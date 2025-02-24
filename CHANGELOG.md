@@ -1,3 +1,12 @@
+# [1.0.0-beta.7](https://github.com/mguyard/hass-diagral/compare/v1.0.0-beta.6...v1.0.0-beta.7) (2025-02-24)
+
+
+### Bug Fixes
+
+* 🔧 Simplify `to` field in `.releaserc` for manifest version update ([3603b42](https://github.com/mguyard/hass-diagral/commit/3603b42e7809c1f3e5872c8cd365da55dbc45f62))
+* 🔧 Update `prepareCmd` in `.releaserc` to overwrite manifest.json ([824a491](https://github.com/mguyard/hass-diagral/commit/824a491d88219a2df64ac5cbb833f8346a32a768))
+* 🔧 Update `release.yaml` and `.releaserc` for semantic-release ([ff60819](https://github.com/mguyard/hass-diagral/commit/ff60819ba547211d4fcca2dae6085c9a8cd5a857))
+
 # [1.0.0-beta.6](https://github.com/mguyard/hass-diagral/compare/v1.0.0-beta.5...v1.0.0-beta.6) (2025-02-24)
 
 
