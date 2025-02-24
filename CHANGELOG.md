@@ -1,3 +1,10 @@
+# [1.0.0-beta.4](https://github.com/mguyard/hass-diagral/compare/v1.0.0-beta.3...v1.0.0-beta.4) (2025-02-24)
+
+
+### Bug Fixes
+
+* 🔧 Correct `prepareCmd` in `.releaserc` to overwrite manifest.json ([8ecccd1](https://github.com/mguyard/hass-diagral/commit/8ecccd144d9ae62776c301328f1b07c59432bea8))
+
 # [1.0.0-beta.3](https://github.com/mguyard/hass-diagral/compare/v1.0.0-beta.2...v1.0.0-beta.3) (2025-02-24)
 
 
