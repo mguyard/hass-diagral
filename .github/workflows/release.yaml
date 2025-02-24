@@ -19,7 +19,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install semantic-release
-        run: npm install -g semantic-release @semantic-release/github @semantic-release/commit-analyzer @semantic-release/git @semantic-release/release-notes-generator @semantic-release/changelog @semantic-release/exec node-jq
+        run: npm install -g semantic-release @semantic-release/github @semantic-release/commit-analyzer @semantic-release/git @semantic-release/release-notes-generator @semantic-release/changelog semantic-release-replace-plugin
       - name: Release
         id: semantic
         env:
