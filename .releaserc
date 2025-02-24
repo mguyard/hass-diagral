@@ -18,7 +18,7 @@
         [
             "@semantic-release/exec",
             {
-              "prepareCmd": "npx node-jq '.version = \"nextRelease.version\"' custom_components/diagral/manifest.json"
+              "prepareCmd": "npx node-jq '.version = \"${nextRelease.version}\"' custom_components/diagral/manifest.json"
             }
         ],
         "@semantic-release/github",
