@@ -1,3 +1,10 @@
+# [1.0.0-beta.8](https://github.com/mguyard/hass-diagral/compare/v1.0.0-beta.7...v1.0.0-beta.8) (2025-02-24)
+
+
+### Bug Fixes
+
+* 🔧 Update `documentation` URL in `manifest.json` ([93ab985](https://github.com/mguyard/hass-diagral/commit/93ab985a12dc5f82103666189360a389c92877a5))
+
 # [1.0.0-beta.7](https://github.com/mguyard/hass-diagral/compare/v1.0.0-beta.6...v1.0.0-beta.7) (2025-02-24)
 
 
