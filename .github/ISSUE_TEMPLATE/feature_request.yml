@@ -1,0 +1,64 @@
+---
+name: "Feature request"
+description: "Suggest an idea for this project"
+title: "[Feature Request]:  "
+labels: [feature]
+assignees: mguyard
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!NOTE]
+        >
+        > This issue form is for reporting Feature Request only!
+        >
+        > Before you open a new feature request, search through the existing [feature requests][fr] to see if others have had the same idea.
+        >
+        > [fr]: https://github.com/mguyard/hass-diagral/issues?q=label%3Afeature
+
+  - type: textarea
+    attributes:
+      label: "Is your feature request related to a problem? Please describe."
+      description: "A clear and concise description of what the problem is."
+      placeholder: "I'm always frustrated when [...]"
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: "Describe the solution you'd like"
+      description: "A clear and concise description of what you want to happen."
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: "Describe alternatives you've considered"
+      description: "A clear and concise description of any alternative solutions or features you've considered."
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: "Additional context"
+      description: "Add any other context or screenshots about the feature request here."
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        > [!TIP]
+        >
+        > Keep in mind you can also help the project by contributing to it, if you have the skills to do so, you can open a pull request with the changes you want to see in the project.
+
+  - type: checkboxes
+    attributes:
+      label: Checklist
+      options:
+        - label: I have filled out the template to the best of my ability.
+          required: true
+        - label: This only contains 1 feature request (if you have multiple feature requests, open one feature request for each feature request).
+          required: true
+        - label: This issue is not a duplicate feature request of [previous feature requests](https://github.com/mguyard/hass-diagral/issues?q=label%3Afeature).
+          required: true

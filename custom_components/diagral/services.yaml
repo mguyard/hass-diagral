@@ -1,0 +1,20 @@
+activate_groups:
+  target:
+    device:
+      integration: diagral
+  fields:
+    group_ids:
+      example: "[3,2] or 3"
+      required: true
+      selector:
+        object:
+disable_groups:
+  target:
+    device:
+      integration: diagral
+  fields:
+    group_ids:
+      example: "[3,2] or 3"
+      required: true
+      selector:
+        object:

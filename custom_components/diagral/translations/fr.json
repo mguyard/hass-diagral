@@ -1,0 +1,88 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "L'appareil est déjà configuré"
+        },
+        "error": {
+            "cannot_connect": "Échec de la connexion",
+            "invalid_auth": "Authentification invalide",
+            "invalid_email": "Veuillez entrer une adresse e-mail valide.",
+            "invalid_pin": "Code PIN invalide. Le code PIN doit contenir uniquement des chiffres.",
+            "unknown": "Erreur inattendue"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "password": "Mot de passe",
+                    "pin_code": "Code PIN",
+                    "serial_id": "Numéro de série",
+                    "username": "Nom d'utilisateur"
+                },
+                "title": "Se connecter à Diagral"
+            }
+        }
+    },
+    "entity": {
+        "alarm_control_panel": {
+            "central": {
+                "name": "Centrale"
+            }
+        },
+        "binary_sensor": {
+            "alarm_triggered": {
+                "name": "Alarme déclenchée"
+            }
+        },
+        "sensor": {
+            "alarm_anomalies": {
+                "name": "Anomalies"
+            }
+        }
+    },
+    "options": {
+        "abort": {
+            "already_configured": "L'appareil est déjà configuré"
+        },
+        "error": {
+            "cannot_connect": "Échec de la connexion",
+            "invalid_auth": "Authentification invalide",
+            "invalid_email": "Veuillez entrer une adresse e-mail valide.",
+            "invalid_pin": "Code PIN invalide. Le code PIN doit contenir uniquement des chiffres.",
+            "unknown": "Erreur inattendue"
+        },
+        "step": {
+            "init": {
+                "data": {
+                    "password": "Mot de passe",
+                    "pin_code": "Code PIN",
+                    "serial_id": "ID de série",
+                    "username": "Nom d'utilisateur"
+                },
+                "description": "Mettre à jour les paramètres pour {username} (ID de série : {serial_id})",
+                "title": "Modifier la configuration de l'alarme Diagral"
+            }
+        }
+    },
+    "services": {
+        "activate_groups": {
+            "description": "Activer le(s) groupe(s) d'alarme",
+            "fields": {
+                "group_ids": {
+                    "description": "Groupe(s) à activer au format [3,2] ou 3",
+                    "name": "ID de groupe(s)"
+                }
+            },
+            "name": "Activer le(s) groupe(s)"
+        },
+        "disable_groups": {
+            "description": "Désactiver le(s) groupe(s) d'alarme",
+            "fields": {
+                "group_ids": {
+                    "description": "Groupe(s) à désactiver au format [3,2] ou 3",
+                    "name": "ID de groupe(s)"
+                }
+            },
+            "name": "Désactiver le(s) groupe(s)"
+        }
+    }
+}

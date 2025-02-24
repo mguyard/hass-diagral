@@ -1,0 +1,88 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Diagral",
+        "data": {
+          "username": "[%key:common::config_flow::data::username%]",
+          "password": "[%key:common::config_flow::data::password%]",
+          "serial_id": "Serial ID",
+          "pin_code": "PIN Code"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "invalid_email": "Please enter a valid email address.",
+      "invalid_pin": "Invalid PIN code. PIN code must contain only digits.",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Modify Diagral Alarm Configuration",
+        "description": "Update settings for {username} (Serial ID: {serial_id})",
+        "data": {
+          "username": "[%key:common::config_flow::data::username%]",
+          "password": "[%key:common::config_flow::data::password%]",
+          "serial_id": "Serial ID",
+          "pin_code": "PIN Code"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "invalid_email": "Please enter a valid email address.",
+      "invalid_pin": "Invalid PIN code. PIN code must contain only digits.",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+    }
+  },
+  "services": {
+    "activate_groups": {
+      "name": "Activate group(s)",
+      "description": "Activate Alarm Group(s)",
+      "fields": {
+        "group_ids": {
+          "name": "Group ID(s)",
+          "description": "Group(s) to activate in format [3,2] or 3"
+        }
+      }
+    },
+    "disable_groups": {
+      "name": "Disable group(s)",
+      "description": "Disable Alarm Group(s)",
+      "fields": {
+        "group_ids": {
+          "name": "Group ID(s)",
+          "description": "Group(s) to disable in format [3,2] or 3"
+        }
+      }
+    }
+  },
+  "entity": {
+    "alarm_control_panel": {
+      "central": {
+        "name": "Central"
+      }
+    },
+    "binary_sensor": {
+      "alarm_triggered": {
+        "name": "Alarm Triggered"
+      }
+    },
+    "sensor": {
+      "alarm_anomalies": {
+        "name": "Anomalies"
+      }
+    }
+  }
+}
