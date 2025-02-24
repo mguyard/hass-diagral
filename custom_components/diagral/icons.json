@@ -1,0 +1,10 @@
+{
+  "services": {
+    "activate_groups": {
+      "service": "mdi:home-group-plus"
+    },
+    "disable_groups": {
+      "service": "mdi:home-group-minus"
+    }
+  }
+}
