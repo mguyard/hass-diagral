@@ -1,7 +1,7 @@
 {
   "domain": "diagral",
   "name": "Diagral",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "codeowners": ["@mguyard"],
   "config_flow": true,
   "dependencies": ["alarm_control_panel", "cloud"],
