@@ -1,3 +1,10 @@
+# [1.0.0-beta.5](https://github.com/mguyard/hass-diagral/compare/v1.0.0-beta.4...v1.0.0-beta.5) (2025-02-24)
+
+
+### Bug Fixes
+
+* 🔧 Update `prepareCmd` in `.releaserc` to use temporary manifest ([9324e10](https://github.com/mguyard/hass-diagral/commit/9324e10183887b0141bb8989858432ea255898da))
+
 # [1.0.0-beta.4](https://github.com/mguyard/hass-diagral/compare/v1.0.0-beta.3...v1.0.0-beta.4) (2025-02-24)
 
 
