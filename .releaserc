@@ -22,16 +22,7 @@
                 {
                   "files": ["custom_components/diagral/manifest.json"],
                   "from": "\"version\": \".*\"",
-                  "to": "\"version\": \"${nextRelease.version}\"",
-                  "results": [
-                    {
-                      "file": "custom_components/diagral/manifest.json",
-                      "hasChanged": true,
-                      "numMatches": 1,
-                      "numReplacements": 1
-                    }
-                  ],
-                  "countMatches": true
+                  "to": "\"version\": \"${nextRelease.version}\""
                 }
               ]
             }
