@@ -1,3 +1,10 @@
+# [1.0.0-beta.3](https://github.com/mguyard/hass-diagral/compare/v1.0.0-beta.2...v1.0.0-beta.3) (2025-02-24)
+
+
+### Bug Fixes
+
+* 🔧 Update `prepareCmd` in `.releaserc` to use template variable with semantic-release ([5f87687](https://github.com/mguyard/hass-diagral/commit/5f8768782df1d0e3de50696e6f348fc378e84751))
+
 # [1.0.0-beta.2](https://github.com/mguyard/hass-diagral/compare/v1.0.0-beta.1...v1.0.0-beta.2) (2025-02-24)
 
 
