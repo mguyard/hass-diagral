@@ -23,6 +23,7 @@ jobs:
         - uses: "home-assistant/actions/hassfest@master"
 
   validate-hacs:
+    name: HACS Validation
     runs-on: "ubuntu-latest"
     steps:
       - name: HACS validation
