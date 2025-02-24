@@ -1,0 +1,13 @@
+{
+  "domain": "diagral",
+  "name": "Diagral",
+  "version": "1.0.0",
+  "codeowners": ["@mguyard"],
+  "config_flow": true,
+  "dependencies": ["alarm_control_panel", "cloud"],
+  "documentation": "https://mguyard.github.io/hass-diagral/",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "quality_scale": "bronze",
+  "requirements": ["pydiagral==1.4.0"]
+}

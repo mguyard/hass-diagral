@@ -1,0 +1,88 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "Device is already configured"
+        },
+        "error": {
+            "cannot_connect": "Failed to connect",
+            "invalid_auth": "Invalid authentication",
+            "invalid_email": "Please enter a valid email address.",
+            "invalid_pin": "Invalid PIN code. PIN code must contain only digits.",
+            "unknown": "Unexpected error"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "password": "Password",
+                    "pin_code": "PIN Code",
+                    "serial_id": "Serial ID",
+                    "username": "Username"
+                },
+                "title": "Connect to Diagral"
+            }
+        }
+    },
+    "entity": {
+        "alarm_control_panel": {
+            "central": {
+                "name": "Central"
+            }
+        },
+        "binary_sensor": {
+            "alarm_triggered": {
+                "name": "Alarm Triggered"
+            }
+        },
+        "sensor": {
+            "alarm_anomalies": {
+                "name": "Anomalies"
+            }
+        }
+    },
+    "options": {
+        "abort": {
+            "already_configured": "Device is already configured"
+        },
+        "error": {
+            "cannot_connect": "Failed to connect",
+            "invalid_auth": "Invalid authentication",
+            "invalid_email": "Please enter a valid email address.",
+            "invalid_pin": "Invalid PIN code. PIN code must contain only digits.",
+            "unknown": "Unexpected error"
+        },
+        "step": {
+            "init": {
+                "data": {
+                    "password": "Password",
+                    "pin_code": "PIN Code",
+                    "serial_id": "Serial ID",
+                    "username": "Username"
+                },
+                "description": "Update settings for {username} (Serial ID: {serial_id})",
+                "title": "Modify Diagral Alarm Configuration"
+            }
+        }
+    },
+    "services": {
+        "activate_groups": {
+            "description": "Activate Alarm Group(s)",
+            "fields": {
+                "group_ids": {
+                    "description": "Group(s) to activate in format [3,2] or 3",
+                    "name": "Group ID(s)"
+                }
+            },
+            "name": "Activate group(s)"
+        },
+        "disable_groups": {
+            "description": "Disable Alarm Group(s)",
+            "fields": {
+                "group_ids": {
+                    "description": "Group(s) to disable in format [3,2] or 3",
+                    "name": "Group ID(s)"
+                }
+            },
+            "name": "Disable group(s)"
+        }
+    }
+}
