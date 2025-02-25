@@ -16,7 +16,7 @@ from pydiagral.models import (
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 import homeassistant.util.dt as dt_util
 
 from . import DiagralConfigEntry
@@ -47,7 +47,7 @@ SENSORS: tuple[DiagralSensorEntityDescription, ...] = (
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: DiagralConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Diagral sensor based on a config entry."""
     coordinator: DiagralDataUpdateCoordinator = entry.runtime_data.coordinator
