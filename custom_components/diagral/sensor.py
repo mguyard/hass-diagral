@@ -175,17 +175,18 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                         for equipment in getattr(anomalies, attr)
                     ]
                     # Flatten anomaly names directly into the details
-                    flattened_details = [
-                        {
-                            key: value
-                            for anomaly in detail.get("anomaly_names", [])
-                            for key, value in vars(anomaly).items()
-                            if key in anomaly_name_order
-                        }
-                        for detail in details
-                    ]
-                    if flattened_details:  # Only add if there are anomalies
-                        anomalies_dict[attr] = flattened_details
+                    for detail in details:
+                        if "anomaly_names" in detail:
+                            for anomaly in detail.pop("anomaly_names"):
+                                detail.update(
+                                    {
+                                        key: value
+                                        for key, value in vars(anomaly).items()
+                                        if key in anomaly_name_order
+                                    }
+                                )
+                    if details:  # Only add if there are anomalies
+                        anomalies_dict[attr] = details
 
             if anomalies_dict:
                 self._attr_extra_state_attributes["anomalies"] = anomalies_dict
