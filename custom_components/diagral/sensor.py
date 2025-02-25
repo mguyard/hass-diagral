@@ -148,6 +148,7 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             anomaly_name_order = ["id", "name"]
 
             # Add each list of anomalies to extra state attributes
+            anomalies_dict = {}
             for attr in vars(anomalies):
                 if isinstance(getattr(anomalies, attr), list) and all(
                     isinstance(item, AnomalyDetail) for item in getattr(anomalies, attr)
@@ -173,26 +174,21 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                         }
                         for equipment in getattr(anomalies, attr)
                     ]
-                    # Sort anomaly names by id with name first
-                    for detail in details:
-                        if "anomaly_names" in detail:
-                            detail["anomaly_names"] = [
-                                {
-                                    key: value
-                                    for key, value in sorted(
-                                        vars(anomaly).items(),
-                                        key=lambda item: anomaly_name_order.index(
-                                            item[0]
-                                        )
-                                        if item[0] in anomaly_name_order
-                                        else len(anomaly_name_order),
-                                    )
-                                    if value is not None
-                                }
-                                for anomaly in detail["anomaly_names"]
-                            ]
-                    if details:  # Only add if there are anomalies
-                        self._attr_extra_state_attributes[attr] = details
+                    # Flatten anomaly names directly into the details
+                    flattened_details = [
+                        {
+                            key: value
+                            for anomaly in detail.get("anomaly_names", [])
+                            for key, value in vars(anomaly).items()
+                            if key in anomaly_name_order
+                        }
+                        for detail in details
+                    ]
+                    if flattened_details:  # Only add if there are anomalies
+                        anomalies_dict[attr] = flattened_details
+
+            if anomalies_dict:
+                self._attr_extra_state_attributes["anomalies"] = anomalies_dict
 
             # Sort extra state attributes by key with created_at and updated_at first
             self._attr_extra_state_attributes = {
