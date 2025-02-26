@@ -20,12 +20,12 @@ All confidential information is REDACTED, but please verify before uploading the
 
 When logging a bug, always ensure you send us the debug logs. 
 
-If you are hitting issues during initial integration setup, you will need to enable logs in your configuration.yaml file by adding the following and restarting Home Assistant:
+If you are hitting issues during initial integration setup, you will need to enable logs in your `configuration.yaml` file by adding the following and restarting Home Assistant:
 ```yaml
 logger:
   default: info
   logs:
-    custom_components.diagral: debug
+    custom_components.diagral: debug // [!code highlight]
 ```
 
 If you have previously successfully installed the integration, debug logs can be enabled from the integration page within Home Assistant:
@@ -42,8 +42,7 @@ logger:
   default: info
   logs:
     custom_components.diagral: debug
-    pydiagral.api: debug
-```
+    pydiagral.api: debug // [!code highlight]
 </Card>
 
 ## Declare issue
