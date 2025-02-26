@@ -4,7 +4,7 @@
   "codeowners": ["@mguyard"],
   "config_flow": true,
   "dependencies": ["alarm_control_panel", "cloud"],
-  "documentation": "https://github.com/mguyard/hass-diagral",
+  "documentation": "https://docs.page/mguyard/hass-diagral",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/mguyard/hass-diagral/issues",
