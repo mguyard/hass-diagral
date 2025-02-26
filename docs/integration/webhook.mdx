@@ -41,3 +41,14 @@ In case of any error, it will also be indicated in the Home Assistant logs.
 <Info>
 In case of error, you can try to restart the integration or use the actions [diagral.unregister_webhook](/integration/actions#register-webhook) and [diagral.register_webhook](/integration/actions#unregister-webhook) to force webhooks to reconfigure.
 </Info>
+
+## Existing subscription
+
+If a webhook subscription already exists for this installation (system ID) on a URL different from your Home Assistant's external URL, the integration will force the webhook URL to update.
+This can happen in various cases such as:
+- Using Diagral Webhook with systems other than this Home Assistant integration
+- A change in your external URL on your Home Assistant
+- After disabling Home Assistant Cloud to use direct external access or another access solution
+- etc...
+
+This scenario will trigger a warning message in your Home Assistant logs.

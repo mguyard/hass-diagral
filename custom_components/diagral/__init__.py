@@ -161,6 +161,14 @@ async def register_webhook(
             except DiagralAPIError as err:
                 if "No subscription found for" in str(err):
                     pass
+                if "subscription already exists" in str(err):
+                    _LOGGER.warning(
+                        "A Webhook subscription already exists for another URL (%s). Integration will force update of webhook_url to %s",
+                        actual_webhook.webhook_url,
+                        webhook_url,
+                    )
+                    unregister_webhook(hass, entry, api, webhook_id, "register_webhook")
+                    register_webhook(hass, entry, api, "register_webhook")
                 else:
                     raise
 
