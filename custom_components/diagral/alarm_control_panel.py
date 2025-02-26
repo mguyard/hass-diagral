@@ -4,7 +4,7 @@ import logging
 
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import DiagralAPIError
-from pydiagral.models import AlarmConfiguration, SystemStatus
+from pydiagral.models import AlarmConfiguration, SystemStatus, WebHookNotificationUser
 import voluptuous as vol
 
 from homeassistant.components.alarm_control_panel import (
@@ -15,6 +15,7 @@ from homeassistant.components.alarm_control_panel import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_platform, entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DiagralConfigEntry
@@ -41,12 +42,12 @@ async def async_setup_entry(
     platform.async_register_entity_service(
         SERVICE_ACTIVATE_GROUP,
         {vol.Required(INPUT_GROUPS): vol.Any(vol.Coerce(int), [vol.Coerce(int)])},
-        DiagralAlarmControlPanel.activate_group.__name__,
+        DiagralAlarmControlPanel.arm_groups.__name__,
     )
     platform.async_register_entity_service(
         SERVICE_DISABLE_GROUP,
         {vol.Required(INPUT_GROUPS): vol.Any(vol.Coerce(int), [vol.Coerce(int)])},
-        DiagralAlarmControlPanel.disable_group.__name__,
+        DiagralAlarmControlPanel.disarm_groups.__name__,
     )
 
     # Create the alarm control panel entity
@@ -75,7 +76,6 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         )
         self._entry_id: str = entry_id
         self._attr_unique_id = f"{self._entry_id}_{DOMAIN}_{self._alarm_config.alarm.central.serial}_alarm_control_panel"
-        # self._attr_name: str = "Central"
         self._attr_translation_key = "central"
         self._changed_by: str = ""
         self._api: DiagralAPI = entry.runtime_data.api
@@ -176,30 +176,49 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         except DiagralAPIError as e:
             _LOGGER.error("Failed to arm Diagral alarm in home mode: %s", e)
 
-    async def activate_group(self, group_ids: int | list[int]) -> None:
+    async def arm_groups(self, group_ids: int | list[int]) -> None:
         """Activate one or more groups."""
-        _LOGGER.debug(
-            "Activating group %s with API instance: %s", group_ids, id(self._api)
-        )
+        _LOGGER.debug("Arming group %s with API instance: %s", group_ids, id(self._api))
         if isinstance(group_ids, int):
             group_ids = [group_ids]
-            _LOGGER.debug("Activating group(s) after transformation: %s", group_ids)
+            _LOGGER.debug("Armed group(s) after transformation: %s", group_ids)
         try:
             await self._api.activate_group(group_ids)
             await self.coordinator.async_request_refresh()
         except DiagralAPIError as e:
-            _LOGGER.error("Failed to activate group(s): %s", e)
+            _LOGGER.error("Failed to arm group(s): %s", e)
 
-    async def disable_group(self, group_ids: int | list[int]) -> None:
-        """Disable one or more groups."""
+    async def disarm_groups(self, group_ids: int | list[int]) -> None:
+        """Disarm one or more groups."""
         _LOGGER.debug(
-            "Disabling group %s with API instance: %s", group_ids, id(self._api)
+            "Disarming group %s with API instance: %s", group_ids, id(self._api)
         )
         if isinstance(group_ids, int):
             group_ids = [group_ids]
-            _LOGGER.debug("Disabling group(s) after transformation: %s", group_ids)
+            _LOGGER.debug("Disarmed group(s) after transformation: %s", group_ids)
         try:
             await self._api.disable_group(group_ids)
             await self.coordinator.async_request_refresh()
         except DiagralAPIError as e:
-            _LOGGER.error("Failed to disable group(s): %s", e)
+            _LOGGER.error("Failed to disarm group(s): %s", e)
+
+    async def async_added_to_hass(self) -> None:
+        """Register callbacks."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"signal-{DOMAIN}-webhook-STATUS",
+                self._handle_event,
+            )
+        )
+
+    @callback
+    def _handle_event(self, event) -> None:
+        """Handle incoming event."""
+        _LOGGER.debug("Alarm Control Panel Received event: %s", event)
+        user_info: WebHookNotificationUser = event["data"]["user"]
+        changed_by: str = user_info.username
+        _LOGGER.debug("Alarm State changed by %s", changed_by)
+        self._changed_by = changed_by
+        self.async_write_ha_state()
