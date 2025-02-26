@@ -86,6 +86,14 @@
                 }
             },
             "name": "Désactiver le(s) groupe(s)"
+        },
+        "register_webhook": {
+            "description": "Déclarer un Webhook dans le Cloud Diagral - Un seul Webhook peut être déclaré par installation",
+            "name": "Déclarer le Webhook"
+        },
+        "unregister_webhook": {
+            "description": "Désinscrire le Webhook du Cloud Diagral",
+            "name": "Désinscrire le Webhook"
         }
     }
 }

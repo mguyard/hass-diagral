@@ -3,8 +3,8 @@ title: Entities
 description: All entities exposed to Home Assistant
 previous: /integration/setup
 previousTitle: Setup
-next: /integration/events
-nextTitle: Events
+next: /integration/webhook
+nextTitle: Webhook
 ---
 
 ## List of entities
@@ -19,8 +19,13 @@ The Diagral integration operates in Hub Mode, meaning that all configurations wi
 | Active Groups             | Sensor displaying the number of active groups in state and details per group in attributes |
 
 <Info>
-All entities are refreshed every `5 minutes` (fixed) or upon receiving a [Webhook](/integration/events) from the Diagral Cloud.
+All entities are refreshed every `5 minutes` (fixed) or upon receiving a [Webhook](/integration/webhook) from the Diagral Cloud.
 </Info>
+
+## Alarm Triggered - Details
+
+The `Alarm Triggered` binary sensor changes its state to `on` when receiving an ALERT webhook (alarm_code 1130, 1139) from Diagral Cloud.
+It automatically resets to `off` when the alarm system is detected as disarmed.
 
 ## Anomalies - Details
 

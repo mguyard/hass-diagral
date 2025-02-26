@@ -1,17 +1,12 @@
 ---
 title: Events
-previous: /integration/entities
-previousTitle: Entities
-next: /actions
+previous: /integration/webhook
+previousTitle: Webhook
+next: /integration/actions
 nextTitle: Actions
 ---
 
-The Diagral integration can receive webhooks from the Diagral Cloud, allowing for quicker notifications of important events.
-This means that in addition to the regular refresh interval, a refresh can also be triggered upon receiving a webhook of these type :
-* `STATUS` : Status change (Armed, Disarmed, etc...)
-* `ANOMALY` : A new anomaly is triggered
-
-All Webhook received are propagated to [Home Assistant Event](https://my.home-assistant.io/redirect/developer_events/) and can be monitor with the event type `DIAGRAL_EVENT`.
+When Diagral integration receive webhooks from the Diagral Cloud, all Webhook received are propagated to [Home Assistant Event](https://my.home-assistant.io/redirect/developer_events/) and can be monitor with the event type `DIAGRAL_EVENT`.
 
 <Image src="/images/devtool-events.png" alt="HA DevTool Events" />
 

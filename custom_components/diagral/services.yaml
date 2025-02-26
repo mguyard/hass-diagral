@@ -8,6 +8,7 @@ arm_groups:
       required: true
       selector:
         object:
+
 disarm_groups:
   target:
     device:
@@ -18,3 +19,13 @@ disarm_groups:
       required: true
       selector:
         object:
+
+register_webhook:
+  target:
+    device:
+      integration: diagral
+
+unregister_webhook:
+  target:
+    device:
+      integration: diagral

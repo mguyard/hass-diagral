@@ -18,8 +18,15 @@ from homeassistant.helpers import entity_platform, entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DiagralConfigEntry
-from .const import DOMAIN, INPUT_GROUPS, SERVICE_ACTIVATE_GROUP, SERVICE_DISABLE_GROUP
+from . import DiagralConfigEntry, register_webhook, unregister_webhook
+from .const import (
+    DOMAIN,
+    INPUT_GROUPS,
+    SERVICE_ARM_GROUP,
+    SERVICE_DISARMGROUP,
+    SERVICE_REGISTER_WEBHOOK,
+    SERVICE_UNREGISTER_WEBHOOK,
+)
 from .coordinator import DiagralDataUpdateCoordinator
 from .entity import DiagralEntity
 from .models import DiagralConfigData
@@ -40,14 +47,24 @@ async def async_setup_entry(
 
     # Register services
     platform.async_register_entity_service(
-        SERVICE_ACTIVATE_GROUP,
+        SERVICE_ARM_GROUP,
         {vol.Required(INPUT_GROUPS): vol.Any(vol.Coerce(int), [vol.Coerce(int)])},
-        DiagralAlarmControlPanel.arm_groups.__name__,
+        DiagralAlarmControlPanel.action_arm_groups.__name__,
     )
     platform.async_register_entity_service(
-        SERVICE_DISABLE_GROUP,
+        SERVICE_DISARMGROUP,
         {vol.Required(INPUT_GROUPS): vol.Any(vol.Coerce(int), [vol.Coerce(int)])},
-        DiagralAlarmControlPanel.disarm_groups.__name__,
+        DiagralAlarmControlPanel.action_disarm_groups.__name__,
+    )
+    platform.async_register_entity_service(
+        SERVICE_REGISTER_WEBHOOK,
+        None,
+        DiagralAlarmControlPanel.action_register_webhook.__name__,
+    )
+    platform.async_register_entity_service(
+        SERVICE_UNREGISTER_WEBHOOK,
+        None,
+        DiagralAlarmControlPanel.action_unregister_webhook.__name__,
     )
 
     # Create the alarm control panel entity
@@ -176,7 +193,7 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         except DiagralAPIError as e:
             _LOGGER.error("Failed to arm Diagral alarm in home mode: %s", e)
 
-    async def arm_groups(self, group_ids: int | list[int]) -> None:
+    async def action_arm_groups(self, group_ids: int | list[int]) -> None:
         """Activate one or more groups."""
         _LOGGER.debug("Arming group %s with API instance: %s", group_ids, id(self._api))
         if isinstance(group_ids, int):
@@ -188,7 +205,7 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         except DiagralAPIError as e:
             _LOGGER.error("Failed to arm group(s): %s", e)
 
-    async def disarm_groups(self, group_ids: int | list[int]) -> None:
+    async def action_disarm_groups(self, group_ids: int | list[int]) -> None:
         """Disarm one or more groups."""
         _LOGGER.debug(
             "Disarming group %s with API instance: %s", group_ids, id(self._api)
@@ -201,6 +218,28 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
             await self.coordinator.async_request_refresh()
         except DiagralAPIError as e:
             _LOGGER.error("Failed to disarm group(s): %s", e)
+
+    async def action_register_webhook(self) -> None:
+        """Register the webhook for Diagral."""
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        webhook_id = await register_webhook(
+            self.hass, entry, entry.runtime_data.api, "HA Action"
+        )
+        # Force the webhook_id in the entry runtime data to be sure it is saved
+        entry.runtime_data.webhook_id = webhook_id
+
+    async def action_unregister_webhook(self) -> None:
+        """Unregister the webhook for Diagral."""
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        # No need to get the webhook_id as it is saved in the entry.runtime_data
+        # directly by the unregister_webhook function
+        await unregister_webhook(
+            self.hass,
+            entry,
+            entry.runtime_data.api,
+            entry.runtime_data.webhook_id,
+            "HA Action",
+        )
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""

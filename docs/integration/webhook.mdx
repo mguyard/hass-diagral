@@ -1,0 +1,43 @@
+---
+title: Webhook
+previous: /integration/entities
+previousTitle: Entities
+next: /integration/events
+nextTitle: Events
+---
+
+The Diagral cloud supports sending webhooks to your Home Assistant to receive real-time alerts, anomalies, or state changes.
+Notifications are transmitted per system, and **each system can have only one webhook subscription.**
+
+This means that in addition to the regular refresh interval, a refresh can also be triggered upon receiving a webhook of these type :
+* `STATUS` : Status change (Armed, Disarmed, etc...)
+* `ALERT` : Alert is triggered like Intrusion or Silent Panic Alarm 
+* `ANOMALY` : A new anomaly is triggered
+
+## Home Assistant URL
+
+To benefit from webhooks, you need a Home Assistant instance that is `accessible from the Internet over HTTPS`.
+
+[![Open your Home Assistant instance and manage your systems network configuration.](https://my.home-assistant.io/badges/network.svg)](https://my.home-assistant.io/redirect/network/)
+<Image src="/images/external-access.png" alt="External Access Configuration" />
+
+The integration can use the connection through Home Assistant Cloud.
+
+However, if you have both an external access and a Home Assistant Cloud subscription, priority will be given to external access.
+
+## Implementation
+
+You don't have to do anything to implement webhooks.
+As long as you meet the aforementioned conditions, webhooks will be automatically set up when the integration starts.
+You can confirm this by checking the "INFO" logs in Home Assistant
+
+```logs
+2024-03-15 09:42:13.627 INFO (MainThread) [custom_components.diagral] Webhook successfully created for HomeSystem (27458196034A82) on : https://my-homeassistant.example.com/api/webhook/5af9c3d1e8b7246f0a9c5d8e2b1f4a7c3d6e9b8a2f5c8d7e4b1a9f6c3d2e5b8
+2025-02-26 16:29:00.458 INFO (MainThread) [custom_components.diagral] Webhook successfully registered for HomeSystem (27458196034A82)
+```
+
+In case of any error, it will also be indicated in the Home Assistant logs.
+
+<Info>
+In case of error, you can try to restart the integration or use the actions [diagral.unregister_webhook](/integration/actions#register-webhook) and [diagral.register_webhook](/integration/actions#unregister-webhook) to force webhooks to reconfigure.
+</Info>

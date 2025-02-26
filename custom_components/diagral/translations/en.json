@@ -86,6 +86,14 @@
                 }
             },
             "name": "Disarm group(s)"
+        },
+        "register_webhook": {
+            "description": "Register webhook in Diagral Cloud - Only one webhook can be registered for an installation",
+            "name": "Register Webhook"
+        },
+        "unregister_webhook": {
+            "description": "Unregister Webhook in Diagral Cloud",
+            "name": "Unregister Webhook"
         }
     }
 }

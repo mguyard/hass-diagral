@@ -47,7 +47,7 @@
     }
   },
   "services": {
-    "aarm_groups": {
+    "arm_groups": {
       "name": "Arm group(s)",
       "description": "Arm Alarm Group(s)",
       "fields": {
@@ -66,6 +66,14 @@
           "description": "Group(s) to disarm in format [3,2] or 3"
         }
       }
+    },
+    "register_webhook": {
+      "name": "Register Webhook",
+      "description": "Register webhook in Diagral Cloud - Only one webhook can be registered for an installation"
+    },
+    "unregister_webhook": {
+      "name": "Unregister Webhook",
+      "description": "Unregister Webhook in Diagral Cloud"
     }
   },
   "entity": {
