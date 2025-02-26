@@ -32,7 +32,8 @@ If you have previously successfully installed the integration, debug logs can be
 
 ![img.png](/images/debugging.png)
 
-The debug logs will appear in the standard Home Assistant logs.
+When you disable debug logs through the interface, the integration logs will be automatically downloaded.
+Also, the debug logs will appear in the standard Home Assistant logs.
 
 <Card title="Active debug on pydiagral library" icon="spider">
 For a more detailed insight into the issue, you can also enable debugging for the `pydiagral` library.
@@ -48,3 +49,7 @@ logger:
 ## Declare issue
 
 If you encounter an issue, you can [open a GitHub issue](https://github.com/mguyard/hass-diagral/issues/new/choose) and share all relevant information to help us resolve it as quickly as possible.
+
+<Warning>
+Logs may contain confidential or personal information (alarm name, system ID, user name, Home Assistant URL, etc...). Therefore, it is essential that you verify the content of all logs/files that you share.
+</Warning>

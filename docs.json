@@ -62,6 +62,11 @@
           "icon": "sitemap"
         },
         {
+          "title": "Webhook",
+          "href": "/integration/webhook",
+          "icon": "envelope"
+        },
+        {
           "title": "Events",
           "href": "/integration/events",
           "icon": "terminal"
