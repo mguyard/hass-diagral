@@ -1,0 +1,74 @@
+---
+title: Setup
+description: Setting up the Integration
+previous: /integration
+previousTitle: Installation
+next: /integration/entities
+nextTitle: Features
+---
+
+To configure the integration, use your Diagral credentials, which are the same as those used for the Diagral eOne mobile application.
+The `Diagral` integration uses Diagral Cloud.
+
+<Warning>
+Please note that the Diagral alarm system is a security system, and it may be preferable not to connect it to the Home Assistant home automation platform for security reasons.
+In no event shall the developer of this integration or the [`pydiagral`](https://github.com/mguyard/pydiagral) library be held liable for any issues arising from the use of this integration or the [`pydiagral`](https://github.com/mguyard/pydiagral) library.
+The user installs and uses this integration at their own risk and with full knowledge of the potential implications.
+</Warning>
+
+## Requirements
+
+1. A functional Diagral Alarm system.
+2. A Diagral box ([DIAG56AAX](https://www.diagral.fr/commande/box-alerte-et-pilotage)).
+3. An active account on the Diagral eOne mobile application.
+4. Internet access for your Home Assistant.
+
+## Collecting informations
+
+Only few information is needed to configure Diagral integration :
+- Diagral username (an email)
+- Password associated to username
+- Your system serial ID (serial of DIAG56AAX box)
+- Pin code associated to useraname/password
+
+### How to choose your Diagral account
+
+Diagral offers two types of accounts: master and secondary.
+Only one account can be connected at a time (via API or mobile application).
+
+The master account can force a connection, disconnecting any currently connected account without notification.
+If a secondary account attempts to connect while another account (master or secondary) is connected, the connection will be refused.
+
+For enhanced security, it is recommended to use a secondary account with limited privileges (as defined in the Diagral eOne mobile application).
+Carefully choose the appropriate account type based on your usage and needs.
+
+### How to find your System Serial ID
+
+The serial number is located inside the Diagral box.
+To find it, you need to open the box and look for a label with a QR code.
+The label contains a 15-character code, which is the serial number of the box.
+
+<Image src="https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png" alt="Location of System Serial ID"/>
+
+<Info>
+If you need assistance with opening the box, please refer to the official DIAG56AAX documentation provided with the product.
+</Info>
+
+## Setup integration in Home Assistant
+
+Click the button below to begin the setup process in Home Assistant.
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=diagral)
+
+The Home Assistant ConfigFlow will start with a confirmation request, followed by a popup to configure the Diagral integration.
+<Image src="/images/configflow.png" />
+
+Complete all the fields and click `Submit`.
+You will see a success popup where you can choose the area to place your Diagral alarm.
+<Image src="/images/configflow-success.png" />
+
+Click `Finish` and you're done! 🎉
+
+<Success>
+Take a few moments to verify that there are no errors related to the Diagral Integration in your Home Assistant logs.
+[![Open your Home Assistant instance and view your Home Assistant logs.](https://my.home-assistant.io/badges/logs.svg)](https://my.home-assistant.io/redirect/logs/?)
+</Success>

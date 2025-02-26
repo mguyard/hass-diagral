@@ -36,6 +36,9 @@
         "sensor": {
             "alarm_anomalies": {
                 "name": "Anomalies"
+            },
+            "active_groups": {
+                "name": "Active Groups"
             }
         }
     },
@@ -64,25 +67,25 @@
         }
     },
     "services": {
-        "activate_groups": {
-            "description": "Activate Alarm Group(s)",
+        "arm_groups": {
+            "description": "Arm Alarm Group(s)",
             "fields": {
                 "group_ids": {
-                    "description": "Group(s) to activate in format [3,2] or 3",
+                    "description": "Group(s) to arm in format [3,2] or 3",
                     "name": "Group ID(s)"
                 }
             },
-            "name": "Activate group(s)"
+            "name": "Arm group(s)"
         },
-        "disable_groups": {
-            "description": "Disable Alarm Group(s)",
+        "disarm_groups": {
+            "description": "Disarm Alarm Group(s)",
             "fields": {
                 "group_ids": {
-                    "description": "Group(s) to disable in format [3,2] or 3",
+                    "description": "Group(s) to disarm in format [3,2] or 3",
                     "name": "Group ID(s)"
                 }
             },
-            "name": "Disable group(s)"
+            "name": "Disarm group(s)"
         }
     }
 }

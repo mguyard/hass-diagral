@@ -1,0 +1,37 @@
+---
+name: "Documentation"
+description: "Report a typo, missing or incorrect documentation"
+title: "[Documentation]:  "
+labels: [documentation]
+assignees: mguyard
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!NOTE]
+        >
+        > This issue form is for reporting documentation content improvement only!
+        >
+        > Before you open a new issue, search through the [existing issues][ei] to see if others have had the same problem.
+        >
+        > [ei]: https://github.com/mguyard/hass-diagral/issues?q=label%3Adocumentation
+
+
+  - type: input
+    validations:
+      required: true
+    attributes:
+      label: What is the link of the concerned documentation?
+      placeholder: https://
+      description: >
+        Please point the specific documentation page.
+
+  - type: textarea
+    validations:
+      required: true
+    attributes:
+      label: What needs to be improved?
+      description: >-
+        Describe what needs to be improved in the documentation.
+        Provide a clear and concise description of what the problem is.
+        Upload screenshots (with annotations) to better locate the issue (if applicable).

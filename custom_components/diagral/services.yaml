@@ -1,4 +1,4 @@
-activate_groups:
+arm_groups:
   target:
     device:
       integration: diagral
@@ -8,7 +8,7 @@ activate_groups:
       required: true
       selector:
         object:
-disable_groups:
+disarm_groups:
   target:
     device:
       integration: diagral

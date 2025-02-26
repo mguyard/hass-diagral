@@ -1,0 +1,67 @@
+---
+image: https://brands.home-assistant.io/diagral/icon.png
+next: /integration
+nextTitle: Installation
+---
+
+<Badges>
+    <Image src="https://img.shields.io/github/license/mguyard/hass-diagral?style=default&color=0080ff" alt="License" />
+    <Image src="https://img.shields.io/github/last-commit/mguyard/hass-diagral?style=default&color=0080ff" alt="Last Commit" />
+    <Image src="https://img.shields.io/github/languages/top/mguyard/hass-diagral?style=default&color=0080ff" alt="repo-top-language" />
+    <Image src="https://img.shields.io/github/languages/count/mguyard/hass-diagral?style=default&color=0080ff" alt="repo-language-count" />
+</Badges>
+<Badges>
+    <Image src="https://img.shields.io/github/v/release/mguyard/hass-diagral?label=Stable" alt="Last Stable Release" />
+    <Image src="https://img.shields.io/github/release-date/mguyard/hass-diagral?label=Stable" alt="Last Release Date Stable" />
+    <Image src="https://img.shields.io/github/v/release/mguyard/hass-diagral?label=Beta&include_prereleases" alt="Last Beta Release" />
+    <Image src="https://img.shields.io/github/release-date-pre/mguyard/hass-diagral?label=Beta" alt="Last Release Date Beta" />
+    <Image src="https://img.shields.io/github/issues-search/mguyard/hass-diagral?query=label%3Abug%20is%3Aopened&label=Open%20Bugs" alt="Open Bugs" />
+    <Image src="https://img.shields.io/github/issues-pr/mguyard/hass-diagral" alt="Open PRs" />
+</Badges>
+<Badges>
+    <Image src="https://github.com/mguyard/hass-diagral/actions/workflows/home-assistant.yaml/badge.svg" alt="Home Assistant Actions" />
+    <Image src="https://github.com/mguyard/hass-diagral/actions/workflows/release.yaml/badge.svg" alt="Release Actions" />
+</Badges>
+
+# Introduction
+
+The Diagral integration for Home Assistant allows you to seamlessly connect and manage your Diagral security alarm system within the Home Assistant platform.
+This integration provides real-time monitoring and control of your Diagral alarm system, enabling you to arm, disarm, and monitor the status of your alarm directly from Home Assistant.
+
+Additionally, it supports various sensors and services, such as activating or disabling alarm groups, and provides detailed information about anomalies and system status.
+
+With this integration, you can enhance the security of your home by integrating Diagral's robust alarm system with Home Assistant's powerful automation and monitoring capabilities.
+
+# Who is Diagral
+
+[Diagral](https://www.diagral.fr) is a leading French company specializing in home security solutions and is a brand of the [Atraltech Group](https://www.atraltech.com/en/).
+Established in 1990, [Diagral](https://www.diagral.fr) offers a wide range of products designed to protect homes and businesses, including alarm systems, surveillance cameras, and smart home devices.
+
+With a strong focus on innovation and user-friendly design, [Diagral](https://www.diagral.fr) has become a trusted name in the security industry, providing reliable and effective solutions to ensure the safety and peace of mind of its customers.
+
+<Info>
+This development is not affiliated with the Diagral brand. I am an independent developer and do not represent the Diagral brand.
+</Info>
+
+# Library Dependency
+
+<Image src="https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/pydiagral-Logo.png" alt="PyDiagral Logo" width="200" />
+
+This development relies on the `pydiagral` library, which is available on GitHub: [pydiagral](https://github.com/mguyard/pydiagral).
+
+The `pydiagral` library provides the necessary tools and functions to interface with Diagral alarm systems, enabling seamless integration with Home Assistant.
+Make sure to check out the repository for more information.
+
+# Responsability
+
+<Warning>
+Please note that the Diagral alarm system is a security system, and it may be preferable not to connect it to the Home Assistant home automation platform for security reasons.
+In no event shall the developer of this integration or the [`pydiagral`](https://github.com/mguyard/pydiagral) library be held liable for any issues arising from the use of this integration or the [`pydiagral`](https://github.com/mguyard/pydiagral) library.
+The user installs and uses this integration at their own risk and with full knowledge of the potential implications.
+</Warning>
+
+<!--  Custom component to show Github Badges on a oneline : https://use.docs.page/components/custom  -->
+
+export const Badges = props => {
+  return <div class="justify-center items-center flex flex-wrap gap-2">{props.children}</div>;
+};
