@@ -10,6 +10,8 @@ CONF_SECRET_KEY = "secret_key"
 
 DEFAULT_SCAN_INTERVAL = 300
 
+HA_CLOUD_DOMAIN = ".nabu.casa"
+
 SERVICE_ARM_GROUP = "arm_groups"
 SERVICE_DISARMGROUP = "disarm_groups"
 SERVICE_REGISTER_WEBHOOK = "register_webhook"
