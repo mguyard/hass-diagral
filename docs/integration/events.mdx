@@ -1,0 +1,73 @@
+---
+title: Events
+previous: /integration/entities
+previousTitle: Entities
+next: /actions
+nextTitle: Actions
+---
+
+The Diagral integration can receive webhooks from the Diagral Cloud, allowing for quicker notifications of important events.
+This means that in addition to the regular refresh interval, a refresh can also be triggered upon receiving a webhook of these type :
+* STATUS : Status change (Armed, Disarmed, etc...)
+* ANOMALY : A new anomaly is triggered
+
+All Webhook received are propagated to [Home Assistant Event](https://my.home-assistant.io/redirect/developer_events/) and can be monitor with the event type `DIAGRAL_EVENT`.
+
+<Image src="/images/devtool-events.png" alt="HA DevTool Events" />
+
+<Card title="Example of Event" icon="bell">
+```yaml
+event_type: DIAGRAL_EVENT
+data: // [!code highlight]
+  type: STATUS // [!code highlight]
+  data: // [!code highlight]
+    transmitter_id: 1234567890ABCD // [!code highlight]
+    alarm_code: "3401" // [!code highlight]
+    alarm_description: LOCAL-ARMING-OF-GROUP // [!code highlight]
+    group_index: NIGHT_MODE_GROUP_CODE // [!code highlight]
+    detail: // [!code highlight]
+      device_type: null // [!code highlight]
+      device_index: null // [!code highlight]
+      device_label: null // [!code highlight]
+    user: // [!code highlight]
+      username: HereMyName // [!code highlight]
+      user_type: owner // [!code highlight]
+    date_time: "2025-02-25T17:59:58.008154+00:00" // [!code highlight]
+origin: LOCAL
+time_fired: "2025-02-25T17:59:59.359763+00:00"
+context:
+  id: 01JMZ480KZPV5J7M1FX2QQWT47
+  parent_id: null
+  user_id: null
+```
+</Card>
+
+The information provided by the received webhook is located in the `data` key.
+
+The type can be:
+- `STATUS`
+- `ALERT`
+- `ANOMALY`
+- `UNKNOWN` (If you encounter this issue, please [open a GitHub issue](https://github.com/mguyard/hass-diagral/issues/new/choose) and provide all relevant event details for further investigation)
+
+<Info>
+The relationship between `alarm_code` and `type` is documented [here](https://mguyard.github.io/pydiagral/models/#pydiagral.models.WebHookNotification.from_dict).
+</Info>
+
+Additional fields include:
+- `transmitter_id`: ID of the device that triggered the event
+- `alarm_code`: Alarm code defined internally by Diagral
+- `alarm_description`: Description of the `alarm_code` provided by Diagral
+- `group_index`: Group ID or specific group (e.g., NIGHT_MODE_GROUP_CODE) affected by the action that triggered the event
+- `details`:
+    - `device_type`: Type of device (e.g., CAMERA, CENTRAL, COMMAND, SENSOR, SIREN, TRANSCEIVER, TRANSMITTER)
+    - `device_index`: Sensor ID (empty if `device_type` is CENTRAL)
+    - `date_time`: Datetime when the event was emitted by Diagral
+- `user`:
+    - `username`: The full name of the user who initiated the event (if it was triggered by a user action)
+    - `user_type`: Type of user
+- `date_time`: Date and time when the event was initiated by Diagral
+
+<Info>
+Username information from events is also stored in the Alarm Control Panel attributes under the `changed_by` field.
+</Info>

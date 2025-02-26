@@ -1,0 +1,100 @@
+{
+  "$schema": "https://docs.page/schema.json",
+  "name": "Diagral",
+  "description": "Documentation for the Diagral integration to Home Assistant",
+  "logo": {
+    "light": "https://brands.home-assistant.io/_/diagral/icon@2x.png"
+  },
+  "favicon": {
+    "light": "https://brands.home-assistant.io/_/diagral/icon@2x.png"
+  },
+  "theme": {
+    "defaultTheme": "dark",
+    "primary": "#02E180",
+    "primaryLight": "#29C04E"
+  },
+  "tabs": [
+    {
+      "id": "root",
+      "title": "Home",
+      "href": "/"
+    },
+    {
+      "id": "integration",
+      "title": "Integration",
+      "href": "/integration"
+    },
+    {
+      "id": "faq",
+      "title": "FAQ",
+      "href": "/faq"
+    },
+    {
+      "id": "issues",
+      "title": "Issues",
+      "href": "/issues"
+    }
+  ],
+  "sidebar": [
+    {
+      "group": "Getting Started",
+      "tab": "integration",
+      "pages": [
+        {
+          "title": "Installation",
+          "href": "/integration",
+          "icon": "rocket"
+        },
+        {
+          "title": "Setup",
+          "href": "/integration/setup",
+          "icon": "cog"
+        }
+      ]
+    },
+    {
+      "group": "Features",
+      "tab": "integration",
+      "pages": [
+        {
+          "title": "Entities",
+          "href": "/integration/entities",
+          "icon": "sitemap"
+        },
+        {
+          "title": "Events",
+          "href": "/integration/events",
+          "icon": "terminal"
+        },
+        {
+          "title": "Actions",
+          "href": "/integration/actions",
+          "icon": "microchip"
+        }
+      ]
+    },
+    {
+      "group": "Misc",
+      "tab": "integration",
+      "pages": [
+        {
+          "title": "Contributing",
+          "href": "/misc/contributing",
+          "icon": "heart"
+        }
+      ]
+    }
+  ],
+  "social": {
+    "github": "mguyard/hass-diagral"
+  },
+  "variables": {
+    "name": "Diagral",
+    "version": "0.1.0",
+    "github": {
+      "username": "mguyard",
+      "full_repo": "mguyard/hass-diagral",
+      "repo_name": "hass-diagral"
+    }
+  }
+}

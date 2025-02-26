@@ -1,0 +1,50 @@
+---
+title: Issues
+description: Debugging the integration
+---
+
+## Collect Issues information
+
+### Diagnostic File
+
+On the device info page for the device entity, you will see a "Download Diagnostics" button.
+Make sure you upload this to your GitHub issue.
+
+<Image src="/images/diagnostics.png" alt="Diagnostic" />
+
+<Warning>
+All confidential information is REDACTED, but please verify before uploading the file to your GitHub issue.
+</Warning>
+
+### Debug Logging
+
+When logging a bug, always ensure you send us the debug logs. 
+
+If you are hitting issues during initial integration setup, you will need to enable logs in your configuration.yaml file by adding the following and restarting Home Assistant:
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.diagral: debug
+```
+
+If you have previously successfully installed the integration, debug logs can be enabled from the integration page within Home Assistant:
+
+![img.png](/images/debugging.png)
+
+The debug logs will appear in the standard Home Assistant logs.
+
+<Card title="Active debug on pydiagral library" icon="spider">
+For a more detailed insight into the issue, you can also enable debugging for the `pydiagral` library.
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.diagral: debug
+    pydiagral.api: debug
+```
+</Card>
+
+## Declare issue
+
+If you encounter an issue, you can [open a GitHub issue](https://github.com/mguyard/hass-diagral/issues/new/choose) and share all relevant information to help us resolve it as quickly as possible.
