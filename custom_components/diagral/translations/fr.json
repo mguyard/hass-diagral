@@ -36,6 +36,9 @@
         "sensor": {
             "alarm_anomalies": {
                 "name": "Anomalies"
+            },
+            "active_groups": {
+                "name": "Groupes actifs"
             }
         }
     },
