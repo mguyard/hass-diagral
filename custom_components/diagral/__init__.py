@@ -10,6 +10,7 @@ from pydiagral.exceptions import DiagralAPIError
 
 from homeassistant.components.cloud import (
     async_active_subscription as cloud_active_subscription,
+    async_create_cloudhook as cloud_create_cloudhook,
 )
 from homeassistant.components.webhook import (
     async_generate_id as webhook_generate_id,
@@ -84,7 +85,7 @@ async def register_webhook(
     """Register the webhook for Diagral."""
     webhook_id: str = webhook_generate_id()
     if cloud_active_subscription(hass):
-        webhook_url = await hass.components.cloud.async_create_cloudhook(webhook_id)
+        webhook_url = await cloud_create_cloudhook(hass, webhook_id)
     else:
         try:
             external_url = get_url(
