@@ -9,9 +9,10 @@ from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import DiagralAPIError
 
 from homeassistant.components.cloud import (
+    CloudNotAvailable,
+    CloudNotConnected,
     async_active_subscription as cloud_active_subscription,
     async_get_or_create_cloudhook as cloud_get_or_create_cloudhook,
-    async_remote_ui_url as cloud_remote_ui_url,
 )
 from homeassistant.components.webhook import (
     async_generate_id as webhook_generate_id,
@@ -25,7 +26,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
-from .const import CONF_API_KEY, CONF_PIN_CODE, CONF_SECRET_KEY, CONF_SERIAL_ID, DOMAIN
+from .const import (
+    CONF_API_KEY,
+    CONF_PIN_CODE,
+    CONF_SECRET_KEY,
+    CONF_SERIAL_ID,
+    DOMAIN,
+    HA_CLOUD_DOMAIN,
+)
 from .coordinator import DiagralDataUpdateCoordinator
 from .models import DiagralConfigData, DiagralData
 from .webhook import handle_webhook
@@ -97,6 +105,7 @@ async def register_webhook(
             allow_cloud=True,
             prefer_external=True,
         )
+        _LOGGER.debug("Returned external URL for webhook : %s", external_url)
     except NoURLAvailableError:
         _LOGGER.error(
             "No URL available for Diagral webhook matching criteria (ssl, external). Webhook will not be created"
@@ -104,16 +113,26 @@ async def register_webhook(
         return None
 
     if external_url is not None:
-        if cloud_active_subscription(hass):
-            nabucasa_url = cloud_remote_ui_url(hass)
+        if external_url.endswith(HA_CLOUD_DOMAIN):
             _LOGGER.debug(
-                "Cloud subscription detected, using Nabu Casa URL : %s", nabucasa_url
+                "Recommanded external URL is Nabu Casa URL (%s). Selected for webhook",
+                external_url,
             )
-            if nabucasa_url is not None and external_url.startswith(nabucasa_url):
-                _LOGGER.debug(
-                    "Recommanded external URL is Nabu Casa URL. Selected for webhook"
+            try:
+                if cloud_active_subscription(hass):
+                    webhook_url = await cloud_get_or_create_cloudhook(hass, webhook_id)
+                else:
+                    _LOGGER.error(
+                        "Cloud subscription not active. Webhook will not be created"
+                    )
+            except (CloudNotConnected, CloudNotAvailable):
+                _LOGGER.error(
+                    "Cloud not connected or not available. Webhook will not be created"
                 )
-                webhook_url = await cloud_get_or_create_cloudhook(hass, webhook_id)
+                return None
+            except ValueError as e:
+                _LOGGER.error("Failed to create cloudhook: %s", e)
+                return None
         else:
             webhook_url = f"{external_url}/api/webhook/{webhook_id}"
             _LOGGER.debug("Selected external URL for webhook : %s", webhook_url)
