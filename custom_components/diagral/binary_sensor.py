@@ -94,13 +94,10 @@ class DiagralBinarySensor(DiagralEntity, BinarySensorEntity):
     @callback
     def _handle_event(self, event) -> None:
         """Handle incoming event."""
-        _LOGGER.debug("Received event: %s", event)
-        _LOGGER.warning("Event type : %s", event["type"])
+        _LOGGER.debug("%s received event: %s", self.name, event)
         if self.entity_description.key == "alarm_triggered":
             event_alarm_code = int(event["data"].get("alarm_code"))
             ALARM_INTRUSION_CODES = {1130, 1139}
             if event_alarm_code in ALARM_INTRUSION_CODES:
                 self._attr_is_on = True
-            # else:
-            #     self._attr_is_on = False
             self.async_write_ha_state()
