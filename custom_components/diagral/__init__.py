@@ -10,7 +10,8 @@ from pydiagral.exceptions import DiagralAPIError
 
 from homeassistant.components.cloud import (
     async_active_subscription as cloud_active_subscription,
-    async_create_cloudhook as cloud_create_cloudhook,
+    async_get_or_create_cloudhook as cloud_get_or_create_cloudhook,
+    async_remote_ui_url as cloud_remote_ui_url,
 )
 from homeassistant.components.webhook import (
     async_generate_id as webhook_generate_id,
@@ -61,7 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
         await coordinator.async_config_entry_first_refresh()
 
         # Register the webhook
-        webhook_id = await register_webhook(hass, entry, api)
+        webhook_id = await register_webhook(hass, entry, api, "setup_entry")
 
         entry.runtime_data = DiagralData(
             config=config, coordinator=coordinator, api=api, webhook_id=webhook_id
@@ -80,29 +81,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
 
 
 async def register_webhook(
-    hass: HomeAssistant, entry: DiagralConfigEntry, api: DiagralAPI
-) -> str:
+    hass: HomeAssistant,
+    entry: DiagralConfigEntry,
+    api: DiagralAPI,
+    source: str = "Unknown",
+) -> str | None:
     """Register the webhook for Diagral."""
+    _LOGGER.debug("Webhook registration requested by '%s' for %s", source, entry.title)
     webhook_id: str = webhook_generate_id()
-    if cloud_active_subscription(hass):
-        webhook_url = await cloud_create_cloudhook(hass, webhook_id)
-    else:
-        try:
-            external_url = get_url(
-                hass,
-                require_ssl=True,
-                allow_internal=False,
-                allow_cloud=True,
-                prefer_external=True,
+    try:
+        external_url = get_url(
+            hass,
+            require_ssl=True,
+            allow_internal=False,
+            allow_cloud=True,
+            prefer_external=True,
+        )
+    except NoURLAvailableError:
+        _LOGGER.error(
+            "No URL available for Diagral webhook matching criteria (ssl, external). Webhook will not be created"
+        )
+        return None
+
+    if external_url is not None:
+        if cloud_active_subscription(hass):
+            nabucasa_url = cloud_remote_ui_url(hass)
+            _LOGGER.debug(
+                "Cloud subscription detected, using Nabu Casa URL : %s", nabucasa_url
             )
+            if nabucasa_url is not None and external_url.startswith(nabucasa_url):
+                _LOGGER.debug(
+                    "Recommanded external URL is Nabu Casa URL. Selected for webhook"
+                )
+                webhook_url = await cloud_get_or_create_cloudhook(hass, webhook_id)
+        else:
             webhook_url = f"{external_url}/api/webhook/{webhook_id}"
+            _LOGGER.debug("Selected external URL for webhook : %s", webhook_url)
             webhook_set_needed = True
             try:
                 # Check if the webhook is already registered
                 actual_webhook = await api.get_webhook()
                 # If the webhook is already registered, update the URL
                 # or if no subscription found, pass
-                if actual_webhook.webhook_url.startswith(
+                if actual_webhook is not None and actual_webhook.webhook_url.startswith(
                     f"{external_url}/api/webhook/"
                 ):
                     _LOGGER.info(
@@ -133,18 +154,42 @@ async def register_webhook(
                     subscribe_to_state=True,
                 )
                 _LOGGER.info(
-                    "Webhook successfully created for %s on %s",
+                    "Webhook successfully created for %s on : %s",
                     entry.title,
                     webhook_url,
                 )
-        except NoURLAvailableError:
-            _LOGGER.error(
-                "No URL available for Diagral webhook matching criteria (ssl, external). Webhook will not be created"
-            )
+        webhook_async_register(
+            hass, DOMAIN, "Diagral Webhook", webhook_id, handle_webhook
+        )
+        _LOGGER.info("Webhook successfully registered for %s", entry.title)
 
-    webhook_async_register(hass, DOMAIN, "Diagral Webhook", webhook_id, handle_webhook)
-    _LOGGER.info("Webhook successfully registered for %s", entry.title)
     return webhook_id
+
+
+async def unregister_webhook(
+    hass: HomeAssistant,
+    entry: DiagralConfigEntry,
+    api: DiagralAPI,
+    webhook_id: str,
+    source: str = "Unknown",
+) -> None:
+    """Unregister the webhook for Diagral."""
+    _LOGGER.debug(
+        "Webhook unregistration requested by '%s' for %s", source, entry.title
+    )
+    if webhook_id:
+        try:
+            await api.delete_webhook()
+        except DiagralAPIError as e:
+            _LOGGER.error(
+                "Failed to delete webhook for %s : %s",
+                entry.title,
+                e,
+            )
+        _LOGGER.info("Webhook successfully deleted for %s", entry.title)
+        webhook_async_unregister(hass, webhook_id)
+        # Force the webhook_id in the entry runtime data to be sure it is saved
+        entry.runtime_data.webhook_id = webhook_id
 
 
 async def async_update_options(hass: HomeAssistant, entry: DiagralConfigEntry) -> None:
@@ -185,19 +230,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> 
     api: DiagralAPI = entry.runtime_data.api
     webhook_id: str = entry.runtime_data.webhook_id
 
-    if webhook_id:
-        try:
-            await api.delete_webhook()
-        except DiagralAPIError as e:
-            _LOGGER.error(
-                "Failed to delete webhook for %s during entry unloading: %s",
-                entry.title,
-                e,
-            )
-        _LOGGER.info(
-            "Webhook successfully deleted for %s during entry unloading", entry.title
-        )
-        webhook_async_unregister(hass, webhook_id)
+    await unregister_webhook(hass, entry, api, webhook_id, "unload_entry")
 
     await api.__aexit__(None, None, None)  # Close explicitly the session
 
