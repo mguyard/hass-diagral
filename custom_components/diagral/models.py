@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from pydiagral import DiagralAPI
+from pydiagral.models import ApiKeyWithSecret
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -66,3 +67,19 @@ class DiagralConfigData:
             ),
             alarmpanel_code=entry.options.get(CONF_ALARMPANEL_CODE),
         )
+
+
+@dataclass
+class ValidateConnectionData:
+    """A class to validate connection parameters for Diagral API.
+
+    This class provides structure for connection validation credentials including a title and API keys.
+
+    Attributes:
+        title (str): A descriptive name or title for the connection.
+        keys (ApiKeyWithSecret): API key credentials containing access key and secret.
+
+    """
+
+    title: str
+    keys: ApiKeyWithSecret

@@ -7,6 +7,7 @@ import logging
 import re
 from typing import Any
 
+from pydiagral import DiagralAPIError
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import (
     AuthenticationError,
@@ -15,7 +16,7 @@ from pydiagral.exceptions import (
     SessionError,
     ValidationError,
 )
-from pydiagral.models import AlarmConfiguration, ApiKeyWithSecret
+from pydiagral.models import TryConnectResult
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -33,6 +34,7 @@ from .const import (
     CONF_SERIAL_ID,
     DOMAIN,
 )
+from .models import ValidateConnectionData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +50,9 @@ def is_valid_pin(pin: int) -> bool:
     return isinstance(pin, int) and pin >= 0
 
 
-async def validate_input(hass: HomeAssistant, data: dict[str, str]) -> dict[str, str]:
+async def validate_input(
+    hass: HomeAssistant, data: dict[str, str]
+) -> ValidateConnectionData:
     """Validate the user input allows us to connect."""
     _LOGGER.debug("Starting validation of input: %s", data)
     try:
@@ -68,30 +72,18 @@ async def validate_input(hass: HomeAssistant, data: dict[str, str]) -> dict[str,
         # Initialize the DiagralAPI
         async with DiagralAPI(**diagral_api_params) as diagral:
             _LOGGER.debug("Attempting to login")
-            await diagral.login()
-            if CONF_API_KEY not in data or CONF_SECRET_KEY not in data:
-                _LOGGER.debug("Login successful, attempting to set API key")
-                api_keys: ApiKeyWithSecret = await diagral.set_apikey()
-                # If we get here, the authentication was successful
-                _LOGGER.info("Authentication and API key generation successful")
-            else:
-                _LOGGER.debug("Login successful, using existing API key")
-                api_keys = ApiKeyWithSecret(
-                    api_key=data[CONF_API_KEY], secret_key=data[CONF_SECRET_KEY]
-                )
-            alarm_config: AlarmConfiguration = await diagral.get_configuration()
-
-            return {
-                "title": f"{alarm_config.alarm.name} ({data[CONF_SERIAL_ID]})",
-                CONF_API_KEY: api_keys.api_key,
-                CONF_SECRET_KEY: api_keys.secret_key,
-            }
+            connection: TryConnectResult = await diagral.try_connection(ephemeral=False)
+            alarm_name: str = await diagral.get_alarm_name()
+            return ValidateConnectionData(
+                title=f"{alarm_name} ({data[CONF_SERIAL_ID]})", keys=connection.keys
+            )
     except (
         ConfigurationError,
         AuthenticationError,
         ValidationError,
         ClientError,
         SessionError,
+        DiagralAPIError,
     ) as error:
         _LOGGER.error("Error during validation: %s", str(error))
         raise CannotConnect from error
@@ -167,22 +159,33 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                     _LOGGER.debug(
                         "Account validation in progress with Diagral Cloud..."
                     )
-                    info = await validate_input(self.hass, user_input)
+                    info: ValidateConnectionData = await validate_input(
+                        self.hass, user_input
+                    )
                     _LOGGER.debug("Account validation successful")
-                    self.title = info["title"]
+                    self.title = info.title
                     self.account_username = user_input[CONF_USERNAME]
                     self.account_password = user_input[CONF_PASSWORD]
                     self.account_pincode = user_input[CONF_PIN_CODE]
-                    self.apikey = info["api_key"]
-                    self.secretkey = info["secret_key"]
+                    self.apikey = info.keys.api_key
+                    self.secretkey = info.keys.secret_key
                     return await self.async_step_options()
-                except CannotConnect:
-                    errors["base"] = "cannot_connect"
-                except InvalidAuth:
-                    errors["base"] = "invalid_auth"
-                except Exception:
+                except CannotConnect as error:
+                    if error.__cause__ is not None:
+                        errors["base"] = str(error.__cause__)
+                    else:
+                        errors["base"] = "cannot_connect"
+                except InvalidAuth as error:
+                    if error.__cause__ is not None:
+                        errors["base"] = str(error.__cause__)
+                    else:
+                        errors["base"] = "invalid_auth"
+                except Exception as error:
                     _LOGGER.exception("Unexpected exception")
-                    errors["base"] = "unknown"
+                    if error.__cause__ is not None:
+                        errors["base"] = str(error.__cause__)
+                    else:
+                        errors["base"] = "unknown"
 
         # Build form
         STEP_ACCOUNT = vol.Schema(
@@ -265,7 +268,18 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input: None = None) -> ConfigFlowResult:
         """Manage the account options."""
-        errors = {}
+        errors: dict[str, str] = {}
+
+        # Build form
+        STEP_ACCOUNT = vol.Schema(
+            {
+                vol.Required(CONF_USERNAME, default=self.options[CONF_USERNAME]): str,
+                vol.Required(CONF_PASSWORD, default=self.options[CONF_PASSWORD]): str,
+                vol.Required(
+                    CONF_PIN_CODE, default=self.options[CONF_PIN_CODE]
+                ): vol.Coerce(int),
+            }
+        )
 
         if user_input is not None:
             # Check if the user has changed the username, password or pin code
@@ -298,34 +312,43 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
                         _LOGGER.debug(
                             "Account validation in progress with Diagral Cloud..."
                         )
-                        info = await validate_input(self.hass, user_input)
+                        info: ValidateConnectionData = await validate_input(
+                            self.hass, user_input
+                        )
                         _LOGGER.debug("Account validation successful")
-                        self.title = info["title"]
+                        self.title = info.title
                         self.options[CONF_USERNAME] = user_input[CONF_USERNAME]
                         self.options[CONF_PASSWORD] = user_input[CONF_PASSWORD]
                         self.options[CONF_PIN_CODE] = user_input[CONF_PIN_CODE]
-                        self.options[CONF_API_KEY] = info["api_key"]
-                        self.options[CONF_SECRET_KEY] = info["secret_key"]
-                    except CannotConnect:
-                        errors["base"] = "cannot_connect"
-                    except InvalidAuth:
-                        errors["base"] = "invalid_auth"
-                    except Exception:
+                        self.options[CONF_API_KEY] = info.keys.api_key
+                        self.options[CONF_SECRET_KEY] = info.keys.secret_key
+                    except CannotConnect as error:
+                        if error.__cause__ is not None:
+                            errors["base"] = str(error.__cause__)
+                        else:
+                            errors["base"] = "cannot_connect"
+                    except InvalidAuth as error:
+                        if error.__cause__ is not None:
+                            errors["base"] = str(error.__cause__)
+                        else:
+                            errors["base"] = "invalid_auth"
+                    except Exception as error:
                         _LOGGER.exception("Unexpected exception")
-                        errors["base"] = "unknown"
+                        if error.__cause__ is not None:
+                            errors["base"] = str(error.__cause__)
+                        else:
+                            errors["base"] = "unknown"
+
+                    if errors:
+                        return self.async_show_form(
+                            step_id="init",
+                            data_schema=STEP_ACCOUNT,
+                            errors=errors or {},
+                            description_placeholders={"title": self.title},
+                            last_step=False,
+                        )
 
                 return await self.async_step_options()
-
-        # Build form
-        STEP_ACCOUNT = vol.Schema(
-            {
-                vol.Required(CONF_USERNAME, default=self.options[CONF_USERNAME]): str,
-                vol.Required(CONF_PASSWORD, default=self.options[CONF_PASSWORD]): str,
-                vol.Required(
-                    CONF_PIN_CODE, default=self.options[CONF_PIN_CODE]
-                ): vol.Coerce(int),
-            }
-        )
 
         return self.async_show_form(
             step_id="init",
@@ -365,6 +388,17 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
                     "Submitting data entry to HA : %s", self.config_entry.data
                 )
                 _LOGGER.debug("Submitting options entry to HA : %s", self.options)
+                # self.hass.config_entries.async_update_entry(
+                #     entry=self.config_entry,
+                #     title=self.title,
+                #     data=self.config_entry.data,
+                #     options=self.options,
+                # )
+                # _LOGGER.warning("Updated entry: %s", result)
+                # _LOGGER.warning(
+                #     "Reloading config entry: %s", self._config_entry.entry_id
+                # )
+                # await self.hass.config_entries.async_reload(self._config_entry.entry_id)
                 return self.async_create_entry(title="", data=self.options)
 
             _LOGGER.debug("No configuration changes detected, skipping update.")
