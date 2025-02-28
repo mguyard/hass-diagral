@@ -7,6 +7,7 @@ CONF_SERIAL_ID = "serial_id"
 CONF_PIN_CODE = "pin_code"
 CONF_API_KEY = "api_key"
 CONF_SECRET_KEY = "secret_key"
+CONF_ALARMPANEL_CODE = "alarmpanel_code"
 
 DEFAULT_SCAN_INTERVAL = 300
 

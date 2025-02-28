@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import logging
 import re
-from typing import Any, cast
+from typing import Any
 
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import (
@@ -24,18 +25,16 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 
 from . import DiagralConfigEntry
-from .const import CONF_API_KEY, CONF_PIN_CODE, CONF_SECRET_KEY, CONF_SERIAL_ID, DOMAIN
+from .const import (
+    CONF_ALARMPANEL_CODE,
+    CONF_API_KEY,
+    CONF_PIN_CODE,
+    CONF_SECRET_KEY,
+    CONF_SERIAL_ID,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
-
-STEP_USER_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_USERNAME): str,
-        vol.Required(CONF_PASSWORD): str,
-        vol.Required(CONF_SERIAL_ID): str,
-        vol.Required(CONF_PIN_CODE, default=1234): vol.Coerce(int),
-    }
-)
 
 
 def is_valid_email(email: str) -> bool:
@@ -105,46 +104,18 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Diagral."""
 
     VERSION = 1
+    MINOR_VERSION = 1
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle the initial step."""
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            if not is_valid_email(user_input[CONF_USERNAME]):
-                errors[CONF_USERNAME] = "invalid_email"
-            if not is_valid_pin(user_input[CONF_PIN_CODE]):
-                errors[CONF_PIN_CODE] = "invalid_pin"
-
-            if not errors:
-                try:
-                    info = await validate_input(self.hass, user_input)
-                except CannotConnect:
-                    errors["base"] = "cannot_connect"
-                except InvalidAuth:
-                    errors["base"] = "invalid_auth"
-                except Exception:
-                    _LOGGER.exception("Unexpected exception")
-                    errors["base"] = "unknown"
-                else:
-                    await self.async_set_unique_id(user_input[CONF_SERIAL_ID])
-                    self._abort_if_unique_id_configured()
-                    return self.async_create_entry(
-                        title=info["title"],
-                        data={
-                            CONF_USERNAME: user_input[CONF_USERNAME],
-                            CONF_PASSWORD: user_input[CONF_PASSWORD],
-                            CONF_SERIAL_ID: user_input[CONF_SERIAL_ID],
-                            CONF_PIN_CODE: user_input[CONF_PIN_CODE],
-                            CONF_API_KEY: info["api_key"],
-                            CONF_SECRET_KEY: info["secret_key"],
-                        },
-                    )
-
-        return self.async_show_form(
-            step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
-        )
+    def __init__(self):
+        """Initialize the config flow."""
+        _LOGGER.debug("Initializing DiagralConfigFlow")
+        self.serialid: str | None = None
+        self.title: str | None = None
+        self.account_username: str | None = None
+        self.account_password: str | None = None
+        self.account_pincode: int | None = None
+        self.apikey: str | None = None
+        self.secretkey: str | None = None
 
     @staticmethod
     @callback
@@ -152,32 +123,59 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
         """Create and return an instance of DiagralOptionsFlow for the given config entry."""
         return DiagralOptionsFlow(config_entry)
 
-
-class DiagralOptionsFlow(config_entries.OptionsFlow):
-    """Handle a config flow for Diagral options."""
-
-    def __init__(self, config_entry: DiagralConfigEntry) -> None:
-        """Initialize the options flow."""
-        self._config_entry = config_entry
-
-    async def async_step_init(
+    async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the options."""
-        errors = {}
+        """Handle the initial step."""
+        errors: dict[str, str] = {}
+
         if user_input is not None:
+            self.serialid = user_input[CONF_SERIAL_ID]
+            return await self.async_step_account()
+
+        # Build form
+        STEP_SERIALID = vol.Schema(
+            {
+                vol.Required(CONF_SERIAL_ID): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=STEP_SERIALID,
+            errors=errors or {},
+            last_step=False,
+        )
+
+    async def async_step_account(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle the account step."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            _LOGGER.debug("Validating input: %s", user_input)
+            # Check if the user has entered a valid email and pin code
             if not is_valid_email(user_input[CONF_USERNAME]):
                 errors[CONF_USERNAME] = "invalid_email"
             if not is_valid_pin(user_input[CONF_PIN_CODE]):
                 errors[CONF_PIN_CODE] = "invalid_pin"
 
             if not errors:
-                # Validate the new configuration
                 try:
-                    # Create a temporary configuration with the new values
-                    temp_config = {**self._config_entry.data, **user_input}
-                    # Attempt to validate the new configuration
-                    await validate_input(self.hass, temp_config)
+                    user_input[CONF_SERIAL_ID] = self.serialid
+                    _LOGGER.debug(
+                        "Account validation in progress with Diagral Cloud..."
+                    )
+                    info = await validate_input(self.hass, user_input)
+                    _LOGGER.debug("Account validation successful")
+                    self.title = info["title"]
+                    self.account_username = user_input[CONF_USERNAME]
+                    self.account_password = user_input[CONF_PASSWORD]
+                    self.account_pincode = user_input[CONF_PIN_CODE]
+                    self.apikey = info["api_key"]
+                    self.secretkey = info["secret_key"]
+                    return await self.async_step_options()
                 except CannotConnect:
                     errors["base"] = "cannot_connect"
                 except InvalidAuth:
@@ -185,39 +183,208 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
                 except Exception:
                     _LOGGER.exception("Unexpected exception")
                     errors["base"] = "unknown"
-                else:
-                    # If validation succeeds, update the configuration
-                    self.hass.config_entries.async_update_entry(
-                        self._config_entry, data=temp_config
-                    )
-                    return self.async_create_entry(title="", data=user_input)
 
-        return cast(
-            ConfigFlowResult,
-            self.async_show_form(
-                step_id="init",
-                data_schema=vol.Schema(
-                    {
-                        vol.Required(
-                            CONF_USERNAME,
-                            default=self._config_entry.data.get(CONF_USERNAME),
-                        ): str,
-                        vol.Required(
-                            CONF_PASSWORD,
-                            default=self._config_entry.data.get(CONF_PASSWORD),
-                        ): str,
-                        vol.Required(
-                            CONF_PIN_CODE,
-                            default=self._config_entry.data.get(CONF_PIN_CODE, 1234),
-                        ): vol.Coerce(int),
-                    }
-                ),
-                errors=errors,
-                description_placeholders={
-                    "username": self._config_entry.data.get(CONF_USERNAME, ""),
-                    "serial_id": self._config_entry.data.get(CONF_SERIAL_ID, ""),
+        # Build form
+        STEP_ACCOUNT = vol.Schema(
+            {
+                vol.Required(CONF_USERNAME): str,
+                vol.Required(CONF_PASSWORD): str,
+                vol.Required(CONF_PIN_CODE, default=None): vol.Coerce(int),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="account",
+            data_schema=STEP_ACCOUNT,
+            errors=errors or {},
+            last_step=False,
+        )
+
+    async def async_step_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle the alarm panel step."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            # Check if the user has entered a valid alarm panel code
+            if user_input[CONF_ALARMPANEL_CODE] is not None and not is_valid_pin(
+                user_input[CONF_ALARMPANEL_CODE]
+            ):
+                errors[CONF_ALARMPANEL_CODE] = "invalid_alarmpanel_code"
+
+            _LOGGER.debug("Submitting entry to HA : %s", user_input)
+            await self.async_set_unique_id(self.serialid)
+            self._abort_if_unique_id_configured()
+            return self.async_create_entry(
+                title=self.title,
+                data={
+                    CONF_SERIAL_ID: self.serialid,
                 },
-            ),
+                options={
+                    CONF_USERNAME: self.account_username,
+                    CONF_PASSWORD: self.account_password,
+                    CONF_PIN_CODE: self.account_pincode,
+                    CONF_API_KEY: self.apikey,
+                    CONF_SECRET_KEY: self.secretkey,
+                    CONF_ALARMPANEL_CODE: user_input.get(CONF_ALARMPANEL_CODE),
+                },
+            )
+
+        # Build form
+        STEP_OPTIONS = vol.Schema(
+            {
+                vol.Optional(CONF_ALARMPANEL_CODE, default=None): vol.Any(
+                    None, vol.Coerce(int)
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="options",
+            data_schema=STEP_OPTIONS,
+            errors=errors or {},
+            last_step=True,
+        )
+
+
+class DiagralOptionsFlow(config_entries.OptionsFlow):
+    """Handle a config flow for Diagral options."""
+
+    def __init__(self, config_entry: DiagralConfigEntry) -> None:
+        """Initialize the options flow."""
+        _LOGGER.debug("Initializing DiagralOptionsFlow")
+        self.options = deepcopy(dict(config_entry.options))
+        self.serialid = config_entry.data[CONF_SERIAL_ID]
+        self.title = config_entry.title
+        self.configuration_changed = False
+        self._username_changed = False
+        self._password_changed = False
+        self._pincode_changed = False
+        self._alarmpanel_code_changed = False
+
+    async def async_step_init(self, user_input: None = None) -> ConfigFlowResult:
+        """Manage the account options."""
+        errors = {}
+
+        if user_input is not None:
+            # Check if the user has changed the username, password or pin code
+            # and check if the new values are valid
+            if user_input[CONF_USERNAME] is not None and user_input[
+                CONF_USERNAME
+            ] != self.options.get(CONF_USERNAME):
+                if not is_valid_email(user_input[CONF_USERNAME]):
+                    errors[CONF_USERNAME] = "invalid_email"
+                self._username_changed = True
+            if user_input[CONF_PASSWORD] is not None and user_input[
+                CONF_PASSWORD
+            ] != self.options.get(CONF_PASSWORD):
+                self._password_changed = True
+            if user_input[CONF_PIN_CODE] is not None and user_input[
+                CONF_PIN_CODE
+            ] != self.options.get(CONF_PIN_CODE):
+                if not is_valid_pin(user_input[CONF_PIN_CODE]):
+                    errors[CONF_PIN_CODE] = "invalid_pin"
+                self._pincode_changed = True
+
+            if not errors:
+                if (
+                    self._username_changed
+                    or self._password_changed
+                    or self._pincode_changed
+                ):
+                    try:
+                        user_input[CONF_SERIAL_ID] = self.serialid
+                        _LOGGER.debug(
+                            "Account validation in progress with Diagral Cloud..."
+                        )
+                        info = await validate_input(self.hass, user_input)
+                        _LOGGER.debug("Account validation successful")
+                        self.title = info["title"]
+                        self.options[CONF_USERNAME] = user_input[CONF_USERNAME]
+                        self.options[CONF_PASSWORD] = user_input[CONF_PASSWORD]
+                        self.options[CONF_PIN_CODE] = user_input[CONF_PIN_CODE]
+                        self.options[CONF_API_KEY] = info["api_key"]
+                        self.options[CONF_SECRET_KEY] = info["secret_key"]
+                    except CannotConnect:
+                        errors["base"] = "cannot_connect"
+                    except InvalidAuth:
+                        errors["base"] = "invalid_auth"
+                    except Exception:
+                        _LOGGER.exception("Unexpected exception")
+                        errors["base"] = "unknown"
+
+                return await self.async_step_options()
+
+        # Build form
+        STEP_ACCOUNT = vol.Schema(
+            {
+                vol.Required(CONF_USERNAME, default=self.options[CONF_USERNAME]): str,
+                vol.Required(CONF_PASSWORD, default=self.options[CONF_PASSWORD]): str,
+                vol.Required(
+                    CONF_PIN_CODE, default=self.options[CONF_PIN_CODE]
+                ): vol.Coerce(int),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=STEP_ACCOUNT,
+            errors=errors or {},
+            description_placeholders={"title": self.title},
+            last_step=False,
+        )
+
+    async def async_step_options(self, user_input: None = None) -> ConfigFlowResult:
+        """Manage the options."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            # Check if the user has changed the alarm panel code
+            if (
+                user_input[CONF_ALARMPANEL_CODE] is not None
+                and user_input[CONF_ALARMPANEL_CODE]
+                != self.options[CONF_ALARMPANEL_CODE]
+            ):
+                # Check if the user has entered a valid alarm panel code
+                if not is_valid_pin(user_input[CONF_ALARMPANEL_CODE]):
+                    errors[CONF_ALARMPANEL_CODE] = "invalid_alarmpanel_code"
+                else:
+                    self._alarmpanel_code_changed = True
+                    self.options[CONF_ALARMPANEL_CODE] = user_input[
+                        CONF_ALARMPANEL_CODE
+                    ]
+
+            if (
+                self._username_changed
+                or self._password_changed
+                or self._pincode_changed
+                or self._alarmpanel_code_changed
+            ):
+                _LOGGER.debug(
+                    "Submitting data entry to HA : %s", self.config_entry.data
+                )
+                _LOGGER.debug("Submitting options entry to HA : %s", self.options)
+                return self.async_create_entry(title="", data=self.options)
+
+            _LOGGER.debug("No configuration changes detected, skipping update.")
+            return self.async_abort(reason="no_changes")
+
+        # Build form
+        STEP_OPTIONS = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_ALARMPANEL_CODE,
+                    default=self.options[CONF_ALARMPANEL_CODE],
+                ): vol.Any(None, vol.Coerce(int)),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="options",
+            data_schema=STEP_OPTIONS,
+            errors=errors or {},
+            last_step=True,
         )
 
 

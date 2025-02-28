@@ -7,18 +7,32 @@
             "cannot_connect": "Échec de la connexion",
             "invalid_auth": "Authentification invalide",
             "invalid_email": "Veuillez entrer une adresse e-mail valide.",
+            "invalid_alarmpanel_code": "Code du panneau d'alarme invalide. Le code doit contenir uniquement des chiffres.",
             "invalid_pin": "Code PIN invalide. Le code PIN doit contenir uniquement des chiffres.",
             "unknown": "Erreur inattendue"
         },
         "step": {
             "user": {
+                "title": "Diagral",
+                "description": "Pour configurer votre système d'alarme Diagral, vous avez besoin d'un module DIAG56AAX qui connecte votre alarme à Internet pour le contrôle à distance.\n\rPour trouver votre ID de série, vérifiez l'étiquette sur votre module ou consultez notre guide de configuration : https://docs.page/mguyard/hass-diagral/integration/setup#how-to-find-your-system-serial-id\n\r![Emplacement SerialID](https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png)",
                 "data": {
-                    "password": "Mot de passe",
-                    "pin_code": "Code PIN",
-                    "serial_id": "Numéro de série",
-                    "username": "Nom d'utilisateur"
-                },
-                "title": "Se connecter à Diagral"
+                "serial_id": "Numéro de série du module DIAG56AAX"
+                }
+            },
+            "account": {
+              "title": "Compte Diagral",
+              "description": "Veuillez fournir vos identifiants Diagral\n\r_Remarque : Assurez-vous que ce compte est associé à votre système d'alarme Diagral et qu'il dispose des autorisations suffisantes pour interagir avec l'alarme._",
+              "data": {
+                "username": "Identifiant (adresse e-mail)",
+                "password": "Mot de passe",
+                "pin_code": "Code PIN Diagral (chiffres uniquement, ex : 1234)"
+              }
+            },
+            "options": {
+              "title": "Options",
+              "data": {
+                "alarmpanel_code": "Code du panneau d'alarme (laisser vide si pas de code)"
+              }
             }
         }
     },
@@ -44,12 +58,14 @@
     },
     "options": {
         "abort": {
-            "already_configured": "L'appareil est déjà configuré"
+            "already_configured": "L'appareil est déjà configuré",
+            "no_changes": "Aucun changement de configuration détecté, mise à jour ignorée."
         },
         "error": {
             "cannot_connect": "Échec de la connexion",
             "invalid_auth": "Authentification invalide",
             "invalid_email": "Veuillez entrer une adresse e-mail valide.",
+            "invalid_alarmpanel_code": "Code du panneau d'alarme invalide. Le code doit contenir uniquement des chiffres.",
             "invalid_pin": "Code PIN invalide. Le code PIN doit contenir uniquement des chiffres.",
             "unknown": "Erreur inattendue"
         },
@@ -57,12 +73,17 @@
             "init": {
                 "data": {
                     "password": "Mot de passe",
-                    "pin_code": "Code PIN",
-                    "serial_id": "ID de série",
-                    "username": "Nom d'utilisateur"
+                    "pin_code": "Code PIN Diagral (chiffres uniquement, ex : 1234)",
+                    "username": "Identifiant (adresse e-mail)"
                 },
-                "description": "Mettre à jour les paramètres pour {username} (ID de série : {serial_id})",
-                "title": "Modifier la configuration de l'alarme Diagral"
+                "description": "Mettre à jour vos identifiants pour {title}",
+                "title": "Mettre à jour les paramètres du compte Diagral"
+            },
+            "options": {
+              "title": "Options",
+              "data": {
+                "alarmpanel_code": "Code du panneau d'alarme (laisser vide si pas de code)"
+              }
             }
         }
     },

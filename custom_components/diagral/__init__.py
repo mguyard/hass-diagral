@@ -51,7 +51,7 @@ type DiagralConfigEntry = ConfigEntry[DiagralData]
 
 async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> bool:
     """Set up Diagral from a config entry."""
-    config = DiagralConfigData(**entry.data)
+    config = DiagralConfigData.from_config_entry(entry)
     # Convert DiagralConfigData to a standard dictionary
     config_dict = asdict(config)
 
