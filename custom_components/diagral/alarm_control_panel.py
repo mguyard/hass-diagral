@@ -20,6 +20,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DiagralConfigEntry, register_webhook, unregister_webhook
 from .const import (
+    CONF_ALARMPANEL_ACTIONTYPE_CODE,
+    CONF_ALARMPANEL_CODE,
     DOMAIN,
     INPUT_GROUPS,
     SERVICE_ARM_GROUP,
@@ -153,9 +155,14 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         return False
 
     @property
-    def code_format(self) -> CodeFormat:
+    def code_format(self) -> CodeFormat | None:
         """Return one or more digits/characters."""
-        return CodeFormat.NUMBER
+        if (
+            self._config.options.alarmpanel_options[CONF_ALARMPANEL_ACTIONTYPE_CODE]
+            != "never"
+        ):
+            return CodeFormat.NUMBER
+        return None
 
     @property
     def changed_by(self) -> str:
@@ -168,30 +175,69 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         system_status: SystemStatus = self.coordinator.data.get("system_status")
         return self._get_ha_state(system_status)
 
-    async def async_alarm_disarm(self, code: str | None = None) -> None:
+    def _validate_code(self, to_state, code_provided: int | None = None) -> bool:
+        """Validate given code."""
+        code = self._config.options.alarmpanel_options[CONF_ALARMPANEL_CODE]
+        trigger = self._config.options.alarmpanel_options[
+            CONF_ALARMPANEL_ACTIONTYPE_CODE
+        ]
+
+        # Convert code to int if not None
+        if code_provided is not None:
+            code_provided = int(code_provided)
+
+        if trigger == "never":
+            _LOGGER.debug("Code validation not required")
+            return True
+
+        if (
+            trigger == "disarm" and to_state == AlarmControlPanelState.DISARMED
+        ) or trigger == "always":
+            _LOGGER.debug("Code validation required")
+            if code is None:
+                _LOGGER.error("Code is not set in the configuration")
+                return False
+            return code_provided == code
+        return True
+
+    async def async_alarm_disarm(self, code: int | None = None) -> None:
         """Send disarm command."""
-        try:
-            await self._api.stop_system()
-            await self.coordinator.async_request_refresh()
-        except DiagralAPIError as e:
-            _LOGGER.error("Failed to disarm Diagral alarm : %s", e)
+        if self._validate_code(
+            to_state=AlarmControlPanelState.DISARMED, code_provided=code
+        ):
+            try:
+                await self._api.stop_system()
+                await self.coordinator.async_request_refresh()
+            except DiagralAPIError as e:
+                _LOGGER.error("Failed to disarm Diagral alarm : %s", e)
+        else:
+            _LOGGER.error("Invalid code provided for disarming")
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Send arm away command."""
-        try:
-            await self._api.start_system()
-            await self.coordinator.async_request_refresh()
-        except DiagralAPIError as e:
-            _LOGGER.error("Failed to arm Diagral alarm in away mode: %s", e)
+        if self._validate_code(
+            to_state=AlarmControlPanelState.ARMED_AWAY, code_provided=code
+        ):
+            try:
+                await self._api.start_system()
+                await self.coordinator.async_request_refresh()
+            except DiagralAPIError as e:
+                _LOGGER.error("Failed to arm Diagral alarm in away mode: %s", e)
+        else:
+            _LOGGER.error("Invalid code provided for arming away")
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         """Send arm home command."""
-        _LOGGER.debug("Arming home with API instance: %s", id(self._api))
-        try:
-            await self._api.presence()
-            await self.coordinator.async_request_refresh()
-        except DiagralAPIError as e:
-            _LOGGER.error("Failed to arm Diagral alarm in home mode: %s", e)
+        if self._validate_code(
+            to_state=AlarmControlPanelState.ARMED_HOME, code_provided=code
+        ):
+            try:
+                await self._api.presence()
+                await self.coordinator.async_request_refresh()
+            except DiagralAPIError as e:
+                _LOGGER.error("Failed to arm Diagral alarm in home mode: %s", e)
+        else:
+            _LOGGER.error("Invalid code provided for arming home")
 
     async def action_arm_groups(self, group_ids: int | list[int]) -> None:
         """Activate one or more groups."""

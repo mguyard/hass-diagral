@@ -1,24 +1,68 @@
 {
     "config": {
         "abort": {
-            "already_configured": "Device is already configured"
+            "already_configured": "Device is already configured",
+            "no_changes": "No configuration changes detected.",
+            "reconfigure_successful": "Reconfiguration successful."
         },
         "error": {
             "cannot_connect": "Failed to connect",
             "invalid_auth": "Invalid authentication",
             "invalid_email": "Please enter a valid email address.",
+            "invalid_alarmpanel_code": "Invalid Alarm Panel Code. Alarm Panel Code must contain only digits (4 or more).",
+            "missing_alarmpanel_code": "Alarm Panel Code is required when you set the action type to something other than `Never`.",
             "invalid_pin": "Invalid PIN code. PIN code must contain only digits.",
             "unknown": "Unexpected error"
         },
         "step": {
             "user": {
                 "data": {
-                    "password": "Password",
-                    "pin_code": "PIN Code",
-                    "serial_id": "Serial ID",
-                    "username": "Username"
+                    "serial_id": "Serial ID of DIAG56AAX module"
                 },
-                "title": "Connect to Diagral"
+                "description": "To set up your Diagral alarm system, you need a DIAG56AAX module which connects your alarm to the internet for remote control.\n\rTo find your Serial ID, check the label on your module or visit our setup guide: https://docs.page/mguyard/hass-diagral/integration/setup#how-to-find-your-system-serial-id\n\r![SerialID Location](https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png)",
+                "title": "Diagral"
+            },
+            "account": {
+              "title": "Diagral Account",
+              "description": "Please provide your Diagral credentials\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
+              "data": {
+                "username": "Username (email address)",
+                "password": "Password",
+                "pin_code": "Diagral PIN Code (numbers only, e.g. 1234)"
+              }
+            }
+            ,
+            "reconfigure": {
+              "title": "Diagral Account",
+              "description": "Please update your Diagral credentials\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
+              "data": {
+                "username": "Username (email address)",
+                "password": "Password",
+                "pin_code": "Diagral PIN Code (numbers only, e.g. 1234)"
+              }
+            },
+            "options": {
+              "title": "Options",
+              "description": "_More details about these options are available [here](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+              "sections": {
+                    "alarmpanel_options": {
+                        "name": "Alarm Panel Options",
+                        "description": "These options apply to your Alarm Control Panel UI",
+                        "data": {
+                            "alarmpanel_actiontype_code": "When do you want the security code to be required?",
+                            "alarmpanel_code": "Alarm Panel Code (minimum of four digits - leave empty for no PIN)"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "selector": {
+        "alarmpanel_actiontype_code": {
+            "options": {
+                "never": "Never",
+                "disarm": "Disarm only",
+                "always": "Always"
             }
         }
     },
@@ -44,25 +88,31 @@
     },
     "options": {
         "abort": {
-            "already_configured": "Device is already configured"
+            "already_configured": "Device is already configured",
+            "no_changes": "No configuration changes detected."
         },
         "error": {
-            "cannot_connect": "Failed to connect",
-            "invalid_auth": "Invalid authentication",
-            "invalid_email": "Please enter a valid email address.",
-            "invalid_pin": "Invalid PIN code. PIN code must contain only digits.",
+            "invalid_alarmpanel_code": "Invalid Alarm Panel Code. Alarm Panel Code must contain only digits (4 or more).",
+            "missing_alarmpanel_code": "Alarm Panel Code is required when you set the action type to something other than `Never`.",
             "unknown": "Unexpected error"
         },
         "step": {
             "init": {
-                "data": {
-                    "password": "Password",
-                    "pin_code": "PIN Code",
-                    "serial_id": "Serial ID",
-                    "username": "Username"
-                },
-                "description": "Update settings for {username} (Serial ID: {serial_id})",
-                "title": "Modify Diagral Alarm Configuration"
+                "title": "Options",
+                "description": "_More details about these options are available [here](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+                "sections": {
+                    "alarmpanel_options": {
+                        "name": "Alarm Panel Options",
+                        "description": "These options apply to your Alarm Control Panel UI",
+                        "data": {
+                            "alarmpanel_actiontype_code": "When do you want the code to be required?",
+                            "alarmpanel_code": "Alarm Panel Code (minimum of four digits - leave empty for no PIN)"
+                        },
+                        "data_description": {
+                            "alarmpanel_actiontype_code": "You can define when the code is required to arm/disarm your alarm. If you set it to `Never`, the code will never be required. If you set it to `To disarm only`, the code will only be required to disarm the alarm. If you set it to `To arm and disarm`, the code will be required for both arming and disarming the alarm."
+                        }
+                    }
+                }
             }
         }
     },
