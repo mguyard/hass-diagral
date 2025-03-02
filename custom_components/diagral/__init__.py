@@ -76,7 +76,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
             config=config, coordinator=coordinator, api=api, webhook_id=webhook_id
         )
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-        entry.async_on_unload(entry.add_update_listener(async_update_options))
 
     except DiagralAPIError as err:
         _LOGGER.error("Failed to set up Diagral integration: %s", err)
@@ -215,38 +214,6 @@ async def unregister_webhook(
         webhook_async_unregister(hass, webhook_id)
         # Force the webhook_id in the entry runtime data to be sure it is saved
         entry.runtime_data.webhook_id = webhook_id
-
-
-async def async_update_options(hass: HomeAssistant, entry: DiagralConfigEntry) -> None:
-    """Update options."""
-    # Retrieve the current configuration
-    current_config: DiagralConfigData = entry.runtime_data.config
-
-    # Convert DiagralConfigData to a standard dictionary
-    current_config_dict = asdict(current_config)
-
-    # Create a new configuration by combining current data and new options
-    new_config = {
-        **current_config_dict,
-        CONF_USERNAME: entry.options.get(
-            CONF_USERNAME, current_config_dict[CONF_USERNAME]
-        ),
-        CONF_PASSWORD: entry.options.get(
-            CONF_PASSWORD, current_config_dict[CONF_PASSWORD]
-        ),
-        CONF_PIN_CODE: entry.options.get(
-            CONF_PIN_CODE, current_config_dict[CONF_PIN_CODE]
-        ),
-    }
-
-    # Update configuration data
-    entry.runtime_data.config = DiagralConfigData(**new_config)
-
-    # Update the configuration entry
-    hass.config_entries.async_update_entry(entry, data=new_config)
-
-    # Reload the configuration entry
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> bool:
