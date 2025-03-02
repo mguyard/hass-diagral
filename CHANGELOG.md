@@ -1,3 +1,12 @@
+# [1.1.0-beta.7](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.6...v1.1.0-beta.7) (2025-03-02)
+
+
+### Features
+
+* **diagral:** ✨ Add alarmpanel_code configuration option and refactor config_flow ([55fa23e](https://github.com/mguyard/hass-diagral/commit/55fa23e0bd8bc420b721908f808a69c64d0e8461))
+* **diagral:** ✨ Refactor `validate_input` to use `TryConnectResult` ([d449f35](https://github.com/mguyard/hass-diagral/commit/d449f35b53fdb364813b75328ab3b57fbbab0749))
+* **diagral:** ✨ Update configuration and add alarm panel options ([302dc97](https://github.com/mguyard/hass-diagral/commit/302dc97c1772fb1f17d23d4fc5ef09a3eefa0eac))
+
 # [1.1.0-beta.6](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.5...v1.1.0-beta.6) (2025-02-26)
 
 
