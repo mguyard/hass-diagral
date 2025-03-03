@@ -152,6 +152,11 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
     @property
     def code_arm_required(self) -> bool:
         """Whether the code is required for arm actions."""
+        if (
+            self._config.options.alarmpanel_options[CONF_ALARMPANEL_ACTIONTYPE_CODE]
+            != "never"
+        ):
+            return True
         return False
 
     @property
