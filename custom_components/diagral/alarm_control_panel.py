@@ -307,8 +307,9 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
     def _handle_event(self, event) -> None:
         """Handle incoming event."""
         _LOGGER.debug("Alarm Control Panel Received event: %s", event)
-        user_info: WebHookNotificationUser = event["data"]["user"]
-        changed_by: str = user_info.username
-        _LOGGER.debug("Alarm State changed by %s", changed_by)
-        self._changed_by = changed_by
-        self.async_write_ha_state()
+        user_info: WebHookNotificationUser | None = event["data"].get("user", None)
+        if user_info:
+            changed_by: str = user_info.username
+            _LOGGER.debug("Alarm State changed by %s", changed_by)
+            self._changed_by = changed_by
+            self.async_write_ha_state()

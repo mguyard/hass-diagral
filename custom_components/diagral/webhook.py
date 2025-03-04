@@ -69,6 +69,12 @@ def enrich_data_alert_anomaly(
     data: WebHookNotification, devices_infos: DeviceList, groups: dict
 ) -> WebHookNotification:
     """Enrich the data with additional information."""
+
+    # If the device_type or device_index is None, skip the enrichment
+    if data.detail.device_type is None or data.detail.device_index is None:
+        _LOGGER.debug("Device type or index is None, skipping enrichment")
+        return data
+
     webhook_device_types = (
         data.detail.device_type.lower() + "s"
     )  # Adding 's' to match the key in devices_infos

@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import logging
 
-from pydiagral.models import AlarmConfiguration
+from pydiagral.models import AlarmConfiguration, Group
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -74,6 +74,7 @@ class DiagralBinarySensor(DiagralEntity, BinarySensorEntity):
         self._attr_unique_id = f"{self._entry_id}_{DOMAIN}_{self._alarm_config.alarm.central.serial}_{self.entity_description.key}"
 
         self._attr_is_on = False
+        self._attr_extra_state_attributes = {}
 
     @property
     def icon(self) -> str | None:
@@ -99,5 +100,21 @@ class DiagralBinarySensor(DiagralEntity, BinarySensorEntity):
             event_alarm_code = int(event["data"].get("alarm_code"))
             ALARM_INTRUSION_CODES = {1130, 1139}
             if event_alarm_code in ALARM_INTRUSION_CODES:
+                # Set the binary sensor to on
                 self._attr_is_on = True
+                # Set the group name and id
+                groups: list[Group] = self._alarm_config.groups
+                group_index: int | None = (
+                    int(event["data"].get("group_index"))
+                    if "group_index" in event["data"]
+                    else None
+                )
+                group: Group = next(
+                    (group for group in groups if group.index == group_index), None
+                )
+                # Add group name and id to the attributes
+                if group and group.name:
+                    self._attr_extra_state_attributes["group_name"] = group.name
+                if group_index:
+                    self._attr_extra_state_attributes["group_id"] = group_index
             self.async_write_ha_state()
