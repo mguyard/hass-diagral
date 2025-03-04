@@ -1,3 +1,15 @@
+# [1.1.0-beta.8](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.7...v1.1.0-beta.8) (2025-03-03)
+
+
+### Bug Fixes
+
+* **diagral:** ✨ Fix forgotten condition for property `code_arm_required` ([d2eed6a](https://github.com/mguyard/hass-diagral/commit/d2eed6a29ab398bdd4da58b7d702380ea010adda))
+
+
+### Features
+
+* **hacs:** 🔧 Update Home Assistant version to 2025.2.0 ([4648701](https://github.com/mguyard/hass-diagral/commit/464870114a26fd1eaa9b49aa79a85648a2aaa8fb))
+
 # [1.1.0-beta.7](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.6...v1.1.0-beta.7) (2025-03-02)
 
 
