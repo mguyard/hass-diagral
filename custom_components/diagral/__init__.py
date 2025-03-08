@@ -7,11 +7,13 @@ import logging
 
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import DiagralAPIError
+from pydiagral.models import Webhook
 
 from homeassistant.components.cloud import (
     CloudNotAvailable,
     CloudNotConnected,
     async_active_subscription as cloud_active_subscription,
+    async_delete_cloudhook as cloud_delete_cloudhook,
     async_get_or_create_cloudhook as cloud_get_or_create_cloudhook,
 )
 from homeassistant.components.webhook import (
@@ -112,6 +114,8 @@ async def register_webhook(
         return None
 
     if external_url is not None:
+        webhook_set_needed = True
+        # If the external URL is a Nabu Casa URL, use the cloudhook
         if external_url.endswith(HA_CLOUD_DOMAIN):
             _LOGGER.debug(
                 "Recommanded external URL is Nabu Casa URL (%s). Selected for webhook",
@@ -132,13 +136,12 @@ async def register_webhook(
             except ValueError as e:
                 _LOGGER.error("Failed to create cloudhook: %s", e)
                 return None
-        else:
+        else:  # Use the external URL
             webhook_url = f"{external_url}/api/webhook/{webhook_id}"
             _LOGGER.debug("Selected external URL for webhook : %s", webhook_url)
-            webhook_set_needed = True
             try:
                 # Check if the webhook is already registered
-                actual_webhook = await api.get_webhook()
+                actual_webhook: Webhook = await api.get_webhook()
                 # If the webhook is already registered, update the URL
                 if actual_webhook is not None:
                     if actual_webhook.webhook_url.startswith(
@@ -169,23 +172,33 @@ async def register_webhook(
                 else:
                     raise
 
-            # If the webhook is not registered, create it
-            if webhook_set_needed:
+        # If the webhook is not registered, register it
+        if webhook_set_needed:
+            try:
                 await api.register_webhook(
                     webhook_url=webhook_url,
                     subscribe_to_anomaly=True,
                     subscribe_to_alert=True,
                     subscribe_to_state=True,
                 )
+            except DiagralAPIError as e:
+                _LOGGER.error(
+                    "Failed to create webhook for %s on %s : %s",
+                    entry.title,
+                    webhook_url,
+                    e,
+                )
+                return None
+            else:
                 _LOGGER.info(
                     "Webhook successfully created for %s on : %s",
                     entry.title,
                     webhook_url,
                 )
-        webhook_async_register(
-            hass, DOMAIN, "Diagral Webhook", webhook_id, handle_webhook
-        )
-        _LOGGER.info("Webhook successfully registered for %s", entry.title)
+                webhook_async_register(
+                    hass, DOMAIN, "Diagral Webhook", webhook_id, handle_webhook
+                )
+                _LOGGER.info("Webhook successfully registered for %s", entry.title)
 
     return webhook_id
 
@@ -203,6 +216,7 @@ async def unregister_webhook(
     )
     if webhook_id:
         try:
+            actual_webhook: Webhook = await api.get_webhook()
             await api.delete_webhook()
         except DiagralAPIError as e:
             _LOGGER.error(
@@ -210,10 +224,22 @@ async def unregister_webhook(
                 entry.title,
                 e,
             )
-        _LOGGER.info("Webhook successfully deleted for %s", entry.title)
-        webhook_async_unregister(hass, webhook_id)
-        # Force the webhook_id in the entry runtime data to be sure it is saved
-        entry.runtime_data.webhook_id = webhook_id
+        else:
+            _LOGGER.info("Webhook successfully deleted for %s", entry.title)
+            if actual_webhook is not None and actual_webhook.webhook_url.startswith(
+                "https://hooks.nabu.casa/"
+            ):
+                _LOGGER.debug(
+                    "Webhook was a cloudhook. Deleting cloudhook %s", webhook_id
+                )
+                try:
+                    await cloud_delete_cloudhook(hass, webhook_id)
+                except ValueError as e:
+                    _LOGGER.error("Failed to delete cloudhook: %s", e)
+            else:
+                webhook_async_unregister(hass, webhook_id)
+            # Force the webhook_id in the entry runtime data to be sure it is saved
+            entry.runtime_data.webhook_id = None
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> bool:
