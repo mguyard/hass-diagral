@@ -1,3 +1,16 @@
+# [1.1.0-beta.9](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.8...v1.1.0-beta.9) (2025-03-04)
+
+
+### Bug Fixes
+
+* **diagral:** 🐛 Handle missing user information in event processing ([3861c16](https://github.com/mguyard/hass-diagral/commit/3861c16bb0acd692a6e3db24b4847fc749f760a8))
+* **diagral:** 🐛 Handle optional user information in event processing ([1abc896](https://github.com/mguyard/hass-diagral/commit/1abc8964eedd48a1af27752457938c24c6bacaa7))
+
+
+### Features
+
+* **diagral:** ✨ Add group information to binary sensor state attributes ([e9776dc](https://github.com/mguyard/hass-diagral/commit/e9776dc27c48c2093d04e327ac3f06b7c7730884))
+
 # [1.1.0-beta.8](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.7...v1.1.0-beta.8) (2025-03-03)
 
 
