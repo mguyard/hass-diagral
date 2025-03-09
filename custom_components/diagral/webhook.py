@@ -20,9 +20,9 @@ async def handle_webhook(
     """Handle incoming webhook from Diagral."""
     try:
         data_received = await request.json()
+        _LOGGER.debug("Received webhook data: %s", data_received)
         data = WebHookNotification.from_dict(data_received)
-
-        _LOGGER.debug("Received webhook data: %s", data)
+        _LOGGER.debug("Received webhook data (parsed): %s", data)
 
         # Retrieve the entry_id from the webhook_id
         entry_id = next(
