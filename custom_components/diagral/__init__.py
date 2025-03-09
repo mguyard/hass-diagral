@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import logging
+from urllib.parse import urlparse
 
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import DiagralAPIError
@@ -98,6 +99,7 @@ async def register_webhook(
     """Register the webhook for Diagral."""
     _LOGGER.debug("Webhook registration requested by '%s' for %s", source, entry.title)
     webhook_id: str = webhook_generate_id()
+    # Get the external URL recommended for the webhook (priority to external before cloud)
     try:
         external_url = get_url(
             hass,
@@ -139,38 +141,45 @@ async def register_webhook(
         else:  # Use the external URL
             webhook_url = f"{external_url}/api/webhook/{webhook_id}"
             _LOGGER.debug("Selected external URL for webhook : %s", webhook_url)
-            try:
-                # Check if the webhook is already registered
-                actual_webhook: Webhook = await api.get_webhook()
-                # If the webhook is already registered, update the URL
-                if actual_webhook is not None:
-                    if actual_webhook.webhook_url.startswith(
-                        f"{external_url}/api/webhook/"
-                    ):
-                        _LOGGER.info(
-                            "Webhook already registered for %s on %s. Updating URL to %s",
-                            entry.title,
-                            actual_webhook.webhook_url,
-                            webhook_url,
-                        )
-                    else:
-                        _LOGGER.warning(
-                            "A Webhook subscription already exists for another URL (%s). Integration will force update of webhook_url to %s",
-                            actual_webhook.webhook_url,
-                            webhook_url,
-                        )
-                    await api.update_webhook(
-                        webhook_url=webhook_url,
-                        subscribe_to_anomaly=True,
-                        subscribe_to_alert=True,
-                        subscribe_to_state=True,
+
+        # Check if the webhook is already registered
+        try:
+            actual_webhook: Webhook = await api.get_webhook()
+            # If the webhook is already registered, update the URL
+            # Trigger warning if the URL is different (not same scheme and hostname)
+            if actual_webhook is not None:
+                _LOGGER.debug(
+                    "Actual Webhook : %s / New Webhook : %s",
+                    actual_webhook,
+                    webhook_url,
+                )
+                if actual_webhook.webhook_url.startswith(
+                    f"{urlparse(webhook_url).scheme}://{urlparse(webhook_url).hostname}"
+                ):
+                    _LOGGER.info(
+                        "Webhook already registered for %s on %s. Updating URL to %s",
+                        entry.title,
+                        actual_webhook.webhook_url,
+                        webhook_url,
                     )
-                    webhook_set_needed = False
-            except DiagralAPIError as err:
-                if "No subscription found for" in str(err):
-                    pass
                 else:
-                    raise
+                    _LOGGER.warning(
+                        "A Webhook subscription already exists for another URL (%s). Integration will force update of webhook_url to %s",
+                        actual_webhook.webhook_url,
+                        webhook_url,
+                    )
+                await api.update_webhook(
+                    webhook_url=webhook_url,
+                    subscribe_to_anomaly=True,
+                    subscribe_to_alert=True,
+                    subscribe_to_state=True,
+                )
+                webhook_set_needed = False
+        except DiagralAPIError as err:
+            if "No subscription found for" in str(err):
+                pass
+            else:
+                raise
 
         # If the webhook is not registered, register it
         if webhook_set_needed:
