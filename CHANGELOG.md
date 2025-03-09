@@ -1,3 +1,10 @@
+# [1.1.0-beta.10](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.9...v1.1.0-beta.10) (2025-03-08)
+
+
+### Bug Fixes
+
+* **webhook:** 🐛 Resolve webhook registration/deletion with NabuCasa ([569733d](https://github.com/mguyard/hass-diagral/commit/569733dcec4fde0c1ee4fb6acb3e19bc466b1613))
+
 # [1.1.0-beta.9](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.8...v1.1.0-beta.9) (2025-03-04)
 
 
