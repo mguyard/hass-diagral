@@ -1,3 +1,10 @@
+# [1.1.0-beta.11](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.10...v1.1.0-beta.11) (2025-03-09)
+
+
+### Bug Fixes
+
+* **webhook:** 🐛 Improve webhook registration logic ([05257c7](https://github.com/mguyard/hass-diagral/commit/05257c7fea690a0feff92963b9c02b357497e175))
+
 # [1.1.0-beta.10](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.9...v1.1.0-beta.10) (2025-03-08)
 
 
