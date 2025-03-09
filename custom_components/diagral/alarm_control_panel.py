@@ -110,29 +110,32 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         system_status: SystemStatus = self.coordinator.data.get("system_status")
 
         # Update the status of the alarm
-        new_state = self._get_ha_state(system_status)
-        if new_state != self.state:
-            _LOGGER.info("Alarm state changed from %s to %s", self.state, new_state)
-            self._attr_state = new_state
+        new_state: AlarmControlPanelState | None = self._get_ha_state(system_status)
+        if new_state:
+            if new_state != self.state:
+                _LOGGER.info("Alarm state changed from %s to %s", self.state, new_state)
+                self._attr_state = new_state
 
-        # Reset the alarm_triggered entity if the alarm is disarmed
-        if new_state == AlarmControlPanelState.DISARMED:
-            entity_registry = er.async_get(self.hass)
-            alarm_triggered_entity_id = entity_registry.async_get_entity_id(
-                "binary_sensor",
-                "diagral",
-                f"{self._entry_id}_{DOMAIN}_{self._alarm_config.alarm.central.serial}_alarm_triggered",
-            )  # Search for the entity_id of the alarm_triggered binary_sensor
-            if alarm_triggered_entity_id:
-                alarm_triggered_entity = self.hass.states.get(alarm_triggered_entity_id)
-                if alarm_triggered_entity and alarm_triggered_entity.state == "on":
-                    self.hass.states.async_set(alarm_triggered_entity_id, "off")
-                    _LOGGER.debug(
-                        "Resetting Alarm Triggered Entity %s from on to off",
-                        alarm_triggered_entity_id,
+            # Reset the alarm_triggered entity if the alarm is disarmed
+            if new_state == AlarmControlPanelState.DISARMED:
+                entity_registry = er.async_get(self.hass)
+                alarm_triggered_entity_id = entity_registry.async_get_entity_id(
+                    "binary_sensor",
+                    "diagral",
+                    f"{self._entry_id}_{DOMAIN}_{self._alarm_config.alarm.central.serial}_alarm_triggered",
+                )  # Search for the entity_id of the alarm_triggered binary_sensor
+                if alarm_triggered_entity_id:
+                    alarm_triggered_entity = self.hass.states.get(
+                        alarm_triggered_entity_id
                     )
+                    if alarm_triggered_entity and alarm_triggered_entity.state == "on":
+                        self.hass.states.async_set(alarm_triggered_entity_id, "off")
+                        _LOGGER.debug(
+                            "Resetting Alarm Triggered Entity %s from on to off",
+                            alarm_triggered_entity_id,
+                        )
 
-        self.async_write_ha_state()
+            self.async_write_ha_state()
 
     def _get_ha_state(
         self, system_status: SystemStatus
