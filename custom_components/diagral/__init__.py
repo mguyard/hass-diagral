@@ -204,10 +204,11 @@ async def register_webhook(
                     entry.title,
                     webhook_url,
                 )
-                webhook_async_register(
-                    hass, DOMAIN, "Diagral Webhook", webhook_id, handle_webhook
-                )
-                _LOGGER.info("Webhook successfully registered for %s", entry.title)
+
+        webhook_async_register(
+            hass, DOMAIN, "Diagral Webhook", webhook_id, handle_webhook
+        )
+        _LOGGER.info("Webhook successfully registered for %s", entry.title)
 
     return webhook_id
 
