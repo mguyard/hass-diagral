@@ -1,10 +1,16 @@
 """Diagral Alarm Control Panel integration for Home Assistant."""
 
 import logging
+from typing import Any
 
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import DiagralAPIError
-from pydiagral.models import AlarmConfiguration, SystemStatus, WebHookNotificationUser
+from pydiagral.models import (
+    AlarmConfiguration,
+    Group,
+    SystemStatus,
+    WebHookNotificationUser,
+)
 import voluptuous as vol
 
 from homeassistant.components.alarm_control_panel import (
@@ -14,7 +20,7 @@ from homeassistant.components.alarm_control_panel import (
     CodeFormat,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_platform, entity_registry as er
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -96,6 +102,9 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         self._entry_id: str = entry_id
         self._attr_unique_id = f"{self._entry_id}_{DOMAIN}_{self._alarm_config.alarm.central.serial}_alarm_control_panel"
         self._attr_translation_key = "central"
+        self._attr_alarm_state: AlarmControlPanelState = self._get_ha_state(
+            self.coordinator.data.get("system_status")
+        )
         self._changed_by: str = ""
         self._api: DiagralAPI = entry.runtime_data.api
 
@@ -103,6 +112,7 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
             AlarmControlPanelEntityFeature.ARM_AWAY
             | AlarmControlPanelEntityFeature.ARM_HOME
         )
+        self._attr_extra_state_attributes: dict[str, Any] = {}
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -113,29 +123,25 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         new_state: AlarmControlPanelState | None = self._get_ha_state(system_status)
         if new_state:
             if new_state != self.state:
-                _LOGGER.info("Alarm state changed from %s to %s", self.state, new_state)
-                self._attr_state = new_state
-
-            # Reset the alarm_triggered entity if the alarm is disarmed
-            if new_state == AlarmControlPanelState.DISARMED:
-                entity_registry = er.async_get(self.hass)
-                alarm_triggered_entity_id = entity_registry.async_get_entity_id(
-                    "binary_sensor",
-                    "diagral",
-                    f"{self._entry_id}_{DOMAIN}_{self._alarm_config.alarm.central.serial}_alarm_triggered",
-                )  # Search for the entity_id of the alarm_triggered binary_sensor
-                if alarm_triggered_entity_id:
-                    alarm_triggered_entity = self.hass.states.get(
-                        alarm_triggered_entity_id
+                # If the alarm is triggered, keep the trigger until disarm
+                if (
+                    self.state == AlarmControlPanelState.TRIGGERED
+                    and new_state != AlarmControlPanelState.DISARMED
+                ):
+                    _LOGGER.info(
+                        "Alarm state remains triggered despite change from %s to %s",
+                        self.state,
+                        new_state,
                     )
-                    if alarm_triggered_entity and alarm_triggered_entity.state == "on":
-                        self.hass.states.async_set(alarm_triggered_entity_id, "off")
-                        _LOGGER.debug(
-                            "Resetting Alarm Triggered Entity %s from on to off",
-                            alarm_triggered_entity_id,
-                        )
+                    self._attr_alarm_state = self.state
+                else:  # Otherwise, update the state
+                    _LOGGER.info(
+                        "Alarm state changed from %s to %s", self.state, new_state
+                    )
+                    self._attr_alarm_state = new_state
+                    self._attr_extra_state_attributes.pop("trigger", None)
 
-            self.async_write_ha_state()
+                self.async_write_ha_state()
 
     def _get_ha_state(
         self, system_status: SystemStatus
@@ -176,12 +182,6 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
     def changed_by(self) -> str:
         """Return the last change triggered by."""
         return self._changed_by
-
-    @property
-    def alarm_state(self) -> AlarmControlPanelState | None:
-        """Return the state of the device."""
-        system_status: SystemStatus = self.coordinator.data.get("system_status")
-        return self._get_ha_state(system_status)
 
     def _validate_code(self, to_state, code_provided: int | None = None) -> bool:
         """Validate given code."""
@@ -298,21 +298,59 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
         await super().async_added_to_hass()
+        # Register callbacks for webhook events (STATUS)
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
                 f"signal-{DOMAIN}-webhook-STATUS",
-                self._handle_event,
+                self._handle_event_status,
+            )
+        )
+        # Register callbacks for webhook events (ALERT)
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"signal-{DOMAIN}-webhook-ALERT",
+                self._handle_event_alert,
             )
         )
 
     @callback
-    def _handle_event(self, event) -> None:
-        """Handle incoming event."""
+    def _handle_event_status(self, event) -> None:
+        """Handle incoming event for STATUS events."""
         _LOGGER.debug("Alarm Control Panel Received event: %s", event)
         user_info: WebHookNotificationUser | None = event["data"].get("user", None)
         if user_info:
             changed_by: str = user_info.username
             _LOGGER.debug("Alarm State changed by %s", changed_by)
             self._changed_by = changed_by
+            self.async_write_ha_state()
+
+    @callback
+    def _handle_event_alert(self, event) -> None:
+        """Handle incoming event for ALERT events."""
+        _LOGGER.debug("%s received event: %s", self.name, event)
+        event_alarm_code = int(event["data"].get("alarm_code"))
+        ALARM_INTRUSION_CODES = {1130, 1139}
+        if event_alarm_code in ALARM_INTRUSION_CODES:
+            # Set the group name and id
+            groups: list[Group] = self._alarm_config.groups
+            group_index: int | None = (
+                int(event["data"].get("group_index"))
+                if "group_index" in event["data"]
+                else None
+            )
+            if group_index:
+                group: Group = next(
+                    (group for group in groups if group.index == group_index), None
+                )
+                # Add group name and id to the attributes
+                trigger_info = {}
+                if group and group.name:
+                    trigger_info["group_name"] = group.name
+                if group_index:
+                    trigger_info["group_id"] = group_index
+                if trigger_info:
+                    self._attr_extra_state_attributes["trigger"] = trigger_info
+            self._attr_alarm_state = AlarmControlPanelState.TRIGGERED
             self.async_write_ha_state()
