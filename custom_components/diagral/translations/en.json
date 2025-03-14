@@ -72,11 +72,6 @@
                 "name": "Central"
             }
         },
-        "binary_sensor": {
-            "alarm_triggered": {
-                "name": "Alarm Triggered"
-            }
-        },
         "sensor": {
             "alarm_anomalies": {
                 "name": "Anomalies"

@@ -31,17 +31,6 @@ You'll need just a few details to configure the Diagral integration:
 - Your system serial ID (from the DIAG56AAX box)
 - The PIN code associated with your username/password
 
-### Choosing Your Diagral Account
-
-Diagral provides two account types: master and secondary.
-Only one account can be active at a time (whether through API or mobile app).
-
-Master accounts can force connection, automatically disconnecting any active session without notification.
-Secondary accounts cannot connect if another account (master or secondary) is already connected.
-
-For better security, we recommend using a secondary account with restricted privileges (as configured in the Diagral eOne mobile app).
-Choose your account type carefully based on your specific needs.
-
 ### Finding Your System Serial ID
 
 The serial number is located inside your Diagral box.
@@ -55,6 +44,10 @@ For guidance on opening the box, refer to the official DIAG56AAX documentation p
 </Info>
 
 ## Integration Setup in Home Assistant
+
+<Warning>
+As [only one simultaneous connection is allowed by the Diagral API](/faq#session-already-opened), before starting the integration setup, make sure you don't have any other active connections such as with the Diagral eOne mobile application.
+</Warning>
 
 Start the setup process by clicking the button below:
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=diagral)

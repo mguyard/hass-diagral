@@ -13,8 +13,7 @@ The Diagral integration operates in Hub Mode, meaning that all configurations wi
 
 | Sensor                    | Description                                                                                |
 | ------------------------- | ------------------------------------------------------------------------------------------ |
-| Central                   | Alarm Control Panel with 3 modes: Away, Home, and Disarmed                                 |
-| Alarm Triggered           | Safety binary sensor (active when alarm is triggered)                                      |
+| Central                   | Alarm Control Panel with 3 modes: Away, Home and Disarmed                                  |
 | Anomalies                 | Sensor displaying the number of anomalies in state and details in attributes               |
 | Active Groups             | Sensor displaying the number of active groups in state and details per group in attributes |
 
@@ -22,10 +21,29 @@ The Diagral integration operates in Hub Mode, meaning that all configurations wi
 All entities are refreshed every `5 minutes` (fixed) or upon receiving a [Webhook](/integration/webhook) from the Diagral Cloud.
 </Info>
 
-## Alarm Triggered - Details
+## Central - Details
 
-The `Alarm Triggered` binary sensor changes its state to `on` when receiving an ALERT webhook (alarm_code 1130, 1139) from Diagral Cloud.
-It automatically resets to `off` when the alarm system is detected as disarmed.
+Central entity is an [Alarm Control Panel](https://www.home-assistant.io/integrations/alarm_control_panel/) entity type.
+This entity supports 3 modes (Away, Home and Disarmed) and 4 states (arming, armed_away, armed_home, disarmed, triggered)
+
+States :
+- `arming`: When the alarm is configured to wait for a specific time before activating (allowing time to exit or enter and input the deactivation code on the keypad)
+- `armed_away`: The alarm is fully activated
+- `armed_home`: The alarm is activated in home mode
+- `disarmed`: The alarm is not activated
+- `triggered`: [An intrusion has been detected](/integration/entities#triggered-state)
+
+### Triggered state
+
+The `triggered` state is not a proper alarm state but is activated when receiving an ALERT [webhook](/integration/webhook) (alarm_code 1130, 1139) from Diagral Cloud.
+The `triggered` status is only removed when the alarm is disarmed.
+When the triggered state is activated, the entity contains attributes (if available in the webhook):
+
+```yaml
+trigger:
+  group_name: Motion Sensors
+  group_id: 3
+```
 
 ## Anomalies - Details
 
