@@ -1,3 +1,12 @@
+# [1.1.0-beta.12](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.11...v1.1.0-beta.12) (2025-03-09)
+
+
+### Bug Fixes
+
+* **alarm_control_panel:** 🐛 improve alarm state handling ([3b9e3f5](https://github.com/mguyard/hass-diagral/commit/3b9e3f5bfe448a8d93d12c290127587f4fa53f23))
+* **webhook:** 🐛 fix webhook registration logic ([73ba0d7](https://github.com/mguyard/hass-diagral/commit/73ba0d784aeb62313e1c366695abeb73d50d2099))
+* **webhook:** 🐛 improve logging for webhook data handling ([8a47783](https://github.com/mguyard/hass-diagral/commit/8a477838669054124d26c35a33e6c905c3f9ed12))
+
 # [1.1.0-beta.11](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.10...v1.1.0-beta.11) (2025-03-09)
 
 
