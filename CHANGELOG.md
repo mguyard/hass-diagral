@@ -1,3 +1,10 @@
+# [1.1.0-beta.14](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.13...v1.1.0-beta.14) (2025-03-15)
+
+
+### Features
+
+* **alarm_control_panel:** ✨ enhance code requirement logic for arming ([cf6d49c](https://github.com/mguyard/hass-diagral/commit/cf6d49ce53bb31d9521801cc20ccd554b6e5bc36))
+
 # [1.1.0-beta.13](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.12...v1.1.0-beta.13) (2025-03-14)
 
 
