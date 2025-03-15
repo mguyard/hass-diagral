@@ -1,3 +1,10 @@
+# [1.1.0-beta.13](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.12...v1.1.0-beta.13) (2025-03-14)
+
+
+### Features
+
+* **diagral:** ✨ replace `triggered binary_sensor` by triggered support in alarm_control_panel ([841dec2](https://github.com/mguyard/hass-diagral/commit/841dec2cffde38c0bdeb63e2df829cd92c9c5247))
+
 # [1.1.0-beta.12](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.11...v1.1.0-beta.12) (2025-03-09)
 
 
