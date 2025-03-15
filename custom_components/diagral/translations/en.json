@@ -51,6 +51,9 @@
                         "data": {
                             "alarmpanel_actiontype_code": "When do you want the security code to be required?",
                             "alarmpanel_code": "Alarm Panel Code (minimum of four digits - leave empty for no PIN)"
+                        },
+                        "data_description": {
+                            "alarmpanel_actiontype_code": "You can define when the code is required to arm/disarm your alarm. If you set it to `Never`, the code will never be required. If you set it to `To disarm only`, the code will only be required to disarm the alarm. If you set it to `To arm and disarm`, the code will be required for both arming and disarming the alarm."
                         }
                     }
                 }

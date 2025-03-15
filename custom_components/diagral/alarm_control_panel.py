@@ -107,7 +107,7 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         )
         self._changed_by: str = ""
         self._api: DiagralAPI = entry.runtime_data.api
-
+        self._attr_code_arm_required: bool = self._is_code_arm_required()
         self._attr_supported_features = (
             AlarmControlPanelEntityFeature.ARM_AWAY
             | AlarmControlPanelEntityFeature.ARM_HOME
@@ -141,6 +141,8 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
                     self._attr_alarm_state = new_state
                     self._attr_extra_state_attributes.pop("trigger", None)
 
+                # Update the code requirement
+                self._attr_code_arm_required = self._is_code_arm_required()
                 self.async_write_ha_state()
 
     def _get_ha_state(
@@ -159,22 +161,9 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         return None
 
     @property
-    def code_arm_required(self) -> bool:
-        """Whether the code is required for arm actions."""
-        if (
-            self._config.options.alarmpanel_options[CONF_ALARMPANEL_ACTIONTYPE_CODE]
-            != "never"
-        ):
-            return True
-        return False
-
-    @property
     def code_format(self) -> CodeFormat | None:
         """Return one or more digits/characters."""
-        if (
-            self._config.options.alarmpanel_options[CONF_ALARMPANEL_ACTIONTYPE_CODE]
-            != "never"
-        ):
+        if self._is_code_arm_required():
             return CodeFormat.NUMBER
         return None
 
@@ -182,6 +171,28 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
     def changed_by(self) -> str:
         """Return the last change triggered by."""
         return self._changed_by
+
+    def _is_code_arm_required(self) -> bool:
+        """Return whether the code is required for requested actions."""
+        # If configuration requires code never, don't require code
+        if (
+            self._config.options.alarmpanel_options[CONF_ALARMPANEL_ACTIONTYPE_CODE]
+            == "never"
+        ):
+            return False
+        # If configuration requires code disarm, require code if the alarm is armed
+        if (
+            self._config.options.alarmpanel_options[CONF_ALARMPANEL_ACTIONTYPE_CODE]
+            == "disarm"
+        ):
+            if self._attr_alarm_state in (
+                AlarmControlPanelState.ARMING,
+                AlarmControlPanelState.ARMED_AWAY,
+                AlarmControlPanelState.ARMED_HOME,
+            ):
+                return True
+            return False  # If the alarm is disarmed, don't require code
+        return True  # For all other cases, require code
 
     def _validate_code(self, to_state, code_provided: int | None = None) -> bool:
         """Validate given code."""
