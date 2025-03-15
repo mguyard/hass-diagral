@@ -50,6 +50,9 @@
                         "data": {
                             "alarmpanel_actiontype_code": "Quand voulez-vous que le code de sécurité soit exigé ?",
                             "alarmpanel_code": "Code du panneau d'alarme (minimum quatre chiffres - laisser vide pour ne pas activer la fonctionnalité)"
+                        },
+                        "data_description": {
+                            "alarmpanel_actiontype_code": "Vous pouvez définir quand le code est requis pour armer/désarmer votre alarme. Si vous le configurez sur `Jamais`, le code ne sera jamais demandé. Si vous le configurez sur `Pour désarmer uniquement`, le code sera uniquement demandé pour désarmer l'alarme. Si vous le configurez sur `Pour armer et désarmer`, le code sera demandé à la fois pour armer et désarmer l'alarme."
                         }
                     }
                 }

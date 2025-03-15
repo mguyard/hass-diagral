@@ -17,19 +17,6 @@ To change your credentials, go to [the integration configuration](https://my.hom
 To enable/disable this feature, go to [the integration configuration](https://my.home-assistant.io/redirect/integration/?domain=diagral), click on `Configure` and you'll find the settings under `Alarm Panel Options`.
 </Accordion>
 
-## Behavior
-
-### Required code doesn't match my configuration
-
-<Accordion title="What is the reason" icon="question">
-You have configured the integration to require a code only when disarming. However, when you arm your alarm, the code is requested.
-This is normal behavior because Home Assistant works this way with its `Alarm Control Panel` platform. Indeed, to detect if a code is required, Home Assistant checks the `code_arm_required` attribute.
-If it's True, then a code must be requested. However, Home Assistant is not able to request it only for disarming (at least for now).
-
-Nevertheless, the code is only verified for the actions you have [configured](/integration/setup#alarm-panel-options).
-Therefore, if you have configured a code required only for disarming, you can enter any code (even a wrong one) for activation.
-</Accordion>
-
 ## Errors
 
 ### Session already opened
