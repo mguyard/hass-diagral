@@ -1,3 +1,10 @@
+# [1.1.0-beta.15](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.14...v1.1.0-beta.15) (2025-03-22)
+
+
+### Bug Fixes
+
+* **diagral:** 🐛 update `pydiagral` requirement to version 1.5.2 ([e4b3614](https://github.com/mguyard/hass-diagral/commit/e4b3614a159e06d58bbd784ba4b72ffec42ac5d5))
+
 # [1.1.0-beta.14](https://github.com/mguyard/hass-diagral/compare/v1.1.0-beta.13...v1.1.0-beta.14) (2025-03-15)
 
 
