@@ -246,7 +246,7 @@ class DiagralSensor(DiagralEntity, SensorEntity):
 
         if system_status.status == "PRESENCE":
             # If the system is in presence mode, we grab the groups from the alarm configuration
-            group_list = alarm_config.grp_marche_presence
+            group_list = alarm_config.presence_group
         else:
             # Otherwise, count the number of activated groups
             group_list = system_status.activated_groups
