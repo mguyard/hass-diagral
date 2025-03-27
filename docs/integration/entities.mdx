@@ -1,0 +1,133 @@
+---
+title: Entities
+description: All entities exposed to Home Assistant
+previous: /integration/setup
+previousTitle: Setup
+next: /integration/webhook
+nextTitle: Webhook
+---
+
+## List of entities
+
+The Diagral integration operates in Hub Mode, meaning that all configurations will be created as devices, and each device will consist of a set of entities.
+
+| Sensor                    | Description                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| Central                   | Alarm Control Panel with 3 modes: Away, Home and Disarmed                                  |
+| Anomalies                 | Sensor displaying the number of anomalies in state and details in attributes               |
+| Active Groups             | Sensor displaying the number of active groups in state and details per group in attributes |
+
+<Info>
+All entities are refreshed every `5 minutes` (fixed) or upon receiving a [Webhook](/integration/webhook) from the Diagral Cloud.
+</Info>
+
+## Central - Details
+
+Central entity is an [Alarm Control Panel](https://www.home-assistant.io/integrations/alarm_control_panel/) entity type.
+This entity supports 3 modes (Away, Home and Disarmed) and 4 states (arming, armed_away, armed_home, disarmed, triggered)
+
+States :
+- `arming`: When the alarm is configured to wait for a specific time before activating (allowing time to exit or enter and input the deactivation code on the keypad)
+- `armed_away`: The alarm is fully activated
+- `armed_home`: The alarm is activated in home mode
+- `disarmed`: The alarm is not activated
+- `triggered`: [An intrusion has been detected](/integration/entities#triggered-state)
+
+### Triggered state
+
+The `triggered` state is not a proper alarm state but is activated when receiving an ALERT [webhook](/integration/webhook) (alarm_code 1130, 1139) from Diagral Cloud.
+The `triggered` status is only removed when the alarm is disarmed.
+When the triggered state is activated, the entity contains attributes (if available in the webhook):
+
+```yaml
+trigger:
+  group_name: Motion Sensors
+  group_id: 3
+```
+
+## Anomalies - Details
+
+<Card title="Example of Anomalies Sensor Attributes" icon="newspaper">
+```yaml
+unit_of_measurement: anomalies
+icon: mdi:alert-box
+friendly_name: Home Alarm Anomalies
+created_at: 2025-02-25T17:45:10.796890+01:00
+updated_at: 2025-02-25T18:14:08.936700+01:00
+anomalies: // [!code highlight]
+  sensors: // [!code highlight]
+    - serial: '123' // [!code highlight]
+      index: 0 // [!code highlight]
+      group: Kitchen // [!code highlight]
+      label: Kitchen Door // [!code highlight]
+      id: 23456789 // [!code highlight]
+      name: sensorAlert // [!code highlight]
+    - id: 98765432 // [!code highlight]
+      name: sensorAlert2 // [!code highlight]
+  central: // [!code highlight]
+    - id: 12805213 // [!code highlight]
+      name: mainPowerSupplyAlert // [!code highlight]
+    - serial: 234 // [!code highlight]
+      group: Détecteurs de Mouvements // [!code highlight]
+      id: 12345678 // [!code highlight]
+      name: mainPowerSupplyAlert2 // [!code highlight]
+```
+</Card>
+
+All anomalies are under `anomalies` key. The first level (e.g., sensor and central in this example) represents the type of element with anomalies. It can be of multiple types:
+- sensor
+- badges
+- sirens
+- cameras
+- commands
+- trasceivers
+- transmitters
+- central
+
+---
+
+Each anomaly can have several attributes:
+- `id`: The unique identifier of the anomaly (internally defined by Diagral)
+- `name`: The name of the anomaly (internally defined by Diagral)
+- `serial`: The serial number of the element that triggered the anomaly (optional)
+- `index`: The index of the element that triggered the anomaly (optional)
+- `group`: The group associated with the element that triggered the anomaly. This can be the group name if defined, otherwise the Group ID (optional)
+- `label`: The name of the element that triggered the anomaly (optional)
+
+Using this attribute format, you can leverage Jinja2 templates to extract and utilize the information you need.
+Below is a quick and simple example for a [Home Assistant Template](https://my.home-assistant.io/redirect/developer_template/) (replace `sensor.home_anomalies` with your actual entity):
+
+```yaml
+{% set anomalies = state_attr('sensor.home_anomalies', 'anomalies') %}
+{% for location in anomalies.keys() -%}
+{% if anomalies[location]|list -%}
+Anomalie {{ anomalies[location]|map(attribute='name')|join(', ') }} on {{ location|capitalize }}
+{% endif -%}
+{% endfor %}
+```
+
+## Active Groups - Details
+
+<Card title="Example of Active Groups Sensor Attributes" icon="newspaper">
+```yaml
+unit_of_measurement: active groups
+icon: mdi:home-group
+friendly_name: Home Alarm Active Groups
+groups: // [!code highlight]
+  - index: 1 // [!code highlight]
+    name: Kitchen // [!code highlight]
+    active: true // [!code highlight]
+  - index: 2 // [!code highlight]
+    name: Stair // [!code highlight]
+    active: true // [!code highlight]
+  - index: 3 // [!code highlight]
+    name: Bed Room // [!code highlight]
+    active: true // [!code highlight]
+  - index: 4 // [!code highlight]
+    name: Garage // [!code highlight]
+    active: false // [!code highlight]
+updated_at: "2025-02-26T00:24:28.212737+01:00"
+```
+</Card>
+
+Since the attribute format is identical to that of `Anomalies`, the same Jinja2 template type can be utilized.

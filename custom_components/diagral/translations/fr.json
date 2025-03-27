@@ -1,24 +1,70 @@
 {
     "config": {
         "abort": {
-            "already_configured": "L'appareil est déjà configuré"
+            "already_configured": "L'appareil est déjà configuré",
+            "no_changes": "Aucun changement de configuration détecté.",
+            "reconfigure_successful": "Reconfiguration réussie."
         },
         "error": {
             "cannot_connect": "Échec de la connexion",
             "invalid_auth": "Authentification invalide",
             "invalid_email": "Veuillez entrer une adresse e-mail valide.",
+            "invalid_alarmpanel_code": "Code du panneau d'alarme invalide. Le code doit contenir uniquement des chiffres (4 ou plus).",
+            "missing_alarmpanel_code": "Le code du panneau d'alarme est requis lorsque vous configurez le type d'action sur une valeur autre que `Jamais`.",
             "invalid_pin": "Code PIN invalide. Le code PIN doit contenir uniquement des chiffres.",
             "unknown": "Erreur inattendue"
         },
         "step": {
             "user": {
+                "title": "Diagral",
+                "description": "Pour configurer votre système d'alarme Diagral, vous avez besoin d'un module DIAG56AAX qui connecte votre alarme à Internet pour le contrôle à distance.\n\rPour trouver votre ID de série, vérifiez l'étiquette sur votre module ou consultez notre guide de configuration : https://docs.page/mguyard/hass-diagral/integration/setup#how-to-find-your-system-serial-id\n\r![Emplacement SerialID](https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png)",
                 "data": {
-                    "password": "Mot de passe",
-                    "pin_code": "Code PIN",
-                    "serial_id": "Numéro de série",
-                    "username": "Nom d'utilisateur"
-                },
-                "title": "Se connecter à Diagral"
+                    "serial_id": "Numéro de série du module DIAG56AAX"
+                }
+            },
+            "account": {
+              "title": "Compte Diagral",
+              "description": "Veuillez fournir vos identifiants Diagral\n\r_Remarque : Assurez-vous que ce compte est associé à votre système d'alarme Diagral et qu'il dispose des autorisations suffisantes pour interagir avec l'alarme._",
+              "data": {
+                "username": "Identifiant (adresse e-mail)",
+                "password": "Mot de passe",
+                "pin_code": "Code PIN Diagral (chiffres uniquement, ex : 1234)"
+              }
+            },
+            "reconfigure": {
+              "title": "Compte Diagral",
+              "description": "Veuillez mettre à jour vos identifiants Diagral\n\r_Remarque : Assurez-vous que ce compte est associé à votre système d'alarme Diagral et qu'il dispose des autorisations suffisantes pour interagir avec l'alarme._",
+              "data": {
+                "username": "Identifiant (adresse e-mail)",
+                "password": "Mot de passe",
+                "pin_code": "Code PIN Diagral (chiffres uniquement, ex : 1234)"
+              }
+            },
+            "options": {
+                "title": "Options",
+                "description": "_Plus de détails sur ces options sont disponibles [ici](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+                "sections": {
+                    "alarmpanel_options": {
+                        "name": "Options du panneau d'alarme",
+                        "description": "Ces options s'appliquent à l'interface de votre panneau d'alarme",
+                        "data": {
+                            "alarmpanel_actiontype_code": "Quand voulez-vous que le code de sécurité soit exigé ?",
+                            "alarmpanel_code": "Code du panneau d'alarme (minimum quatre chiffres - laisser vide pour ne pas activer la fonctionnalité)"
+                        },
+                        "data_description": {
+                            "alarmpanel_actiontype_code": "Vous pouvez définir quand le code est requis pour armer/désarmer votre alarme. Si vous le configurez sur `Jamais`, le code ne sera jamais demandé. Si vous le configurez sur `Pour désarmer uniquement`, le code sera uniquement demandé pour désarmer l'alarme. Si vous le configurez sur `Pour armer et désarmer`, le code sera demandé à la fois pour armer et désarmer l'alarme."
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "selector": {
+        "alarmpanel_actiontype_code": {
+            "options": {
+                "never": "Jamais",
+                "disarm": "Pour désarmer uniquement",
+                "always": "Toujours"
             }
         }
     },
@@ -28,38 +74,42 @@
                 "name": "Centrale"
             }
         },
-        "binary_sensor": {
-            "alarm_triggered": {
-                "name": "Alarme déclenchée"
-            }
-        },
         "sensor": {
             "alarm_anomalies": {
                 "name": "Anomalies"
+            },
+            "active_groups": {
+                "name": "Groupes actifs"
             }
         }
     },
     "options": {
         "abort": {
-            "already_configured": "L'appareil est déjà configuré"
+            "already_configured": "L'appareil est déjà configuré",
+            "no_changes": "Aucun changement de configuration détecté, mise à jour ignorée."
         },
         "error": {
-            "cannot_connect": "Échec de la connexion",
-            "invalid_auth": "Authentification invalide",
-            "invalid_email": "Veuillez entrer une adresse e-mail valide.",
-            "invalid_pin": "Code PIN invalide. Le code PIN doit contenir uniquement des chiffres.",
+            "invalid_alarmpanel_code": "Code du panneau d'alarme invalide. Le code doit contenir uniquement des chiffres (4 ou plus).",
+            "missing_alarmpanel_code": "Le code du panneau d'alarme est requis lorsque vous configurez le type d'action sur une valeur autre que `Jamais`.",
             "unknown": "Erreur inattendue"
         },
         "step": {
             "init": {
-                "data": {
-                    "password": "Mot de passe",
-                    "pin_code": "Code PIN",
-                    "serial_id": "ID de série",
-                    "username": "Nom d'utilisateur"
-                },
-                "description": "Mettre à jour les paramètres pour {username} (ID de série : {serial_id})",
-                "title": "Modifier la configuration de l'alarme Diagral"
+                "title": "Options",
+                "description": "_Plus de détails sur ces options sont disponibles [ici](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+                "sections": {
+                    "alarmpanel_options": {
+                        "name": "Options du panneau d'alarme",
+                        "description": "Ces options s'appliquent à l'interface de votre panneau d'alarme",
+                        "data": {
+                            "alarmpanel_actiontype_code": "Quand voulez-vous que le code de sécurité soit exigé ?",
+                            "alarmpanel_code": "Code du panneau d'alarme (minimum quatre chiffres - laisser vide pour ne pas activer la fonctionnalité)"
+                        },
+                        "data_description": {
+                            "alarmpanel_actiontype_code": "Vous pouvez définir quand le code est requis pour armer/désarmer votre alarme. Si vous le configurez sur `Jamais`, le code ne sera jamais demandé. Si vous le configurez sur `Pour désarmer uniquement`, le code sera uniquement demandé pour désarmer l'alarme. Si vous le configurez sur `Pour armer et désarmer`, le code sera demandé à la fois pour armer et désarmer l'alarme."
+                        }
+                    }
+                }
             }
         }
     },
@@ -83,6 +133,14 @@
                 }
             },
             "name": "Désactiver le(s) groupe(s)"
+        },
+        "register_webhook": {
+            "description": "Déclarer un Webhook dans le Cloud Diagral - Un seul Webhook peut être déclaré par installation",
+            "name": "Déclarer le Webhook"
+        },
+        "unregister_webhook": {
+            "description": "Désinscrire le Webhook du Cloud Diagral",
+            "name": "Désinscrire le Webhook"
         }
     }
 }

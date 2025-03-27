@@ -58,7 +58,6 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
                 # Update only if the data is valid
                 self.data = updated_data
                 await self._update_device_info()
-                self.async_update_listeners()
                 return updated_data
         except DiagralAPIError as err:
             raise UpdateFailed(f"Error communicating with API: {err}") from err

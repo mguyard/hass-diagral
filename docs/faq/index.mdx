@@ -1,0 +1,35 @@
+---
+title: FAQ
+summary: Frequently Asked Questions
+---
+
+## Configuration
+
+### Change Credentials (login/password/pin)
+
+<Accordion title="How to" icon="question" defaultOpen>
+To change your credentials, go to [the integration configuration](https://my.home-assistant.io/redirect/integration/?domain=diagral), click on the 3 vertical dots icon and select `Reconfigure`.
+</Accordion>
+
+### Enable/Disable Code for Arming/Disarming
+
+<Accordion title="How to" icon="question">
+To enable/disable this feature, go to [the integration configuration](https://my.home-assistant.io/redirect/integration/?domain=diagral), click on `Configure` and you'll find the settings under `Alarm Panel Options`.
+</Accordion>
+
+## Errors
+
+### Session already opened
+
+<Accordion title="What is the reason" icon="question">
+The Diagral Cloud only accepts a single simultaneous connection for the same serial ID. It is possible that you have another open session that is blocking your access.
+This can be through the eOne application that you are using or from which you have not logged out, or another solution using the Diagral API.
+
+`How to solve?`: Disconnect from the other session.
+</Accordion>
+
+---
+
+<Success>
+[Feel free to share](https://github.com/mguyard/hass-diagral/issues/new/choose) any content you think would be useful here.
+</Success>

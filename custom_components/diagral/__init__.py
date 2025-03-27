@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import logging
+from urllib.parse import urlparse
 
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import DiagralAPIError
+from pydiagral.models import Webhook
 
 from homeassistant.components.cloud import (
+    CloudNotAvailable,
+    CloudNotConnected,
     async_active_subscription as cloud_active_subscription,
+    async_delete_cloudhook as cloud_delete_cloudhook,
+    async_get_or_create_cloudhook as cloud_get_or_create_cloudhook,
 )
 from homeassistant.components.webhook import (
     async_generate_id as webhook_generate_id,
@@ -23,7 +29,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
-from .const import CONF_API_KEY, CONF_PIN_CODE, CONF_SECRET_KEY, CONF_SERIAL_ID, DOMAIN
+from .const import (
+    CONF_API_KEY,
+    CONF_PIN_CODE,
+    CONF_SECRET_KEY,
+    CONF_SERIAL_ID,
+    DOMAIN,
+    HA_CLOUD_DOMAIN,
+)
 from .coordinator import DiagralDataUpdateCoordinator
 from .models import DiagralConfigData, DiagralData
 from .webhook import handle_webhook
@@ -32,7 +45,6 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [
     Platform.ALARM_CONTROL_PANEL,
-    Platform.BINARY_SENSOR,
     Platform.SENSOR,
 ]
 
@@ -41,7 +53,7 @@ type DiagralConfigEntry = ConfigEntry[DiagralData]
 
 async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> bool:
     """Set up Diagral from a config entry."""
-    config = DiagralConfigData(**entry.data)
+    config = DiagralConfigData.from_config_entry(entry)
     # Convert DiagralConfigData to a standard dictionary
     config_dict = asdict(config)
 
@@ -60,13 +72,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
         await coordinator.async_config_entry_first_refresh()
 
         # Register the webhook
-        webhook_id = await register_webhook(hass, entry, api)
+        webhook_id = await register_webhook(hass, entry, api, "setup_entry")
 
         entry.runtime_data = DiagralData(
             config=config, coordinator=coordinator, api=api, webhook_id=webhook_id
         )
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-        entry.async_on_unload(entry.add_update_listener(async_update_options))
 
     except DiagralAPIError as err:
         _LOGGER.error("Failed to set up Diagral integration: %s", err)
@@ -79,30 +90,70 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
 
 
 async def register_webhook(
-    hass: HomeAssistant, entry: DiagralConfigEntry, api: DiagralAPI
-) -> str:
+    hass: HomeAssistant,
+    entry: DiagralConfigEntry,
+    api: DiagralAPI,
+    source: str = "Unknown",
+) -> str | None:
     """Register the webhook for Diagral."""
+    _LOGGER.debug("Webhook registration requested by '%s' for %s", source, entry.title)
     webhook_id: str = webhook_generate_id()
-    if cloud_active_subscription(hass):
-        webhook_url = await hass.components.cloud.async_create_cloudhook(webhook_id)
-    else:
-        try:
-            external_url = get_url(
-                hass,
-                require_ssl=True,
-                allow_internal=False,
-                allow_cloud=True,
-                prefer_external=True,
+    # Get the external URL recommended for the webhook (priority to external before cloud)
+    try:
+        external_url = get_url(
+            hass,
+            require_ssl=True,
+            allow_internal=False,
+            allow_cloud=True,
+            prefer_external=True,
+        )
+        _LOGGER.debug("Returned external URL for webhook : %s", external_url)
+    except NoURLAvailableError:
+        _LOGGER.error(
+            "No URL available for Diagral webhook matching criteria (ssl, external). Webhook will not be created"
+        )
+        return None
+
+    if external_url is not None:
+        webhook_set_needed = True
+        # If the external URL is a Nabu Casa URL, use the cloudhook
+        if external_url.endswith(HA_CLOUD_DOMAIN):
+            _LOGGER.debug(
+                "Recommanded external URL is Nabu Casa URL (%s). Selected for webhook",
+                external_url,
             )
-            webhook_url = f"{external_url}/api/webhook/{webhook_id}"
-            webhook_set_needed = True
             try:
-                # Check if the webhook is already registered
-                actual_webhook = await api.get_webhook()
-                # If the webhook is already registered, update the URL
-                # or if no subscription found, pass
+                if cloud_active_subscription(hass):
+                    webhook_url = await cloud_get_or_create_cloudhook(hass, webhook_id)
+                else:
+                    _LOGGER.error(
+                        "Cloud subscription not active. Webhook will not be created"
+                    )
+            except (CloudNotConnected, CloudNotAvailable):
+                _LOGGER.error(
+                    "Cloud not connected or not available. Webhook will not be created"
+                )
+                return None
+            except ValueError as e:
+                _LOGGER.error("Failed to create cloudhook: %s", e)
+                return None
+        else:  # Use the external URL
+            webhook_url = f"{external_url}/api/webhook/{webhook_id}"
+            _LOGGER.debug("Selected external URL for webhook : %s", webhook_url)
+
+        # Check if the webhook is already registered
+        try:
+            actual_webhook: Webhook = await api.get_webhook()
+            # If the webhook is already registered, update the URL
+            # Trigger warning if the URL is different (not same scheme and hostname)
+            if actual_webhook is not None:
+                _LOGGER.debug(
+                    "Actual Webhook : %s / New Webhook : %s",
+                    actual_webhook,
+                    webhook_url,
+                )
                 if actual_webhook.webhook_url.startswith(
-                    f"{external_url}/api/webhook/"
+                    f"{urlparse(webhook_url).scheme}://{urlparse(webhook_url).hostname}"
                 ):
                     _LOGGER.info(
                         "Webhook already registered for %s on %s. Updating URL to %s",
@@ -110,72 +161,94 @@ async def register_webhook(
                         actual_webhook.webhook_url,
                         webhook_url,
                     )
-                    await api.update_webhook(
-                        webhook_url=webhook_url,
-                        subscribe_to_anomaly=True,
-                        subscribe_to_alert=True,
-                        subscribe_to_state=True,
-                    )
-                    webhook_set_needed = False
-            except DiagralAPIError as err:
-                if "No subscription found for" in str(err):
-                    pass
                 else:
-                    raise
+                    _LOGGER.warning(
+                        "A Webhook subscription already exists for another URL (%s). Integration will force update of webhook_url to %s",
+                        actual_webhook.webhook_url,
+                        webhook_url,
+                    )
+                await api.update_webhook(
+                    webhook_url=webhook_url,
+                    subscribe_to_anomaly=True,
+                    subscribe_to_alert=True,
+                    subscribe_to_state=True,
+                )
+                webhook_set_needed = False
+        except DiagralAPIError as err:
+            if "No subscription found for" in str(err):
+                pass
+            else:
+                raise
 
-            # If the webhook is not registered, create it
-            if webhook_set_needed:
+        # If the webhook is not registered, register it
+        if webhook_set_needed:
+            try:
                 await api.register_webhook(
                     webhook_url=webhook_url,
                     subscribe_to_anomaly=True,
                     subscribe_to_alert=True,
                     subscribe_to_state=True,
                 )
+            except DiagralAPIError as e:
+                _LOGGER.error(
+                    "Failed to create webhook for %s on %s : %s",
+                    entry.title,
+                    webhook_url,
+                    e,
+                )
+                return None
+            else:
                 _LOGGER.info(
-                    "Webhook successfully created for %s on %s",
+                    "Webhook successfully created for %s on : %s",
                     entry.title,
                     webhook_url,
                 )
-        except NoURLAvailableError:
-            _LOGGER.error(
-                "No URL available for Diagral webhook matching criteria (ssl, external). Webhook will not be created"
-            )
 
-    webhook_async_register(hass, DOMAIN, "Diagral Webhook", webhook_id, handle_webhook)
-    _LOGGER.info("Webhook successfully registered for %s", entry.title)
+        webhook_async_register(
+            hass, DOMAIN, "Diagral Webhook", webhook_id, handle_webhook
+        )
+        _LOGGER.info("Webhook successfully registered for %s", entry.title)
+
     return webhook_id
 
 
-async def async_update_options(hass: HomeAssistant, entry: DiagralConfigEntry) -> None:
-    """Update options."""
-    # Retrieve the current configuration
-    current_config: DiagralConfigData = entry.runtime_data.config
-
-    # Convert DiagralConfigData to a standard dictionary
-    current_config_dict = asdict(current_config)
-
-    # Create a new configuration by combining current data and new options
-    new_config = {
-        **current_config_dict,
-        CONF_USERNAME: entry.options.get(
-            CONF_USERNAME, current_config_dict[CONF_USERNAME]
-        ),
-        CONF_PASSWORD: entry.options.get(
-            CONF_PASSWORD, current_config_dict[CONF_PASSWORD]
-        ),
-        CONF_PIN_CODE: entry.options.get(
-            CONF_PIN_CODE, current_config_dict[CONF_PIN_CODE]
-        ),
-    }
-
-    # Update configuration data
-    entry.runtime_data.config = DiagralConfigData(**new_config)
-
-    # Update the configuration entry
-    hass.config_entries.async_update_entry(entry, data=new_config)
-
-    # Reload the configuration entry
-    await hass.config_entries.async_reload(entry.entry_id)
+async def unregister_webhook(
+    hass: HomeAssistant,
+    entry: DiagralConfigEntry,
+    api: DiagralAPI,
+    webhook_id: str,
+    source: str = "Unknown",
+) -> None:
+    """Unregister the webhook for Diagral."""
+    _LOGGER.debug(
+        "Webhook unregistration requested by '%s' for %s", source, entry.title
+    )
+    if webhook_id:
+        try:
+            actual_webhook: Webhook = await api.get_webhook()
+            await api.delete_webhook()
+        except DiagralAPIError as e:
+            _LOGGER.error(
+                "Failed to delete webhook for %s : %s",
+                entry.title,
+                e,
+            )
+        else:
+            _LOGGER.info("Webhook successfully deleted for %s", entry.title)
+            if actual_webhook is not None and actual_webhook.webhook_url.startswith(
+                "https://hooks.nabu.casa/"
+            ):
+                _LOGGER.debug(
+                    "Webhook was a cloudhook. Deleting cloudhook %s", webhook_id
+                )
+                try:
+                    await cloud_delete_cloudhook(hass, webhook_id)
+                except ValueError as e:
+                    _LOGGER.error("Failed to delete cloudhook: %s", e)
+            else:
+                webhook_async_unregister(hass, webhook_id)
+            # Force the webhook_id in the entry runtime data to be sure it is saved
+            entry.runtime_data.webhook_id = None
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> bool:
@@ -184,19 +257,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> 
     api: DiagralAPI = entry.runtime_data.api
     webhook_id: str = entry.runtime_data.webhook_id
 
-    if webhook_id:
-        try:
-            await api.delete_webhook()
-        except DiagralAPIError as e:
-            _LOGGER.error(
-                "Failed to delete webhook for %s during entry unloading: %s",
-                entry.title,
-                e,
-            )
-        _LOGGER.info(
-            "Webhook successfully deleted for %s during entry unloading", entry.title
-        )
-        webhook_async_unregister(hass, webhook_id)
+    await unregister_webhook(hass, entry, api, webhook_id, "unload_entry")
 
     await api.__aexit__(None, None, None)  # Close explicitly the session
 

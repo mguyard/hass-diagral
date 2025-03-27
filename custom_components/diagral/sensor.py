@@ -12,11 +12,12 @@ from pydiagral.models import (
     AnomalyDetail,
     DeviceList,
     Group,
+    SystemStatus,
 )
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 import homeassistant.util.dt as dt_util
 
 from . import DiagralConfigEntry
@@ -41,13 +42,19 @@ SENSORS: tuple[DiagralSensorEntityDescription, ...] = (
         icon="mdi:alert-box",
         native_unit_of_measurement="anomalies",
     ),
+    DiagralSensorEntityDescription(
+        key="active_groups",
+        translation_key="active_groups",
+        icon="mdi:home-group",
+        native_unit_of_measurement="active groups",
+    ),
 )
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: DiagralConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Diagral sensor based on a config entry."""
     coordinator: DiagralDataUpdateCoordinator = entry.runtime_data.coordinator
@@ -85,21 +92,30 @@ class DiagralSensor(DiagralEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        _LOGGER.debug("_handle_coordinator_update called for %s", self.name)
-        alarm_config = self.coordinator.data.get("alarm_config")
+
+        _LOGGER.debug(
+            "_handle_coordinator_update called for %s (%s)",
+            self.name,
+            self.entity_description.key,
+        )
+        alarm_config: AlarmConfiguration = self.coordinator.data.get("alarm_config")
         anomalies: Anomalies = self.coordinator.data.get("anomalies")
         groups: list[Group] = self.coordinator.data.get("groups", [])
+        system_status: SystemStatus = self.coordinator.data.get("system_status")
         devices_infos: DeviceList = self.coordinator.data.get("devices_infos")
         if not alarm_config:
             _LOGGER.warning("No alarm_config in coordinator data for %s", self.name)
             return
 
-        _LOGGER.debug("Anomalies retrieved: %s", anomalies)
-        _LOGGER.debug("Groups retrieved: %s", groups)
-        _LOGGER.debug("Devices infos retrieved: %s", devices_infos)
+        _LOGGER.debug("Anomalies received: %s", anomalies)
+        _LOGGER.debug("Groups received: %s", groups)
+        _LOGGER.debug("System status received: %s", system_status)
+        _LOGGER.debug("Devices infos received: %s", devices_infos)
 
         if self.entity_description.key == "anomalies":
             self._update_anomalies(anomalies, groups, devices_infos)
+        if self.entity_description.key == "active_groups":
+            self._update_active_groups(system_status, groups, alarm_config)
 
         _LOGGER.debug("State updated for %s: %s", self.name, self.state)
         self.async_write_ha_state()
@@ -108,6 +124,12 @@ class DiagralSensor(DiagralEntity, SensorEntity):
         self, anomalies: Anomalies, groups: list[Group], devices_infos: DeviceList
     ) -> None:
         """Update the anomalies data."""
+        _LOGGER.debug(
+            "Update anomalies sensor. Anomalies: %s / Groups: %s / DeviceInfos: %s",
+            anomalies,
+            groups,
+            devices_infos,
+        )
         if anomalies:
             # Count the number of anomalies
             anomaly_count = sum(
@@ -148,6 +170,7 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             anomaly_name_order = ["id", "name"]
 
             # Add each list of anomalies to extra state attributes
+            anomalies_dict = {}
             for attr in vars(anomalies):
                 if isinstance(getattr(anomalies, attr), list) and all(
                     isinstance(item, AnomalyDetail) for item in getattr(anomalies, attr)
@@ -173,26 +196,22 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                         }
                         for equipment in getattr(anomalies, attr)
                     ]
-                    # Sort anomaly names by id with name first
+                    # Flatten anomaly names directly into the details
                     for detail in details:
                         if "anomaly_names" in detail:
-                            detail["anomaly_names"] = [
-                                {
-                                    key: value
-                                    for key, value in sorted(
-                                        vars(anomaly).items(),
-                                        key=lambda item: anomaly_name_order.index(
-                                            item[0]
-                                        )
-                                        if item[0] in anomaly_name_order
-                                        else len(anomaly_name_order),
-                                    )
-                                    if value is not None
-                                }
-                                for anomaly in detail["anomaly_names"]
-                            ]
+                            for anomaly in detail.pop("anomaly_names"):
+                                detail.update(
+                                    {
+                                        key: value
+                                        for key, value in vars(anomaly).items()
+                                        if key in anomaly_name_order
+                                    }
+                                )
                     if details:  # Only add if there are anomalies
-                        self._attr_extra_state_attributes[attr] = details
+                        anomalies_dict[attr] = details
+
+            if anomalies_dict:
+                self._attr_extra_state_attributes["anomalies"] = anomalies_dict
 
             # Sort extra state attributes by key with created_at and updated_at first
             self._attr_extra_state_attributes = {
@@ -210,3 +229,42 @@ class DiagralSensor(DiagralEntity, SensorEntity):
         else:
             self._attr_native_value = 0
             self._attr_extra_state_attributes = {}
+
+    def _update_active_groups(
+        self,
+        system_status: SystemStatus,
+        groups: list[Group],
+        alarm_config: AlarmConfiguration,
+    ) -> None:
+        """Update the active groups sensor."""
+        _LOGGER.debug(
+            "Update active_groups sensor. SystemStatus: %s / Groups: %s / AlarmConfig: %s",
+            system_status,
+            groups,
+            alarm_config,
+        )
+
+        if system_status.status == "PRESENCE":
+            # If the system is in presence mode, we grab the groups from the alarm configuration
+            group_list = alarm_config.presence_group
+        else:
+            # Otherwise, count the number of activated groups
+            group_list = system_status.activated_groups
+
+        active_groups_count: int = len(group_list)
+        self._attr_native_value = active_groups_count
+
+        groups_info = [
+            {
+                "index": group.index,
+                "name": group.name,
+                "active": group.index in group_list,
+            }
+            for group in groups
+        ]
+        self._attr_extra_state_attributes = {
+            "groups": groups_info,
+            "updated_at": dt_util.now().isoformat(),
+        }
+        _LOGGER.debug("Active groups count: %s", active_groups_count)
+        _LOGGER.debug("Groups info: %s", groups_info)

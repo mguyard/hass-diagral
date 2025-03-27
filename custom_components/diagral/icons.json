@@ -1,10 +1,16 @@
 {
   "services": {
-    "activate_groups": {
+    "arm_groups": {
       "service": "mdi:home-group-plus"
     },
-    "disable_groups": {
+    "disarm_groups": {
       "service": "mdi:home-group-minus"
+    },
+    "register_webhook": {
+      "service": "mdi:link-variant"
+    },
+    "unregister_webhook": {
+      "service": "mdi:link-variant-off"
     }
   }
 }

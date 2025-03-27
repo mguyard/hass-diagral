@@ -8,5 +8,8 @@
         {
             "file": ".github/copilot-commit-message-instructions.md"
         }
+    ],
+    "flake8.args": [
+        "--max-line-length=150"
     ]
 }
