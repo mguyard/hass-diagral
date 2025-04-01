@@ -36,6 +36,8 @@ from .const import (
     CONF_PIN_CODE,
     CONF_SECRET_KEY,
     CONF_SERIAL_ID,
+    CONFIG_MINOR_VERSION,
+    CONFIG_VERSION,
     DOMAIN,
 )
 from .models import AccountInfoData, DiagralOptionsData, ValidateConnectionData
@@ -49,9 +51,12 @@ def is_valid_email(email: str) -> bool:
     return re.match(pattern, email) is not None
 
 
-def is_valid_pin(pin: int) -> bool:
-    """Check if the PIN is valid (positive integer)."""
-    return isinstance(pin, int) and pin >= 0
+def is_valid_pin(pin: str) -> bool:
+    """Check if the pin code is valid.
+
+    The pin code must be a string of digits and must be greater than or equal to 0.
+    """
+    return isinstance(pin, str) and pin.isdigit() and int(pin) >= 0
 
 
 def is_valid_alarmpanel_code(code: int) -> bool:
@@ -130,8 +135,8 @@ async def validate_account(
 class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Diagral."""
 
-    VERSION = 1
-    MINOR_VERSION = 1
+    VERSION = CONFIG_VERSION
+    MINOR_VERSION = CONFIG_MINOR_VERSION
 
     def __init__(self):
         """Initialize the config flow."""
@@ -140,7 +145,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
         self.title: str | None = None
         self.account_username: str | None = None
         self.account_password: str | None = None
-        self.account_pincode: int | None = None
+        self.account_pincode: str | None = None
         self.apikey: str | None = None
         self.secretkey: str | None = None
 
@@ -228,7 +233,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_USERNAME): str,
                 vol.Required(CONF_PASSWORD): str,
-                vol.Required(CONF_PIN_CODE, default=None): vol.Coerce(int),
+                vol.Required(CONF_PIN_CODE, default=None): str,
             }
         )
 
@@ -420,7 +425,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                 ): str,
                 vol.Required(
                     CONF_PIN_CODE, default=config_entry.data[CONF_PIN_CODE]
-                ): vol.Coerce(int),
+                ): str,
             }
         )
 
