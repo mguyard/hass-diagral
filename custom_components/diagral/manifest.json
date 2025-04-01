@@ -9,6 +9,6 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/mguyard/hass-diagral/issues",
   "quality_scale": "bronze",
-  "requirements": ["pydiagral==1.5.2"],
-  "version": "1.1.0"
+  "requirements": ["pydiagral==1.6.0-beta.1"],
+  "version": "1.2.0-beta.1"
 }
