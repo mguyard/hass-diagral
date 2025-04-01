@@ -1,3 +1,10 @@
+# [1.2.0-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.1.0...v1.2.0-beta.1) (2025-04-01)
+
+
+### Features
+
+* **config:** ✨ Allow support of pincode starting with one or more 0 ([1b6777f](https://github.com/mguyard/hass-diagral/commit/1b6777fe0447876a7290bc40395f7cc8451df7c3)), closes [#38](https://github.com/mguyard/hass-diagral/issues/38)
+
 # [1.1.0](https://github.com/mguyard/hass-diagral/compare/v1.0.0...v1.1.0) (2025-03-27)
 
 
