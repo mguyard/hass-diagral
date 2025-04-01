@@ -189,6 +189,7 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
                 AlarmControlPanelState.ARMING,
                 AlarmControlPanelState.ARMED_AWAY,
                 AlarmControlPanelState.ARMED_HOME,
+                AlarmControlPanelState.TRIGGERED,
             ):
                 return True
             return False  # If the alarm is disarmed, don't require code
