@@ -3,6 +3,9 @@
 DOMAIN = "diagral"
 BRAND = "Diagral"
 
+CONFIG_VERSION = 2
+CONFIG_MINOR_VERSION = 1
+
 CONF_SERIAL_ID = "serial_id"
 CONF_PIN_CODE = "pin_code"
 CONF_API_KEY = "api_key"
