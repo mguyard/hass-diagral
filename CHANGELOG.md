@@ -1,3 +1,10 @@
+# [1.2.0-beta.2](https://github.com/mguyard/hass-diagral/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2025-04-01)
+
+
+### Bug Fixes
+
+* **alarm_control_panel:** 🐛 Fix code support for `TRIGGERED` state ([eb2f30a](https://github.com/mguyard/hass-diagral/commit/eb2f30a6d848383098e5a938fca218d7cd9f662d))
+
 # [1.2.0-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.1.0...v1.2.0-beta.1) (2025-04-01)
 
 
