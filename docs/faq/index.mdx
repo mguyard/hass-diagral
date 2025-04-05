@@ -19,6 +19,16 @@ To enable/disable this feature, go to [the integration configuration](https://my
 
 ## Errors
 
+### Cloud subscription not active. Webhook will not be created
+
+<Accordion title="What is the reason" icon="question">
+The Diagral integration automatically detects your Home Assistant configuration compatible with receiving a [Webhook](/integration/webhook) from Diagral servers.<br /><br />
+This error message indicates that according to Home Assistant, the only method meeting the [prerequisites](/integration/webhook#home-assistant-url) and allowing to receive a webhook from Diagral is through `Home Assistant Cloud` from [Nabu Casa](https://www.nabucasa.com) but your Home Assistant Cloud subscription is no longer valid (but still configured on your Home Assistant) or you are experiencing connectivity issues between your Home Assistant and Home Assistant Cloud.<br />
+In any case, the Diagral integration cannot create the Webhook through Home Assistant Cloud.
+
+`How to solve?`: Depending on your situation, either renew your subscription/fix the connectivity issue with Home Assistant Cloud, or configure your Home Assistant to stop using Home Assistant Cloud and use another connection solution such as direct access, [NGINX](https://nginx.org) or [DuckDns](http://www.duckdns.org) for example that meets the [prerequisites](/integration/webhook#home-assistant-url).
+</Accordion>
+
 ### Session already opened
 
 <Accordion title="What is the reason" icon="question">
