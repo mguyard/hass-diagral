@@ -151,9 +151,11 @@ async def register_webhook(
                 if cloud_active_subscription(hass):
                     webhook_url = await cloud_get_or_create_cloudhook(hass, webhook_id)
                 else:
+                    # If the cloud subscription is not active, we cannot create a webhook
                     _LOGGER.error(
                         "Cloud subscription not active. Webhook will not be created"
                     )
+                    return None
             except (CloudNotConnected, CloudNotAvailable):
                 _LOGGER.error(
                     "Cloud not connected or not available. Webhook will not be created"
