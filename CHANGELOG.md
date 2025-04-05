@@ -1,3 +1,10 @@
+# [1.2.0-beta.3](https://github.com/mguyard/hass-diagral/compare/v1.2.0-beta.2...v1.2.0-beta.3) (2025-04-05)
+
+
+### Bug Fixes
+
+* **webhook:** 🐛 Avoid error with inactive cloud subscription for webhook creation ([8b06aa3](https://github.com/mguyard/hass-diagral/commit/8b06aa33eb4c0fef14f6d4424185fd6d22420d80)), closes [#42](https://github.com/mguyard/hass-diagral/issues/42)
+
 # [1.2.0-beta.2](https://github.com/mguyard/hass-diagral/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2025-04-01)
 
 
