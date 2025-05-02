@@ -1,3 +1,16 @@
+# [1.2.0](https://github.com/mguyard/hass-diagral/compare/v1.1.0...v1.2.0) (2025-05-02)
+
+
+### Bug Fixes
+
+* **alarm_control_panel:** 🐛 Fix code support for `TRIGGERED` state ([eb2f30a](https://github.com/mguyard/hass-diagral/commit/eb2f30a6d848383098e5a938fca218d7cd9f662d))
+* **webhook:** 🐛 Avoid error with inactive cloud subscription for webhook creation ([8b06aa3](https://github.com/mguyard/hass-diagral/commit/8b06aa33eb4c0fef14f6d4424185fd6d22420d80)), closes [#42](https://github.com/mguyard/hass-diagral/issues/42)
+
+
+### Features
+
+* **config:** ✨ Allow support of pincode starting with one or more 0 ([1b6777f](https://github.com/mguyard/hass-diagral/commit/1b6777fe0447876a7290bc40395f7cc8451df7c3)), closes [#38](https://github.com/mguyard/hass-diagral/issues/38)
+
 # [1.2.0-beta.3](https://github.com/mguyard/hass-diagral/compare/v1.2.0-beta.2...v1.2.0-beta.3) (2025-04-05)
 
 
