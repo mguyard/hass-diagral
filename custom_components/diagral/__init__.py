@@ -34,6 +34,7 @@ from .const import (
     CONF_PIN_CODE,
     CONF_SECRET_KEY,
     CONF_SERIAL_ID,
+    CONFIG_VERSION,
     DOMAIN,
     HA_CLOUD_DOMAIN,
 )
@@ -89,6 +90,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
         return True
 
 
+async def async_migrate_entry(hass: HomeAssistant, config_entry: DiagralConfigEntry):
+    """Migrate the config entry to a new version."""
+    _LOGGER.debug(
+        "Migrating configuration from version %s.%s",
+        config_entry.version,
+        config_entry.minor_version,
+    )
+
+    if config_entry.version > CONFIG_VERSION:
+        # This means the user has downgraded from a future version
+        return False
+
+    if config_entry.version == 1:
+        new_data = {**config_entry.data}
+        if config_entry.minor_version == 1:
+            new_data[CONF_PIN_CODE] = str(config_entry.data[CONF_PIN_CODE])
+
+        hass.config_entries.async_update_entry(
+            config_entry, data=new_data, minor_version=3, version=1
+        )
+
+    return True
+
+
 async def register_webhook(
     hass: HomeAssistant,
     entry: DiagralConfigEntry,
@@ -126,9 +151,11 @@ async def register_webhook(
                 if cloud_active_subscription(hass):
                     webhook_url = await cloud_get_or_create_cloudhook(hass, webhook_id)
                 else:
+                    # If the cloud subscription is not active, we cannot create a webhook
                     _LOGGER.error(
                         "Cloud subscription not active. Webhook will not be created"
                     )
+                    return None
             except (CloudNotConnected, CloudNotAvailable):
                 _LOGGER.error(
                     "Cloud not connected or not available. Webhook will not be created"
