@@ -1,3 +1,10 @@
+# [1.3.0-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.2.0...v1.3.0-beta.1) (2025-05-20)
+
+
+### Features
+
+* **alarm_control_panel:** ✨ Add additional alarm code for trigger state ([7fe6a77](https://github.com/mguyard/hass-diagral/commit/7fe6a77e4d1d7b1074ceb10c3e5e53f4756b3576))
+
 # [1.2.0](https://github.com/mguyard/hass-diagral/compare/v1.1.0...v1.2.0) (2025-05-02)
 
 
