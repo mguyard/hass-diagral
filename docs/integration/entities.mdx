@@ -35,7 +35,7 @@ States :
 
 ### Triggered state
 
-The `triggered` state is not a proper alarm state but is activated when receiving an ALERT [webhook](/integration/webhook) (alarm_code 1130, 1139) from Diagral Cloud.
+The `triggered` state is not a proper alarm state but is activated when receiving an ALERT [webhook](/integration/webhook) from Diagral Cloud.
 The `triggered` status is only removed when the alarm is disarmed.
 When the triggered state is activated, the entity contains attributes (if available in the webhook):
 
@@ -44,6 +44,11 @@ trigger:
   group_name: Motion Sensors
   group_id: 3
 ```
+
+Alert type supported :
+- `1130` : INTRUSION
+- `1139` : INTRUSION-CONFIRMED
+- `1141` : PREALARM-CONFIRMED
 
 ## Anomalies - Details
 
