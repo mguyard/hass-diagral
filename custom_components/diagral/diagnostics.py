@@ -1,4 +1,4 @@
-"""Diagnostics support for Netatmo."""
+"""Diagnostics support for Diagral."""
 
 from __future__ import annotations
 
