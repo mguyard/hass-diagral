@@ -343,7 +343,10 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         """Handle incoming event for ALERT events."""
         _LOGGER.debug("%s received event: %s", self.name, event)
         event_alarm_code = int(event["data"].get("alarm_code"))
-        ALARM_INTRUSION_CODES = {1130, 1139}
+        # 1130 : INTRUSION
+        # 1139 : INTRUSION-CONFIRMED
+        # 1141 : PREALARM-CONFIRMED
+        ALARM_INTRUSION_CODES = {1130, 1139, 1141}
         if event_alarm_code in ALARM_INTRUSION_CODES:
             # Set the group name and id
             groups: list[Group] = self._alarm_config.groups
