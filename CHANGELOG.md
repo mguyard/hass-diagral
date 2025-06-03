@@ -1,3 +1,10 @@
+# [1.3.0-beta.2](https://github.com/mguyard/hass-diagral/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2025-06-03)
+
+
+### Bug Fixes
+
+* **docs:** 📝 Update HACS integration instructions ([f9e3651](https://github.com/mguyard/hass-diagral/commit/f9e3651a9f0efa3f2bbad2c7f52b9b62af5ef290))
+
 # [1.3.0-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.2.0...v1.3.0-beta.1) (2025-05-20)
 
 
