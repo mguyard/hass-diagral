@@ -1,3 +1,15 @@
+# [1.3.0](https://github.com/mguyard/hass-diagral/compare/v1.2.0...v1.3.0) (2025-06-03)
+
+
+### Bug Fixes
+
+* **docs:** 📝 Update HACS integration instructions ([f9e3651](https://github.com/mguyard/hass-diagral/commit/f9e3651a9f0efa3f2bbad2c7f52b9b62af5ef290))
+
+
+### Features
+
+* **alarm_control_panel:** ✨ Add additional alarm code for trigger state ([7fe6a77](https://github.com/mguyard/hass-diagral/commit/7fe6a77e4d1d7b1074ceb10c3e5e53f4756b3576))
+
 # [1.3.0-beta.2](https://github.com/mguyard/hass-diagral/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2025-06-03)
 
 
