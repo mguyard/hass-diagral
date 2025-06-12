@@ -1,0 +1,17 @@
+name: FortiDevSec Scanner CI
+on:
+    push:
+        branches: 
+          - dev
+    pull_request:
+        branches: 
+          - dev
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v4
+        - name: SAST
+          run: |
+            env | grep -E "GITHUB_ACTIONS|GITHUB_RUN_NUMBER|GITHUB_REF_NAME|GITHUB_SHA" > /tmp/env
+            docker run --pull always --rm --env-file /tmp/env --mount type=bind,source=$PWD,target=/scan registry.fortidevsec.forticloud.com/fdevsec_sast:latest
