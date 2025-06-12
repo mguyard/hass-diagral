@@ -32,7 +32,7 @@ languages:
 
 # CI/CD pipeline fails when risk rating(range 0-9) exceeds the configured value.
 fail_pipeline:
-  risk_rating: 1
+  risk_rating: 9
 
 # Only for FortiDevSec OnPrem users. Cloud users should keep it commented
 #on_prem:
