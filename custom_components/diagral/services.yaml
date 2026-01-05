@@ -1,7 +1,8 @@
 arm_groups:
   target:
-    device:
+    entity:
       integration: diagral
+      domain: alarm_control_panel
   fields:
     group_ids:
       example: "[3,2] or 3"
@@ -11,8 +12,9 @@ arm_groups:
 
 disarm_groups:
   target:
-    device:
+    entity:
       integration: diagral
+      domain: alarm_control_panel
   fields:
     group_ids:
       example: "[3,2] or 3"
@@ -22,10 +24,12 @@ disarm_groups:
 
 register_webhook:
   target:
-    device:
+    entity:
       integration: diagral
+      domain: alarm_control_panel
 
 unregister_webhook:
   target:
-    device:
+    entity:
       integration: diagral
+      domain: alarm_control_panel
