@@ -1,3 +1,10 @@
+## [1.3.1-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.3.0...v1.3.1-beta.1) (2026-01-05)
+
+
+### Bug Fixes
+
+* **fdevsec.yaml:** 🔧 Update `risk_rating` to 9 for pipeline failure ([8960aa4](https://github.com/mguyard/hass-diagral/commit/8960aa4c093000d6d559ad94752e732ec506fe1c))
+
 # [1.3.0](https://github.com/mguyard/hass-diagral/compare/v1.2.0...v1.3.0) (2025-06-03)
 
 
