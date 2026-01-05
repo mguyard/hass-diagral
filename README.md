@@ -11,10 +11,10 @@
 	<img src="https://img.shields.io/github/languages/count/mguyard/hass-diagral?style=default&color=0080ff" alt="repo-language-count">
 <p>
 <p align="center">
-    <img src="https://img.shields.io/github/v/release/mguyard/hass-diagral?label=Stable" alt="Last Stable Release">
+    <img src="https://img.shields.io/github/v/release/mguyard/hass-diagral?display_date=published_at&label=Stable" alt="Last Stable Release">
     <img src="https://img.shields.io/github/release-date/mguyard/hass-diagral?label=Stable" alt="Last Release Date Stable">
-    <img src="https://img.shields.io/github/v/release/mguyard/hass-diagral?label=Beta&include_prereleases" alt="Last Beta Release">
-    <img src="https://img.shields.io/github/release-date/mguyard/hass-diagral?label=Beta" alt="Last Release Date Beta">
+    <img src="https://img.shields.io/github/v/release/mguyard/hass-diagral?include_prereleases&filter=*-beta.*&display_name=release&label=Beta" alt="Last Beta Release">
+    <img src="https://img.shields.io/github/release-date-pre/mguyard/hass-diagral?display_date=published_at&label=Beta" alt="Last Release Date Beta">
     <img src="https://img.shields.io/github/issues-search/mguyard/hass-diagral?query=label%3Abug%20is%3Aopened&label=Open%20Bugs" alt="Open Bugs">
     <img src="https://img.shields.io/github/issues-pr/mguyard/hass-diagral" alt="Open PRs">
 <p>
