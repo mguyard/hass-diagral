@@ -4,6 +4,6 @@
       "esbenp.prettier-vscode",
       "ms-python.python",
       "GitHub.vscode-pull-request-github",
-      "GitHub.copilot"
+      "github.copilot-chat"
     ]
   }
