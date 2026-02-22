@@ -352,6 +352,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="options",
             data_schema=STEP_OPTIONS,
             errors=errors or {},
+            description_placeholders={"options_url": "https://docs.page/mguyard/hass-diagral/integration/setup#options"},
             last_step=True,
         )
 
@@ -531,6 +532,7 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=STEP_OPTIONS,
             errors=errors or {},
+            description_placeholders={"options_url": "https://docs.page/mguyard/hass-diagral/integration/setup#options"},
             last_step=True,
         )
 

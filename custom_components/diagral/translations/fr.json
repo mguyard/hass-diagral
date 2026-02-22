@@ -42,7 +42,7 @@
             },
             "options": {
                 "title": "Options",
-                "description": "_Plus de détails sur ces options sont disponibles [ici](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+                "description": "_Plus de détails sur ces options sont disponibles [ici]({options_url})_",
                 "sections": {
                     "alarmpanel_options": {
                         "name": "Options du panneau d'alarme",
@@ -96,7 +96,7 @@
         "step": {
             "init": {
                 "title": "Options",
-                "description": "_Plus de détails sur ces options sont disponibles [ici](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+                "description": "_Plus de détails sur ces options sont disponibles [ici]({options_url})_",
                 "sections": {
                     "alarmpanel_options": {
                         "name": "Options du panneau d'alarme",

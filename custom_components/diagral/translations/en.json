@@ -43,7 +43,7 @@
             },
             "options": {
               "title": "Options",
-              "description": "_More details about these options are available [here](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+              "description": "_More details about these options are available [here]({options_url})_",
               "sections": {
                     "alarmpanel_options": {
                         "name": "Alarm Panel Options",
@@ -97,7 +97,7 @@
         "step": {
             "init": {
                 "title": "Options",
-                "description": "_More details about these options are available [here](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+                "description": "_More details about these options are available [here]({options_url})_",
                 "sections": {
                     "alarmpanel_options": {
                         "name": "Alarm Panel Options",
