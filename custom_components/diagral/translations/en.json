@@ -19,7 +19,7 @@
                 "data": {
                     "serial_id": "Serial ID of DIAG56AAX module"
                 },
-                "description": "To set up your Diagral alarm system, you need a DIAG56AAX module which connects your alarm to the internet for remote control.\n\rTo find your Serial ID, check the label on your module or visit our setup guide: https://docs.page/mguyard/hass-diagral/integration/setup#how-to-find-your-system-serial-id\n\r![SerialID Location](https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png)",
+                "description": "To set up your Diagral alarm system, you need a DIAG56AAX module which connects your alarm to the internet for remote control.\n\rTo find your Serial ID, check the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})",
                 "title": "Diagral"
             },
             "account": {
@@ -43,7 +43,7 @@
             },
             "options": {
               "title": "Options",
-              "description": "_More details about these options are available [here](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+              "description": "_More details about these options are available [here]({options_url})_",
               "sections": {
                     "alarmpanel_options": {
                         "name": "Alarm Panel Options",
@@ -97,7 +97,7 @@
         "step": {
             "init": {
                 "title": "Options",
-                "description": "_More details about these options are available [here](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+                "description": "_More details about these options are available [here]({options_url})_",
                 "sections": {
                     "alarmpanel_options": {
                         "name": "Alarm Panel Options",
