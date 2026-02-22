@@ -1,3 +1,11 @@
+## [1.3.1-beta.2](https://github.com/mguyard/hass-diagral/compare/v1.3.1-beta.1...v1.3.1-beta.2) (2026-02-22)
+
+
+### Bug Fixes
+
+* **translations:** 🐛 Replace raw URLs in user step description ([22653f6](https://github.com/mguyard/hass-diagral/commit/22653f68b9f480c1a527baa6145e03dbeb81de9b)), closes [#61](https://github.com/mguyard/hass-diagral/issues/61)
+* **translations:** 🐛 Replace raw URLs with description_placeholders ([3ed070b](https://github.com/mguyard/hass-diagral/commit/3ed070b790f2c7e0a88f84cb52f50c83d97d5f96)), closes [#61](https://github.com/mguyard/hass-diagral/issues/61)
+
 ## [1.3.1-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.3.0...v1.3.1-beta.1) (2026-01-05)
 
 
