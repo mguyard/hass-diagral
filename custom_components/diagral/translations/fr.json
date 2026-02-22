@@ -17,7 +17,7 @@
         "step": {
             "user": {
                 "title": "Diagral",
-                "description": "Pour configurer votre système d'alarme Diagral, vous avez besoin d'un module DIAG56AAX qui connecte votre alarme à Internet pour le contrôle à distance.\n\rPour trouver votre ID de série, vérifiez l'étiquette sur votre module ou consultez notre guide de configuration : https://docs.page/mguyard/hass-diagral/integration/setup#how-to-find-your-system-serial-id\n\r![Emplacement SerialID](https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png)",
+                "description": "Pour configurer votre système d'alarme Diagral, vous avez besoin d'un module DIAG56AAX qui connecte votre alarme à Internet pour le contrôle à distance.\n\rPour trouver votre ID de série, vérifiez l'étiquette sur votre module ou consultez notre guide de configuration : [{setup_guide_url}]({setup_guide_url})\n\r![Emplacement SerialID]({serial_id_image_url})",
                 "data": {
                     "serial_id": "Numéro de série du module DIAG56AAX"
                 }
@@ -42,7 +42,7 @@
             },
             "options": {
                 "title": "Options",
-                "description": "_Plus de détails sur ces options sont disponibles [ici](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+                "description": "_Plus de détails sur ces options sont disponibles [ici]({options_url})_",
                 "sections": {
                     "alarmpanel_options": {
                         "name": "Options du panneau d'alarme",
@@ -96,7 +96,7 @@
         "step": {
             "init": {
                 "title": "Options",
-                "description": "_Plus de détails sur ces options sont disponibles [ici](https://docs.page/mguyard/hass-diagral/integration/setup#options)_",
+                "description": "_Plus de détails sur ces options sont disponibles [ici]({options_url})_",
                 "sections": {
                     "alarmpanel_options": {
                         "name": "Options du panneau d'alarme",

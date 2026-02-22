@@ -176,6 +176,10 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=STEP_SERIALID,
             errors=errors or {},
+            description_placeholders={
+                "setup_guide_url": "https://docs.page/mguyard/hass-diagral/integration/setup#how-to-find-your-system-serial-id",
+                "serial_id_image_url": "https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png",
+            },
             last_step=False,
         )
 
@@ -352,6 +356,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="options",
             data_schema=STEP_OPTIONS,
             errors=errors or {},
+            description_placeholders={"options_url": "https://docs.page/mguyard/hass-diagral/integration/setup#options"},
             last_step=True,
         )
 
@@ -531,6 +536,7 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=STEP_OPTIONS,
             errors=errors or {},
+            description_placeholders={"options_url": "https://docs.page/mguyard/hass-diagral/integration/setup#options"},
             last_step=True,
         )
 
