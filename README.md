@@ -10,7 +10,7 @@
 	<img src="https://img.shields.io/github/languages/top/mguyard/hass-diagral?style=default&color=0080ff" alt="repo-top-language">
 	<img src="https://img.shields.io/github/languages/count/mguyard/hass-diagral?style=default&color=0080ff" alt="repo-language-count">
     <a href="https://codecov.io/gh/mguyard/hass-diagral" >
-        <img src="https://codecov.io/gh/mguyard/hass-diagral/graph/badge.svg?token=GKQZDY2KTO"/>
+        <img src="https://codecov.io/gh/mguyard/hass-diagral/graph/badge.svg?token=GKQZDY2KTO" alt="CodeCov"/>
     </a>
 <p>
 <p align="center">
