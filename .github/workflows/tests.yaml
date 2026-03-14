@@ -293,6 +293,29 @@ jobs:
           pip install pytest pytest-asyncio pytest-cov pytest-timeout pytest-mock pytest-html
           pip install aiohttp aiofiles
 
+      - name: Install integration requirements
+        if: env.SKIP_TESTS != 'true'
+        run: |
+          echo "📦 Installing integration requirements from manifest.json..."
+          python3 -c "
+          import json
+          with open('custom_components/diagral/manifest.json') as f:
+              manifest = json.load(f)
+          requirements = manifest.get('requirements', [])
+          if requirements:
+              print('Requirements found: ' + ', '.join(requirements))
+          else:
+              print('No requirements found in manifest.json')
+          " | tee /tmp/requirements_info.txt
+          python3 -c "
+          import json, subprocess, sys
+          with open('custom_components/diagral/manifest.json') as f:
+              manifest = json.load(f)
+          requirements = manifest.get('requirements', [])
+          if requirements:
+              subprocess.check_call([sys.executable, '-m', 'pip', 'install'] + requirements)
+          "
+
       - name: Create Home Assistant test environment
         if: env.SKIP_TESTS != 'true'
         run: |
