@@ -10,13 +10,6 @@ from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import DiagralAPIError
 from pydiagral.models import Webhook
 
-from homeassistant.components.cloud import (
-    CloudNotAvailable,
-    CloudNotConnected,
-    async_active_subscription as cloud_active_subscription,
-    async_delete_cloudhook as cloud_delete_cloudhook,
-    async_get_or_create_cloudhook as cloud_get_or_create_cloudhook,
-)
 from homeassistant.components.webhook import (
     async_generate_id as webhook_generate_id,
     # SUPPORTED_METHODS,
@@ -121,6 +114,13 @@ async def register_webhook(
     source: str = "Unknown",
 ) -> str | None:
     """Register the webhook for Diagral."""
+    from homeassistant.components.cloud import (  # noqa: PLC0415
+        CloudNotAvailable,
+        CloudNotConnected,
+        async_active_subscription as cloud_active_subscription,
+        async_get_or_create_cloudhook as cloud_get_or_create_cloudhook,
+    )
+
     _LOGGER.debug("Webhook registration requested by '%s' for %s", source, entry.title)
     webhook_id: str = webhook_generate_id()
     # Get the external URL recommended for the webhook (priority to external before cloud)
@@ -247,6 +247,8 @@ async def unregister_webhook(
     source: str = "Unknown",
 ) -> None:
     """Unregister the webhook for Diagral."""
+    from homeassistant.components.cloud import async_delete_cloudhook as cloud_delete_cloudhook  # noqa: PLC0415
+
     _LOGGER.debug(
         "Webhook unregistration requested by '%s' for %s", source, entry.title
     )

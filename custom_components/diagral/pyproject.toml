@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["../.."]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore:Setting custom ClientSession.close attribute is discouraged:DeprecationWarning:homeassistant.helpers.aiohttp_client",
+    "ignore:Unclosed client session:ResourceWarning",
+]
