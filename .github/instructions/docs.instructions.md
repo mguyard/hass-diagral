@@ -83,6 +83,20 @@ Each new entity **must** be added to the table in `docs/integration/entities.mdx
 | Entity Name | Description of what the entity exposes and its unit |
 ```
 
+## When to Update Documentation
+
+After **any code change** (new feature, modified behavior, new entity, changed option, updated
+service…), the documentation must be reviewed and updated as needed:
+
+1. **Scan `docs/integration/`** to find pages that describe the changed area.
+2. **Update only what changed** — add, edit, or remove the relevant sentences, rows, or sections.
+3. **Match the existing style** — tone, table format, MDX components, and heading levels must
+   stay consistent with the surrounding content.
+4. **When in doubt, ask** — if it is unclear whether documentation needs updating, ask the
+   developer before proceeding:
+
+   > "Should I update the documentation for this change? If yes, which page(s)?"
+
 ## Commit Type for Docs
 
 ```

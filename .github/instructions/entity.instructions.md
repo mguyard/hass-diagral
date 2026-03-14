@@ -125,3 +125,19 @@ Add a row in `docs/integration/entities.mdx`:
 ```mdx
 | My Sensor | Description of what this entity exposes |
 ```
+
+## Documentation Review on Every Code Change
+
+Whenever a feature, service, entity, or behavior is **added or modified**, apply this process
+before considering the task complete:
+
+1. **Read the relevant `docs/` pages** — scan `docs/integration/` to identify pages that cover
+   the area being changed (entities, actions, events, webhook, setup, etc.).
+2. **Identify what needs documenting** — new behavior, changed defaults, added options, new
+   entities, removed capabilities, updated configuration steps, etc.
+3. **Preserve the existing style** — match the tone, structure, table format, and MDX components
+   already used on the target page. Do not introduce new formatting patterns.
+4. **When in doubt, ask the developer** — if it is unclear whether a change warrants a
+   documentation update, ask before writing or skipping it:
+
+   > "Should I update the documentation for this change? If yes, which page(s)?"
