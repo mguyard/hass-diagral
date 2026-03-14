@@ -321,34 +321,6 @@ jobs:
         run: |
           mkdir -p /tmp/hass-config
           cp -r ${{ github.workspace }}/custom_components /tmp/hass-config/
-          # Create a root conftest.py loaded by pytest BEFORE any package init.
-          # custom_components/diagral/__init__.py imports homeassistant.components.cloud
-          # which transitively pulls stream -> numpy (not available in CI).
-          # A root-level conftest is loaded before Python initializes the diagral package.
-          cat > /tmp/hass-config/conftest.py << 'CONFTEST'
-          """Root conftest: mock heavy HA deps before any custom component init."""
-          import sys
-          from unittest.mock import AsyncMock, MagicMock
-
-          _cloud_mock = MagicMock()
-          _cloud_mock.CloudNotAvailable = type("CloudNotAvailable", (Exception,), {})
-          _cloud_mock.CloudNotConnected = type("CloudNotConnected", (Exception,), {})
-          _cloud_mock.async_active_subscription = AsyncMock(return_value=True)
-          _cloud_mock.async_delete_cloudhook = AsyncMock()
-          _cloud_mock.async_get_or_create_cloudhook = AsyncMock(
-              return_value="https://mock.nabu.casa/webhook/test"
-          )
-          sys.modules["homeassistant.components.cloud"] = _cloud_mock
-          CONFTEST
-          # Remove leading indentation added by heredoc in YAML block
-          python3 -c "
-          import textwrap
-          with open('/tmp/hass-config/conftest.py') as f:
-              content = f.read()
-          with open('/tmp/hass-config/conftest.py', 'w') as f:
-              f.write(textwrap.dedent(content))
-          "
-          echo "✅ Root conftest.py created at /tmp/hass-config/conftest.py"
 
       - name: Run tests
         if: env.SKIP_TESTS != 'true'
