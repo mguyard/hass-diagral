@@ -1,7 +1,20 @@
 """Shared test fixtures for hass-diagral."""
+import sys
 import pytest
-from unittest.mock import MagicMock
-from homeassistant.core import HomeAssistant
+from unittest.mock import AsyncMock, MagicMock
+
+# Mock heavy transitive HA dependencies before any diagral code is imported.
+# homeassistant.components.cloud pulls in alexa → camera → stream → numpy (+ av/FFmpeg)
+# which are not installed in the CI test environment and are not needed for unit tests.
+_cloud_mock = MagicMock()
+_cloud_mock.CloudNotAvailable = type("CloudNotAvailable", (Exception,), {})
+_cloud_mock.CloudNotConnected = type("CloudNotConnected", (Exception,), {})
+_cloud_mock.async_active_subscription = AsyncMock(return_value=True)
+_cloud_mock.async_delete_cloudhook = AsyncMock()
+_cloud_mock.async_get_or_create_cloudhook = AsyncMock(return_value="https://mock.nabu.casa/webhook/test")
+sys.modules.setdefault("homeassistant.components.cloud", _cloud_mock)
+
+from homeassistant.core import HomeAssistant  # noqa: E402
 
 
 @pytest.fixture
