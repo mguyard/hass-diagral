@@ -10,21 +10,52 @@ description: "Use when writing, updating, or reviewing tests for the hass-diagra
 ```
 tests/
 ├── __init__.py         # Empty, marks as package
-├── conftest.py         # Shared fixtures (MockConfigEntry, mock coordinator)
+├── conftest.py         # Shared fixtures (mock_hass, coordinator_mock, etc.)
+├── test_const.py       # Tier 1: pure constant tests (no HA dependency)
+├── test_config_flow_validation.py
 ├── test_sensor.py
 ├── test_alarm_control_panel.py
-├── test_coordinator.py
 └── test_webhook.py
 ```
 
 Create `tests/__init__.py` and `tests/conftest.py` when writing the first test.
 
+## Test Tiers
+
+| Tier | What | HA dependency | Where to run |
+|------|------|--------------|------------|
+| Tier 1 | Pure constants (`const.py`) loaded via `importlib` | None | Local or Docker |
+| Tier 2 | Any file that imports HA (sensor, alarm_control_panel, config_flow…) | Yes | Docker devcontainer only |
+
+For **Tier 1 tests**, load `const.py` directly to bypass the package `__init__.py` which imports HA:
+```python
+import importlib.util, pathlib
+spec = importlib.util.spec_from_file_location(
+    "diagral_const",
+    pathlib.Path(__file__).parent.parent / "custom_components/diagral/const.py",
+)
+const = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(const)
+```
+
 ## Dependencies
 
-Use `pytest-homeassistant-custom-component` for Home Assistant fixtures.
+`homeassistant` is installed as a regular pip package in the devcontainer.
+**No `pytest-homeassistant-custom-component` is required.**
 
-```bash
-pip install pytest-homeassistant-custom-component
+Test dependencies (`requirements_test.txt`):
+```
+pytest
+pytest-asyncio
+pytest-mock
+```
+
+pytest is configured via `pyproject.toml`:
+```toml
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
 ```
 
 ## conftest.py Bootstrap
@@ -32,64 +63,78 @@ pip install pytest-homeassistant-custom-component
 ```python
 """Shared test fixtures for hass-diagral."""
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-from custom_components.diagral.const import DOMAIN
-
-
-@pytest.fixture
-def mock_config_entry():
-    """Return a mock config entry."""
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "username": "test@example.com",
-            "password": "testpassword",
-            "serial_id": "DIAG123456",
-            "pin_code": "1234",
-        },
-        entry_id="test_entry_id",
-    )
-```
-
-## Mocking the Coordinator
-
-Patch `_async_update_data` to avoid real `pydiagral` API calls:
-
-```python
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
+from homeassistant.core import HomeAssistant
 
 
 @pytest.fixture
-def mock_coordinator_data():
-    """Return fake coordinator data matching the expected schema."""
-    alarm_config = MagicMock()
-    alarm_config.alarm.central.serial = "SERIAL123"
-    return {
-        "alarm_config": alarm_config,
-        "system_status": MagicMock(),
-        "anomalies": MagicMock(),
+def mock_hass():
+    """Return a mock Home Assistant instance."""
+    return MagicMock(spec=HomeAssistant)
+
+
+@pytest.fixture
+def alarm_config_mock():
+    """Return a mock AlarmConfiguration."""
+    mock = MagicMock()
+    mock.alarm.central.serial = "SERIAL123"
+    return mock
+
+
+@pytest.fixture
+def system_status_mock():
+    """Return a mock SystemStatus in disarmed state."""
+    mock = MagicMock()
+    mock.status = "off"
+    return mock
+
+
+@pytest.fixture
+def coordinator_mock(alarm_config_mock, system_status_mock):
+    """Return a fully populated coordinator mock."""
+    mock = MagicMock()
+    mock.data = {
+        "alarm_config": alarm_config_mock,
+        "system_status": system_status_mock,
+        "anomalies": None,
         "groups": [],
         "devices_infos": MagicMock(),
     }
+    return mock
 
 
 @pytest.fixture
-def patch_coordinator(mock_coordinator_data):
-    with patch(
-        "custom_components.diagral.coordinator.DiagralDataUpdateCoordinator._async_update_data",
-        new_callable=AsyncMock,
-        return_value=mock_coordinator_data,
-    ):
-        yield
+def diagral_config():
+    """Return a mock DiagralConfigData with default options."""
+    from custom_components.diagral.const import (
+        CONF_ALARMPANEL_ACTIONTYPE_CODE,
+        CONF_ALARMPANEL_CODE,
+    )
+    config = MagicMock()
+    config.options.alarmpanel_options = {
+        CONF_ALARMPANEL_ACTIONTYPE_CODE: "never",
+        CONF_ALARMPANEL_CODE: None,
+    }
+    return config
 ```
+
+## Mocking Strategy
+
+- Use `MagicMock(spec=HomeAssistant)` for the HA instance
+- **Never make real HTTP calls** — always mock at the `pydiagral` library boundary
+- Mock `pydiagral` API objects using `unittest.mock.MagicMock` / `AsyncMock`
+- Patch module-level utilities: `@patch("custom_components.diagral.sensor.dt_util")`
+- Use `SimpleNamespace` (not `MagicMock`) when attribute assignment is needed:
+  ```python
+  from types import SimpleNamespace
+  detail = SimpleNamespace(device_type="detector", device_index="1", device_label=None)
+  ```
 
 ## Key Rules
 
 - **Never make real HTTP calls** — always mock at the `pydiagral` library boundary
-- Mock `pydiagral` API objects using `unittest.mock.MagicMock` / `AsyncMock`
 - Test both the happy path and error handling (API exceptions, missing/invalid data)
-- Use `@pytest.mark.asyncio` for async test functions (or configure `asyncio_mode = "auto"`)
+- Use `asyncio_mode = "auto"` (configured in `pyproject.toml`) — no `@pytest.mark.asyncio` needed
 - Assert on entity states, attributes, and unique IDs
 
 ## Test Naming Convention
@@ -106,5 +151,9 @@ Examples:
 ## Running Tests
 
 ```bash
-pytest tests/
+# In Docker devcontainer (required for Tier 2 tests):
+docker exec -w /workspaces/hass-diagral <container_id> pytest tests/ -v
+
+# Single file:
+docker exec -w /workspaces/hass-diagral <container_id> pytest tests/test_sensor.py -v
 ```
