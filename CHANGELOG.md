@@ -1,3 +1,13 @@
+## [1.3.2](https://github.com/mguyard/hass-diagral/compare/v1.3.1...v1.3.2) (2026-03-14)
+
+
+### Bug Fixes
+
+* **tests:** 🐛 Create root conftest.py to mock cloud before package init ([a9eb5fa](https://github.com/mguyard/hass-diagral/commit/a9eb5fa8d6975b0fab19f9ea4e641cda5b6885cf))
+* **tests:** 🐛 Install integration requirements from manifest.json ([383e9dd](https://github.com/mguyard/hass-diagral/commit/383e9dde41b90f808bbc32e03a285f325ef7b528))
+* **tests:** 🐛 Mock homeassistant.components.cloud to avoid numpy dep ([17fa41f](https://github.com/mguyard/hass-diagral/commit/17fa41fcdb16668e92ab73fef5941f523d855de8))
+* **tests:** 🐛 Use lazy imports for homeassistant.components.cloud ([cd54cd6](https://github.com/mguyard/hass-diagral/commit/cd54cd680e9e03a3da0648539a4f4f57455ca83e))
+
 ## [1.3.2-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.3.1...v1.3.2-beta.1) (2026-03-14)
 
 
