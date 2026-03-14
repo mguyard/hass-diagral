@@ -8,7 +8,7 @@ Create a complete new entity for the hass-diagral integration based on the follo
 
 **Request:** $input
 
-Follow all rules in [entity.instructions.md](../.github/instructions/entity.instructions.md) and produce ALL of the following in one pass:
+Follow all rules in [entity.instructions.md](../instructions/entity.instructions.md) and produce ALL of the following in one pass:
 
 ## 1. EntityDescription entry — `custom_components/diagral/sensor.py` or `alarm_control_panel.py`
 
@@ -56,11 +56,11 @@ Create or update the test file with at least:
 - A test for the entity state with mocked coordinator data
 - A test for the `exists_fn` if one was defined
 
-If `tests/` does not exist yet, also create `tests/__init__.py` and `tests/conftest.py` following [tests.instructions.md](../.github/instructions/tests.instructions.md).
+If `tests/` does not exist yet, also create `tests/__init__.py` and `tests/conftest.py` following [tests.instructions.md](../instructions/tests.instructions.md).
 
 ## 6. Commit message
 
-Provide a ready-to-use commit message following [commits.instructions.md](../.github/instructions/commits.instructions.md):
+Provide a ready-to-use commit message following [commits.instructions.md](../instructions/commits.instructions.md):
 
 ```
 feat(<platform>): ✨ Add <entity_name> entity

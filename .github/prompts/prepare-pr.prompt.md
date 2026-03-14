@@ -5,7 +5,7 @@ tools: [run_in_terminal, read_file]
 argument-hint: "Optional: issue number to close (e.g. 42) or a summary of the change"
 ---
 
-Prepare a pull request for the `hass-diagral` project. Follow all rules in [commits.instructions.md](../.github/instructions/commits.instructions.md).
+Prepare a pull request for the `hass-diagral` project. Follow all rules in [commits.instructions.md](../instructions/commits.instructions.md).
 
 ## Step 1 — Gather context
 

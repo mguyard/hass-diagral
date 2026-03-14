@@ -19,8 +19,9 @@
   - All new entities must be documented in `docs/integration/entities.mdx`.
 - **Testing:**  
   - Use `pytest` conventions for tests.
-  - Place tests in a `tests/` directory (does not exist yet — create it when writing the first tests).
-  - **Always suggest adding or updating tests when new features or bug fixes are implemented.**
+  - Tests live at `custom_components/diagral/tests/` (inside the devcontainer-mounted folder).
+  - **Whenever any `custom_components/diagral/*.py` file is created or modified, immediately analyse the corresponding `tests/test_<module>.py` and CREATE, UPDATE, or DELETE tests as needed. Never skip this step silently.**
+  - After writing or modifying tests, run the test suite (see Quick Start below for environment detection and the correct command).
 - **Linting/Formatting:**  
   - Use `flake8` as the linter, with a maximum line length of 150 characters.
   - Run locally with: `flake8 --max-line-length=150 custom_components/diagral/`
@@ -32,15 +33,22 @@
 # Lint
 flake8 --max-line-length=150 custom_components/diagral/
 
-# Tests (once tests/ exists)
-pytest tests/
+# Tests — environment-aware (see tests.instructions.md for full details)
+# 1. Check if inside devcontainer:
+test -d /workspaces && echo "inside" || echo "outside"
+# 2a. Inside devcontainer:
+#   cd /workspaces/home-assistant-dev/config/custom_components/diagral && pytest tests/ -v
+# 2b. Outside devcontainer — list containers, then:
+#   docker ps --format "table {{.ID}}\t{{.Image}}\t{{.Names}}"
+#   docker exec -w /workspaces/home-assistant-dev/config/custom_components/diagral <ID> pytest tests/ -v
 
 # CI validation (run by GitHub Actions — not local)
 # hassfest  →  validates manifest.json, translations, quality_scale.yaml
 # hacs/action  →  validates HACS compatibility
 ```
 
-> **No Makefile or pyproject.toml** — there is no automated local build script. Use the commands above directly.
+> **No Makefile** — there is no automated local build script. Use the commands above directly.
+> A `pyproject.toml` lives at `custom_components/diagral/pyproject.toml` for pytest configuration (mounted into the devcontainer).
 
 ## Architecture
 
@@ -187,9 +195,10 @@ custom_components/diagral/
 - When generating commit messages, follow the Conventional Commits and gitmoji rules above.
 - When working with Home Assistant, prefer async APIs and follow the entity/component patterns in the codebase.
 - All configuration, code, and documentation must be consistent with the existing project structure and standards.
-- **Always suggest adding or updating tests for new features or bug fixes.**
+- **After every code change in `custom_components/diagral/*.py`, analyse `tests/test_<module>.py` and CREATE, UPDATE, or DELETE tests as needed. Never skip this step.**
 - **Enforce flake8 linting with a max line length of 150 characters.**
-- The `tests/` directory does not exist yet — create it with a `conftest.py` and `__init__.py` when writing the first test.
+- The `tests/` directory lives at `custom_components/diagral/tests/`. Create it with `__init__.py` and `conftest.py` when writing the first test.
+- To run tests: detect the environment first (`test -d /workspaces`). If inside devcontainer run `pytest tests/ -v` directly; otherwise run `docker ps` to list containers and ask the developer which container ID to use. If no container is running, ask the developer to start the devcontainer first.
 - New entities need a unique ID, a translation key, and an entry in `docs/integration/entities.mdx`.
 - All Diagral API calls must go through `pydiagral` — do not call the Diagral API directly.
 - Use `DiagralConfigEntry` (typed alias) instead of raw `ConfigEntry` wherever possible.
