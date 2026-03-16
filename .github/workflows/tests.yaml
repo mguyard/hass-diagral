@@ -81,7 +81,7 @@ jobs:
       - name: Find last tested version artifact
         if: github.event_name == 'schedule'
         id: find-artifact
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const artifactName = 'last-tested-${{ matrix.home-assistant-version }}-version';
