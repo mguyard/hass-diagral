@@ -356,3 +356,74 @@ Report what is **not yet tested** in `tests/test_<module>.py`:
 ### Test gaps
 - description
 ```
+
+---
+
+## 9. Investigating HA Behavior Changes
+
+**Trigger:** When the user mentions that a behavior changed since a specific HA version (e.g., "this worked in HA 2024.3 but broke in 2024.4"). Always perform this investigation **before** modifying integration code, to understand the root cause rather than patching symptoms.
+
+### Step 1 — Identify suspect HA files
+
+Based on the integration code that changed behavior, identify the HA modules likely involved. Common locations:
+
+- `homeassistant/components/<platform>/` — platform base classes and contracts
+- `homeassistant/helpers/entity.py`, `entity_registry.py` — entity lifecycle
+- `homeassistant/components/alarm_control_panel/__init__.py` — alarm panel contract
+
+### Step 2 — Analyze via Git (devcontainer)
+
+The devcontainer contains a **git clone** of HA. Use it to inspect history directly.
+
+**Step 2a — Detect environment and locate the HA repo:**
+```bash
+# Detect environment (see ../testing-hass-diagral/SKILL.md §3)
+test -d /workspaces && echo "inside devcontainer" || echo "outside devcontainer"
+
+# Find the HA git repository
+find /workspaces -name ".git" -maxdepth 3 2>/dev/null
+```
+
+**Step 2b — Browse commit history on a suspected file:**
+```bash
+# List commits on a file (all history)
+git -C <ha_repo_path> log --oneline --follow -- homeassistant/components/alarm_control_panel/__init__.py
+
+# Restrict to a version range
+git -C <ha_repo_path> log --oneline v2024.3.0..v2024.4.0 -- <file>
+
+# See the full diff of a commit
+git -C <ha_repo_path> show <commit_sha>
+```
+
+**Outside devcontainer:** retrieve the container ID first, then prefix with `docker exec <CONTAINER_ID>` (see `../testing-hass-diagral/SKILL.md §3`).
+
+### Step 3 — Analyze via MCP GitHub
+
+Use MCP GitHub tools to search history and context in `home-assistant/core` or `home-assistant/frontend`:
+
+| Goal | Tool | Key parameters |
+|------|------|----------------|
+| Browse commits on a file | `mcp_github_list_commits` | `owner=home-assistant`, `repo=core`, `path=homeassistant/components/...` |
+| Read a specific commit | `mcp_github_get_commit` | `sha` from the list above |
+| Search code in HA | `mcp_github_search_code` | `query=MyClass repo:home-assistant/core` |
+| Find related issues | `mcp_github_search_issues` | `query=breaking change alarm_control_panel 2024.4` |
+| Find related PRs | `mcp_github_search_pull_requests` | `query=alarm_control_panel` in `home-assistant/core` |
+
+Primary repos to check (not exclusively):
+- `home-assistant/core` — Python backend, entities, platforms, helpers
+- `home-assistant/frontend` — UI components (if the change is visual/frontend)
+
+### Step 4 — Cross-reference with release notes
+
+After finding relevant commits, confirm using HA release blog posts:
+- `https://www.home-assistant.io/blog/` — release notes per version
+- Look for **Breaking changes** or **Deprecations** sections mentioning the affected platform
+
+### Step 5 — Adapt integration code
+
+Once the HA change is fully understood:
+1. Update affected files in `custom_components/diagral/`
+2. Adjust tests that reflect the previous (now incorrect) behavior — see `../testing-hass-diagral/SKILL.md §7`
+3. Run the test suite (see `../testing-hass-diagral/SKILL.md §3`)
+4. Commit with scope and a `Tests:` line (see `../git-conventions/SKILL.md`)
