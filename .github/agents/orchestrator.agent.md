@@ -130,7 +130,7 @@ Routing contract:
 5. **Code review / audit / analysis** -> `Reviewer` with `python-homeassistant/SKILL.md` + `review-core/SKILL.md`; add `security-best-practices/SKILL.md` for `webhook.py`, `config_flow.py`, `__init__.py`; `python-homeassistant/SKILL.md §8` is the HA-specific review checklist and must always be included for any file in `custom_components/diagral/`
 6. **Documentation update / new doc page** -> `CoderJr` with `docs-hass-diagral/SKILL.md`; if scope unclear, route to `Planner` first
 7. **Prepare PR / PR title and description** -> `CoderJr` with `git-conventions/SKILL.md` §4; task = run `git log origin/dev..HEAD --oneline` + `git diff origin/dev --stat`, then produce PR title and description following §4.2
-8. **Concrete reproducible bug** -> `Debugger`
+8. **Concrete reproducible bug** -> `Debugger` with `python-homeassistant/SKILL.md` + `code-quality/SKILL.md`; if the user reports a behavior change tied to a specific HA version, explicitly instruct `Debugger` to apply §9 of `python-homeassistant/SKILL.md` (HA behavior change investigation) before diagnosing
 9. **Acceptance verification** -> `Verifier`
 
 Hard rule:

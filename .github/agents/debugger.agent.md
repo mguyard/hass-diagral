@@ -43,6 +43,8 @@ If none apply: do not modify code; report non-reproducibility with current info.
 
 Follow any skills assigned by Orchestrator for domain-specific constraints (for example security rules).
 
+Additionally, when the bug involves any file under `custom_components/diagral/`, **always** load and follow `../skills/python-homeassistant/SKILL.md` before starting Phase 1. Pay particular attention to §9 (Investigating HA Behavior Changes) when the user or Orchestrator mentions a behavior that changed across HA versions.
+
 ## Required Workflow (in order)
 
 ### Phase 1: Reproduce
