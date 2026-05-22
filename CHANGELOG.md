@@ -1,3 +1,47 @@
+## [1.3.2](https://github.com/mguyard/hass-diagral/compare/v1.3.1...v1.3.2) (2026-03-14)
+
+
+### Bug Fixes
+
+* **tests:** 🐛 Create root conftest.py to mock cloud before package init ([a9eb5fa](https://github.com/mguyard/hass-diagral/commit/a9eb5fa8d6975b0fab19f9ea4e641cda5b6885cf))
+* **tests:** 🐛 Install integration requirements from manifest.json ([383e9dd](https://github.com/mguyard/hass-diagral/commit/383e9dde41b90f808bbc32e03a285f325ef7b528))
+* **tests:** 🐛 Mock homeassistant.components.cloud to avoid numpy dep ([17fa41f](https://github.com/mguyard/hass-diagral/commit/17fa41fcdb16668e92ab73fef5941f523d855de8))
+* **tests:** 🐛 Use lazy imports for homeassistant.components.cloud ([cd54cd6](https://github.com/mguyard/hass-diagral/commit/cd54cd680e9e03a3da0648539a4f4f57455ca83e))
+
+## [1.3.2-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.3.1...v1.3.2-beta.1) (2026-03-14)
+
+
+### Bug Fixes
+
+* **tests:** 🐛 Create root conftest.py to mock cloud before package init ([a9eb5fa](https://github.com/mguyard/hass-diagral/commit/a9eb5fa8d6975b0fab19f9ea4e641cda5b6885cf))
+* **tests:** 🐛 Install integration requirements from manifest.json ([383e9dd](https://github.com/mguyard/hass-diagral/commit/383e9dde41b90f808bbc32e03a285f325ef7b528))
+* **tests:** 🐛 Mock homeassistant.components.cloud to avoid numpy dep ([17fa41f](https://github.com/mguyard/hass-diagral/commit/17fa41fcdb16668e92ab73fef5941f523d855de8))
+* **tests:** 🐛 Use lazy imports for homeassistant.components.cloud ([cd54cd6](https://github.com/mguyard/hass-diagral/commit/cd54cd680e9e03a3da0648539a4f4f57455ca83e))
+
+## [1.3.1](https://github.com/mguyard/hass-diagral/compare/v1.3.0...v1.3.1) (2026-02-22)
+
+
+### Bug Fixes
+
+* **fdevsec.yaml:** 🔧 Update `risk_rating` to 9 for pipeline failure ([8960aa4](https://github.com/mguyard/hass-diagral/commit/8960aa4c093000d6d559ad94752e732ec506fe1c))
+* **translations:** 🐛 Replace raw URLs in user step description ([22653f6](https://github.com/mguyard/hass-diagral/commit/22653f68b9f480c1a527baa6145e03dbeb81de9b)), closes [#61](https://github.com/mguyard/hass-diagral/issues/61)
+* **translations:** 🐛 Replace raw URLs with description_placeholders ([3ed070b](https://github.com/mguyard/hass-diagral/commit/3ed070b790f2c7e0a88f84cb52f50c83d97d5f96)), closes [#61](https://github.com/mguyard/hass-diagral/issues/61)
+
+## [1.3.1-beta.2](https://github.com/mguyard/hass-diagral/compare/v1.3.1-beta.1...v1.3.1-beta.2) (2026-02-22)
+
+
+### Bug Fixes
+
+* **translations:** 🐛 Replace raw URLs in user step description ([22653f6](https://github.com/mguyard/hass-diagral/commit/22653f68b9f480c1a527baa6145e03dbeb81de9b)), closes [#61](https://github.com/mguyard/hass-diagral/issues/61)
+* **translations:** 🐛 Replace raw URLs with description_placeholders ([3ed070b](https://github.com/mguyard/hass-diagral/commit/3ed070b790f2c7e0a88f84cb52f50c83d97d5f96)), closes [#61](https://github.com/mguyard/hass-diagral/issues/61)
+
+## [1.3.1-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.3.0...v1.3.1-beta.1) (2026-01-05)
+
+
+### Bug Fixes
+
+* **fdevsec.yaml:** 🔧 Update `risk_rating` to 9 for pipeline failure ([8960aa4](https://github.com/mguyard/hass-diagral/commit/8960aa4c093000d6d559ad94752e732ec506fe1c))
+
 # [1.3.0](https://github.com/mguyard/hass-diagral/compare/v1.2.0...v1.3.0) (2025-06-03)
 
 
