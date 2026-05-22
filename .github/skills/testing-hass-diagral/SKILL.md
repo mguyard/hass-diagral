@@ -1,21 +1,28 @@
 ---
-applyTo: "tests/**"
-description: "Use when writing, updating, or reviewing tests for the hass-diagral integration. Covers pytest setup, Home Assistant mock patterns, config entry helpers, and test structure conventions."
+name: testing-hass-diagral
+description: Project-specific test setup for hass-diagral — directory structure, test tiers, devcontainer/docker environment detection, running pytest, and shared fixtures.
+user-invocable: false
 ---
 
-# Test Writing Guidelines — hass-diagral
+# Testing — hass-diagral Project Setup
 
-## Directory Structure
+Use this skill for any task that requires running, writing, or understanding tests in the `custom_components/diagral/` codebase.
+
+For generic testing principles (behavior-based, determinism, unit vs integration strategy), see `../testing-qa/SKILL.md`.
+
+---
+
+## 1. Directory Structure
 
 Tests live **inside** the integration folder, which is the only directory mounted into the HA devcontainer:
 
 ```
 custom_components/diagral/
-├── pyproject.toml       # pytest config (pythonpath, asyncio_mode, filterwarnings)
+├── pyproject.toml       # pytest config (asyncio_mode=auto, pythonpath=["../.."])
 └── tests/
     ├── __init__.py      # Empty, marks as package
-    ├── conftest.py      # Shared fixtures (mock_hass, coordinator_mock, etc.)
-    ├── test_const.py    # Tier 1: pure constant tests (no HA dependency)
+    ├── conftest.py      # Shared fixtures
+    ├── test_const.py
     ├── test_config_flow_validation.py
     ├── test_sensor.py
     ├── test_alarm_control_panel.py
@@ -24,58 +31,16 @@ custom_components/diagral/
 
 Create `tests/__init__.py` and `tests/conftest.py` when writing the first test.
 
-## Test Tiers
+---
 
-| Tier | What | HA dependency | Where to run |
-|------|------|--------------|------------|
-| Tier 1 | Pure constants (`const.py`) loaded via `importlib` | None | Local or Docker |
-| Tier 2 | Any file that imports HA (sensor, alarm_control_panel, config_flow…) | Yes | Docker devcontainer only |
+## 2. Test Tiers
 
-For **Tier 1 tests**, load `const.py` directly to bypass the package `__init__.py` which imports HA:
+| Tier | Scope | HA dependency | Run where |
+|------|-------|--------------|-----------|
+| Tier 1 | Pure constants (`const.py` via `importlib`) | None | Anywhere |
+| Tier 2 | Files that import HA (sensor, alarm_control_panel…) | Yes | Devcontainer only |
 
-## Running Tests
-
-Before running tests, detect the execution environment automatically:
-
-### Step 1 — Detect if running inside the devcontainer
-
-Check for the presence of the `/workspaces` directory **or** the `REMOTE_CONTAINERS` / `CODESPACES` environment variables:
-
-```bash
-# Quick check
-test -d /workspaces && echo "inside devcontainer" || echo "outside devcontainer"
-```
-
-**If inside the devcontainer**, run pytest directly from the integration working directory:
-
-```bash
-cd /workspaces/home-assistant-dev/config/custom_components/diagral
-pytest tests/ -v
-```
-
-### Step 2 — If NOT inside the devcontainer
-
-List running Docker containers and present the result to the developer:
-
-```bash
-docker ps --format "table {{.ID}}\t{{.Image}}\t{{.Names}}"
-```
-
-Present the output to the developer and ask:
-> "Which container ID should I use to run the tests?"
-
-**If no container is running**, inform the developer:
-> "No running container found. Please start the HA devcontainer first, then provide the container ID."
-
-### Step 3 — Once the container ID is known
-
-```bash
-docker exec -w /workspaces/home-assistant-dev/config/custom_components/diagral <CONTAINER_ID> pytest tests/ -v
-```
-
-Replace `<CONTAINER_ID>` with the value provided by the developer (e.g., `f5ea139decbd`).
-
-> **Note:** The container ID changes every time the devcontainer is restarted. Always retrieve it fresh via `docker ps`.
+For Tier 1, load `const.py` directly to bypass `__init__.py` (which imports HA):
 ```python
 import importlib.util, pathlib
 spec = importlib.util.spec_from_file_location(
@@ -86,7 +51,38 @@ const = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(const)
 ```
 
-## Dependencies
+---
+
+## 3. Running Tests
+
+**Step 1 — Detect environment:**
+```bash
+test -d /workspaces && echo "inside devcontainer" || echo "outside devcontainer"
+```
+
+**Step 2a — Inside devcontainer:**
+```bash
+cd /workspaces/home-assistant-dev/config/custom_components/diagral
+pytest tests/ -v
+```
+
+**Step 2b — Outside devcontainer** (get container ID first):
+```bash
+docker ps --format "table {{.ID}}\t{{.Image}}\t{{.Names}}"
+```
+
+Present the output and ask the developer which container ID to use. Then:
+```bash
+docker exec -w /workspaces/home-assistant-dev/config/custom_components/diagral <CONTAINER_ID> pytest tests/ -v
+```
+
+> The container ID changes every time the devcontainer is restarted — always retrieve it fresh via `docker ps`.
+
+> **This section is the canonical source for running tests.** `git-conventions/SKILL.md §3` (pre-commit gate) references this section — do not duplicate the commands elsewhere.
+
+---
+
+## 4. Dependencies and pytest Configuration
 
 `homeassistant` is installed as a regular pip package in the devcontainer.
 **No `pytest-homeassistant-custom-component` is required.**
@@ -110,9 +106,14 @@ filterwarnings = [
 ]
 ```
 
-`pythonpath = ["../.."` adds `/workspaces/home-assistant-dev/config` to sys.path so that `from custom_components.diagral.xxx import ...` resolves correctly.
+`asyncio_mode = "auto"` means **no `@pytest.mark.asyncio` decorator is needed** on async tests.
+`pythonpath = ["../.."]` adds `/workspaces/home-assistant-dev/config` to `sys.path` so `from custom_components.diagral.xxx import ...` resolves correctly.
 
-## conftest.py Bootstrap
+---
+
+## 5. Shared Fixtures (conftest.py)
+
+Full bootstrap:
 
 ```python
 """Shared test fixtures for hass-diagral."""
@@ -172,7 +173,9 @@ def diagral_config():
     return config
 ```
 
-## Mocking Strategy
+---
+
+## 6. Mocking Strategy
 
 - Use `MagicMock(spec=HomeAssistant)` for the HA instance
 - **Never make real HTTP calls** — always mock at the `pydiagral` library boundary
@@ -180,47 +183,36 @@ def diagral_config():
 - Patch module-level utilities: `@patch("custom_components.diagral.sensor.dt_util")`
 - Use `DeviceList(cameras=[], commands=[], sensors=[], sirens=[], transmitters=[])` (not `MagicMock()`) when `vars(devices_infos)` is iterated in the code under test — `MagicMock().__dict__` contains non-iterable sentinel objects that cause `TypeError`
 
-## Key Rules
+---
 
-- **Never make real HTTP calls** — always mock at the `pydiagral` library boundary
-- Test both the happy path and error handling (API exceptions, missing/invalid data)
-- Use `asyncio_mode = "auto"` (configured in `pyproject.toml`) — no `@pytest.mark.asyncio` needed
-- Assert on entity states, attributes, and unique IDs
+## 7. Test Impact Analysis (Mandatory)
 
-## Test Impact Analysis
-
-**Every time a file in `custom_components/diagral/*.py` is created or modified**, you MUST perform the following analysis before finishing the task:
+Every time a file in `custom_components/diagral/*.py` is created or modified, perform this analysis **before finishing the task**:
 
 1. **Identify** the corresponding test file: `tests/test_<module>.py`
-   (e.g., modifying `sensor.py` → check `tests/test_sensor.py`)
 2. **Read** the existing tests in that file (if it exists)
 3. **For each function or class that was added, changed, or removed**, decide:
    - `CREATE` — new behaviour needs a new test
    - `UPDATE` — existing test no longer reflects the new logic
    - `DELETE` — function was removed and its test is now dead code
 4. **Apply** all required test changes immediately — never skip silently
-5. **Run** the test suite (see [Running Tests](#running-tests)) to validate no regression
+5. **Run** the test suite (§3) to validate no regression
 
 > This rule applies to ALL code changes: features, bug fixes, refactors, and deletions.
-> If the test file does not exist yet, create it with the standard `tests/__init__.py` + `conftest.py` bootstrap.
+> If the test file does not exist yet, create it with the standard `__init__.py` + `conftest.py` bootstrap.
 
-## Test Naming Convention
+---
 
-```
-test_<module>_<scenario>
-```
+## 8. Test Rules and Naming
+
+- Minimum coverage per entity: `unique_id` format, entity state value, `exists_fn` if defined, coordinator error path
+- Test both happy path and error handling (API exceptions, missing/invalid data)
+- Assert on entity states, attributes, and unique IDs
+- Run `flake8 --max-line-length=150 custom_components/diagral/` after changes
+
+**Naming convention:** `test_<module>_<scenario>`
 
 Examples:
 - `test_sensor_anomalies_returns_count`
 - `test_coordinator_update_retains_data_on_api_error`
 - `test_alarm_panel_arm_away_calls_api`
-
-## Running Tests
-
-```bash
-# All tests (from the integration directory in the container):
-docker exec -w /workspaces/home-assistant-dev/config/custom_components/diagral <container_id> pytest tests/ -v
-
-# Single file:
-docker exec -w /workspaces/home-assistant-dev/config/custom_components/diagral <container_id> pytest tests/test_sensor.py -v
-```

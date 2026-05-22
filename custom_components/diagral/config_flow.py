@@ -25,7 +25,13 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+)
 
 from . import DiagralConfigEntry
 from .const import (
@@ -259,7 +265,12 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             alarmpaneltypecode = user_input["alarmpanel_options"][
                 CONF_ALARMPANEL_ACTIONTYPE_CODE
             ]
-            alarmpanelcode = user_input["alarmpanel_options"][CONF_ALARMPANEL_CODE]
+            alarmpanelcode = user_input["alarmpanel_options"].get(CONF_ALARMPANEL_CODE)
+            if alarmpanelcode is None:
+                user_input["alarmpanel_options"][CONF_ALARMPANEL_CODE] = None
+            if alarmpanelcode is not None:
+                alarmpanelcode = int(alarmpanelcode)
+                user_input["alarmpanel_options"][CONF_ALARMPANEL_CODE] = alarmpanelcode
 
             # Check if the user has entered a valid alarm panel code
             _LOGGER.debug("Validating Options: %s", user_input)
@@ -342,8 +353,12 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                                     ],
                                 )
                             ),
-                            vol.Optional(CONF_ALARMPANEL_CODE, default=None): vol.Any(
-                                None, vol.Coerce(int)
+                            vol.Optional(CONF_ALARMPANEL_CODE, default=vol.UNDEFINED): vol.Any(
+                                None,
+                                vol.All(
+                                    vol.Coerce(int),
+                                    NumberSelector(NumberSelectorConfig(mode=NumberSelectorMode.BOX, step=1)),
+                                ),
                             ),
                         }
                     ),
@@ -460,7 +475,12 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
                 != options["alarmpanel_options"][CONF_ALARMPANEL_ACTIONTYPE_CODE]
             )
             # Check if the user has changed the alarm panel code
-            alarmpanelcode = user_input["alarmpanel_options"][CONF_ALARMPANEL_CODE]
+            alarmpanelcode = user_input["alarmpanel_options"].get(CONF_ALARMPANEL_CODE)
+            if alarmpanelcode is None:
+                user_input["alarmpanel_options"][CONF_ALARMPANEL_CODE] = None
+            if alarmpanelcode is not None:
+                alarmpanelcode = int(alarmpanelcode)
+                user_input["alarmpanel_options"][CONF_ALARMPANEL_CODE] = alarmpanelcode
             alarmpanelcode_updated = (
                 alarmpanelcode is not None
                 and alarmpanelcode
@@ -500,6 +520,8 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
                 return self.async_abort(reason="no_changes")
 
         # Build form
+        stored_code = options["alarmpanel_options"][CONF_ALARMPANEL_CODE]
+        code_default = stored_code if stored_code is not None else vol.UNDEFINED
         STEP_OPTIONS = vol.Schema(
             {
                 vol.Required("alarmpanel_options"): section(
@@ -521,10 +543,14 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
                             ),
                             vol.Optional(
                                 CONF_ALARMPANEL_CODE,
-                                default=options["alarmpanel_options"][
-                                    CONF_ALARMPANEL_CODE
-                                ],
-                            ): vol.Any(None, vol.Coerce(int)),
+                                default=code_default,
+                            ): vol.Any(
+                                None,
+                                vol.All(
+                                    vol.Coerce(int),
+                                    NumberSelector(NumberSelectorConfig(mode=NumberSelectorMode.BOX, step=1)),
+                                ),
+                            ),
                         }
                     ),
                     {"collapsed": True},
