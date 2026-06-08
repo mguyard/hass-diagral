@@ -371,7 +371,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: matrix.home-assistant-version == 'stable' && env.SKIP_TESTS != 'true'
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: /tmp/hass-config/coverage.xml
@@ -381,7 +381,7 @@ jobs:
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() && env.SKIP_TESTS != 'true' }}
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: /tmp/hass-config/junit.xml
