@@ -11,15 +11,15 @@
             "invalid_email": "Please enter a valid email address.",
             "invalid_alarmpanel_code": "Invalid Alarm Panel Code. Alarm Panel Code must contain only digits (4 or more).",
             "missing_alarmpanel_code": "Alarm Panel Code is required when you set the action type to something other than `Never`.",
-            "invalid_pin": "Invalid PIN code. PIN code must contain only digits.",
+            "invalid_pin": "Invalid Master (PIN) code. Master (PIN) code must contain only digits.",
             "unknown": "Unexpected error"
         },
         "step": {
             "user": {
                 "data": {
-                    "serial_id": "Serial ID of DIAG56AAX module"
+                    "serial_id": "Serial ID of DIAG56AAX/DIAG59AAX module"
                 },
-                "description": "To set up your Diagral alarm system, you need a DIAG56AAX module which connects your alarm to the internet for remote control.\n\rTo find your Serial ID, check the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})",
+                "description": "To set up your Diagral alarm system, you need a DIAG56AAX/DIAG59AAX module which connects your alarm to the internet for remote control.\n\rTo find your Serial ID, check the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})",
                 "title": "Diagral"
             },
             "account": {
@@ -28,7 +28,7 @@
               "data": {
                 "username": "Username (email address)",
                 "password": "Password",
-                "pin_code": "Diagral PIN Code (numbers only, e.g. 1234)"
+                "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
               }
             }
             ,
@@ -38,7 +38,7 @@
               "data": {
                 "username": "Username (email address)",
                 "password": "Password",
-                "pin_code": "Diagral PIN Code (numbers only, e.g. 1234)"
+                "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
               }
             },
             "options": {
