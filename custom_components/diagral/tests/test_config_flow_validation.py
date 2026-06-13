@@ -4,7 +4,13 @@ Tests is_valid_email(), is_valid_pin(), and is_valid_alarmpanel_code()
 which have no side effects and require only Home Assistant to be importable.
 """
 import pytest
+from unittest.mock import MagicMock
 
+from custom_components.diagral.config_flow import DiagralOptionsFlow
+from custom_components.diagral.const import (
+    CONF_ALARMPANEL_ACTIONTYPE_CODE,
+    CONF_ALARMPANEL_CODE,
+)
 from custom_components.diagral.config_flow import (
     is_valid_alarmpanel_code,
     is_valid_email,
@@ -118,3 +124,100 @@ class TestIsValidAlarmPanelCode:
     def test_invalid_code_none(self):
         """None must be invalid."""
         assert is_valid_alarmpanel_code(None) is False
+
+
+class TestAlarmPanelFlowValidation:
+    """Simulate the alarm panel code validation logic from async_step_options / async_step_init.
+
+    These tests cover the coercion + validation path without requiring a live HA flow context.
+    """
+
+    def _validate(self, typecode: str, code) -> str | None:
+        """Replicate the core validation logic from the config/options flow steps.
+
+        Returns the error key string, or None when no error.
+        """
+        alarmpanelcode = code
+        # Coercion: float from HA frontend → int (mirrors the fix in both flow methods)
+        if alarmpanelcode is not None:
+            alarmpanelcode = int(alarmpanelcode)
+
+        # "never" + non-None code → code is cleared, no error
+        if typecode == "never" and alarmpanelcode is not None:
+            return None
+        # non-"never" + None code → missing code error
+        elif typecode != "never" and alarmpanelcode is None:
+            return "missing_alarmpanel_code"
+
+        # Validate code length / type
+        if alarmpanelcode is not None and not is_valid_alarmpanel_code(alarmpanelcode):
+            return "invalid_alarmpanel_code"
+
+        return None
+
+    def test_never_type_with_none_code_no_error(self):
+        """'never' type with None code must not raise an error."""
+        assert self._validate("never", None) is None
+
+    def test_always_type_with_none_code_raises_missing(self):
+        """'always' type with None code must raise missing_alarmpanel_code."""
+        assert self._validate("always", None) == "missing_alarmpanel_code"
+
+    def test_disarm_only_type_with_none_code_raises_missing(self):
+        """'disarm_only' type with None code must raise missing_alarmpanel_code."""
+        assert self._validate("disarm_only", None) == "missing_alarmpanel_code"
+
+    def test_always_type_with_valid_int_code_no_error(self):
+        """'always' type with valid 4-digit int code must not raise an error."""
+        assert self._validate("always", 1234) is None
+
+    def test_always_type_with_float_code_is_coerced_and_valid(self):
+        """Float code from HA frontend (1234.0) must be coerced to int and pass validation."""
+        assert self._validate("always", 1234.0) is None
+
+    def test_disarm_only_type_with_float_code_is_coerced_and_valid(self):
+        """Float code from HA frontend must be coerced and pass validation for 'disarm_only'."""
+        assert self._validate("disarm_only", 5678.0) is None
+
+    def test_always_type_with_short_code_raises_invalid(self):
+        """'always' type with 3-digit code must raise invalid_alarmpanel_code."""
+        assert self._validate("always", 123) == "invalid_alarmpanel_code"
+
+    def test_float_coercion_preserves_value(self):
+        """int(1234.0) must equal 1234 (basic coercion sanity check)."""
+        assert int(1234.0) == 1234
+
+    def test_float_without_coercion_fails_alarmpanel_validation(self):
+        """Float 1234.0 without coercion must fail is_valid_alarmpanel_code (not isinstance int)."""
+        assert is_valid_alarmpanel_code(1234.0) is False
+
+
+class TestDiagralOptionsFlowRegression:
+    """Regression tests for options flow input handling."""
+
+    async def test_async_step_init_missing_alarmpanel_code_key_returns_missing_error(self):
+        """Missing alarm panel code key must return missing_alarmpanel_code instead of raising KeyError."""
+        flow = object.__new__(DiagralOptionsFlow)
+        flow.handler = "entry_id"
+
+        config_entry = MagicMock()
+        config_entry.options = {
+            "alarmpanel_options": {
+                CONF_ALARMPANEL_ACTIONTYPE_CODE: "never",
+                CONF_ALARMPANEL_CODE: None,
+            }
+        }
+
+        flow.hass = MagicMock()
+        flow.hass.config_entries.async_get_known_entry.return_value = config_entry
+
+        result = await flow.async_step_init(
+            {
+                "alarmpanel_options": {
+                    CONF_ALARMPANEL_ACTIONTYPE_CODE: "always",
+                }
+            }
+        )
+
+        assert result["type"] == "form"
+        assert result["errors"]["base"] == "missing_alarmpanel_code"

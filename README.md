@@ -9,6 +9,9 @@
 	<img src="https://img.shields.io/github/last-commit/mguyard/hass-diagral?style=default&color=0080ff" alt="Last Commit">
 	<img src="https://img.shields.io/github/languages/top/mguyard/hass-diagral?style=default&color=0080ff" alt="repo-top-language">
 	<img src="https://img.shields.io/github/languages/count/mguyard/hass-diagral?style=default&color=0080ff" alt="repo-language-count">
+    <a href="https://codecov.io/gh/mguyard/hass-diagral" >
+        <img src="https://codecov.io/gh/mguyard/hass-diagral/graph/badge.svg?token=GKQZDY2KTO" alt="CodeCov"/>
+    </a>
 <p>
 <p align="center">
     <img src="https://img.shields.io/github/v/release/mguyard/hass-diagral?display_date=published_at&label=Stable" alt="Last Stable Release">
