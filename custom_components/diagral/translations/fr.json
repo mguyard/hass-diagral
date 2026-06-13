@@ -11,15 +11,15 @@
             "invalid_email": "Veuillez entrer une adresse e-mail valide.",
             "invalid_alarmpanel_code": "Code du panneau d'alarme invalide. Le code doit contenir uniquement des chiffres (4 ou plus).",
             "missing_alarmpanel_code": "Le code du panneau d'alarme est requis lorsque vous configurez le type d'action sur une valeur autre que `Jamais`.",
-            "invalid_pin": "Code PIN invalide. Le code PIN doit contenir uniquement des chiffres.",
+            "invalid_pin": "Master (PIN) code invalide. Le Master (PIN) code doit contenir uniquement des chiffres.",
             "unknown": "Erreur inattendue"
         },
         "step": {
             "user": {
                 "title": "Diagral",
-                "description": "Pour configurer votre système d'alarme Diagral, vous avez besoin d'un module DIAG56AAX qui connecte votre alarme à Internet pour le contrôle à distance.\n\rPour trouver votre ID de série, vérifiez l'étiquette sur votre module ou consultez notre guide de configuration : [{setup_guide_url}]({setup_guide_url})\n\r![Emplacement SerialID]({serial_id_image_url})",
+                "description": "Pour configurer votre système d'alarme Diagral, vous avez besoin d'un module DIAG56AAX/DIAG59AAX qui connecte votre alarme à Internet pour le contrôle à distance.\n\rPour trouver votre ID de série, vérifiez l'étiquette sur votre module ou consultez notre guide de configuration : [{setup_guide_url}]({setup_guide_url})\n\r![Emplacement SerialID]({serial_id_image_url})",
                 "data": {
-                    "serial_id": "Numéro de série du module DIAG56AAX"
+                    "serial_id": "Numéro de série du module DIAG56AAX/DIAG59AAX"
                 }
             },
             "account": {
@@ -28,7 +28,7 @@
               "data": {
                 "username": "Identifiant (adresse e-mail)",
                 "password": "Mot de passe",
-                "pin_code": "Code PIN Diagral (chiffres uniquement, ex : 1234)"
+                "pin_code": "Master (PIN) Code Diagral (chiffres uniquement, ex : 1234)"
               }
             },
             "reconfigure": {
@@ -37,7 +37,7 @@
               "data": {
                 "username": "Identifiant (adresse e-mail)",
                 "password": "Mot de passe",
-                "pin_code": "Code PIN Diagral (chiffres uniquement, ex : 1234)"
+                "pin_code": "Master (PIN) Code Diagral (chiffres uniquement, ex : 1234)"
               }
             },
             "options": {
