@@ -1,3 +1,11 @@
+## [1.3.3](https://github.com/mguyard/hass-diagral/compare/v1.3.2...v1.3.3) (2026-06-13)
+
+
+### Bug Fixes
+
+* **config_flow:** 🐛 Fix alarm code field regression ([1aaca45](https://github.com/mguyard/hass-diagral/commit/1aaca4529c286d239466939ef5423e88a0bc60a0))
+* **translations:** 🐛 Update PIN code references in English and French translations ([6ded039](https://github.com/mguyard/hass-diagral/commit/6ded0395993030b6defa303295910fcda0ea8f6a)), closes [#74](https://github.com/mguyard/hass-diagral/issues/74)
+
 ## [1.3.3-beta.2](https://github.com/mguyard/hass-diagral/compare/v1.3.3-beta.1...v1.3.3-beta.2) (2026-06-13)
 
 
