@@ -1,3 +1,10 @@
+## [1.3.3-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.3.2...v1.3.3-beta.1) (2026-05-22)
+
+
+### Bug Fixes
+
+* **config_flow:** 🐛 Fix alarm code field regression ([1aaca45](https://github.com/mguyard/hass-diagral/commit/1aaca4529c286d239466939ef5423e88a0bc60a0))
+
 ## [1.3.2](https://github.com/mguyard/hass-diagral/compare/v1.3.1...v1.3.2) (2026-03-14)
 
 
