@@ -19,6 +19,11 @@ CONF_ALARMPANEL_ACTIONTYPE_CODE_OPTIONS = [
 CONF_ALARMPANEL_CODE = "alarmpanel_code"
 
 DEFAULT_SCAN_INTERVAL = 300
+# Number of consecutive Diagral service errors tolerated before the entities
+# are marked unavailable. The Diagral cloud regularly answers 500/503 for a
+# few minutes; losing the alarm state on the first one is worse than serving
+# data that is at most a few polls old.
+MAX_CONSECUTIVE_SERVER_ERRORS = 2
 
 HA_CLOUD_DOMAIN = ".nabu.casa"
 

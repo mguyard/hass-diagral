@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 from pydiagral.api import DiagralAPI
-from pydiagral.exceptions import DiagralAPIError
+from pydiagral.exceptions import DiagralAPIError, ServerError
 from pydiagral.models import (
     AlarmConfiguration,
     Anomalies,
@@ -19,7 +19,12 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import BRAND, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    BRAND,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    MAX_CONSECUTIVE_SERVER_ERRORS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +41,7 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         self.api = api
+        self._consecutive_server_errors: int = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Diagral API."""
@@ -46,6 +52,9 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
             devices_infos: DeviceInfos = await self.api.get_devices_info()
             system_status: SystemStatus = await self.api.get_system_status()
             anomalies: Anomalies = await self.api.get_anomalies()
+
+            # The service answered, whatever the payload turns out to be.
+            self._consecutive_server_errors = 0
 
             if alarm_config and system_status:
                 updated_data = {
@@ -59,7 +68,26 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
                 self.data = updated_data
                 await self._update_device_info()
                 return updated_data
+        except ServerError as err:
+            # A 5xx means the Diagral cloud is down, not that the alarm is
+            # gone. Marking every entity unavailable on the first failure
+            # hands `unavailable` to automations reading the alarm state, so
+            # the last known data is served for a few polls instead.
+            self._consecutive_server_errors += 1
+            if self.data and self._consecutive_server_errors <= MAX_CONSECUTIVE_SERVER_ERRORS:
+                _LOGGER.warning(
+                    "Diagral service unavailable (%s/%s), keeping last known data: %s",
+                    self._consecutive_server_errors,
+                    MAX_CONSECUTIVE_SERVER_ERRORS + 1,
+                    err,
+                )
+                return self.data
+            raise UpdateFailed(
+                f"Diagral service unavailable after {self._consecutive_server_errors} "
+                f"consecutive attempts: {err}"
+            ) from err
         except DiagralAPIError as err:
+            self._consecutive_server_errors = 0
             raise UpdateFailed(f"Error communicating with API: {err}") from err
         else:
             _LOGGER.warning("Received invalid data from API, keeping old data")
