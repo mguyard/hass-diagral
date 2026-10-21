@@ -78,7 +78,6 @@ async def async_setup_entry(
     # Create the alarm control panel entity
     async_add_entities(
         [DiagralAlarmControlPanel(hass, entry, entry.entry_id, coordinator, config)],
-        True,
     )
 
 
@@ -143,7 +142,9 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
 
                 # Update the code requirement
                 self._attr_code_arm_required = self._is_code_arm_required()
-                self.async_write_ha_state()
+
+        # Always write state so availability follows the coordinator
+        self.async_write_ha_state()
 
     def _get_ha_state(
         self, system_status: SystemStatus

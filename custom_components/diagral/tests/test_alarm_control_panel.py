@@ -150,3 +150,41 @@ class TestValidateCode:
         """'disarm' trigger on ARM transition must pass (code not required for arming)."""
         panel = make_panel_mock("disarm", 1234, AlarmControlPanelState.DISARMED)
         assert panel._validate_code(AlarmControlPanelState.ARMED_AWAY, None) is True
+
+
+class TestHandleCoordinatorUpdate:
+    """Tests for _handle_coordinator_update()."""
+
+    def make_panel_with_status(self, alarm_state: AlarmControlPanelState, status: str) -> DiagralAlarmControlPanel:
+        """Return a panel whose coordinator reports the given Diagral status."""
+        panel = make_panel_mock("never", None, alarm_state)
+        panel._attr_extra_state_attributes = {}
+        panel.coordinator = MagicMock()
+        panel.coordinator.data = {"system_status": MagicMock(status=status)}
+        panel.async_write_ha_state = MagicMock()
+        return panel
+
+    def test_unchanged_state_is_still_written(self):
+        """An update with an unchanged alarm state must still write the state.
+
+        Otherwise an entity added while the coordinator was failing stays
+        'unavailable' after the coordinator recovers.
+        """
+        panel = self.make_panel_with_status(AlarmControlPanelState.DISARMED, "off")
+        panel._handle_coordinator_update()
+        panel.async_write_ha_state.assert_called_once()
+        assert panel._attr_alarm_state == AlarmControlPanelState.DISARMED
+
+    def test_changed_state_is_written(self):
+        """An update with a new alarm state must apply and write it."""
+        panel = self.make_panel_with_status(AlarmControlPanelState.DISARMED, "group")
+        panel._handle_coordinator_update()
+        panel.async_write_ha_state.assert_called_once()
+        assert panel._attr_alarm_state == AlarmControlPanelState.ARMED_AWAY
+
+    def test_unknown_status_is_still_written(self):
+        """An unmapped status must keep the current state but still write it."""
+        panel = self.make_panel_with_status(AlarmControlPanelState.ARMED_HOME, "unknown_state")
+        panel._handle_coordinator_update()
+        panel.async_write_ha_state.assert_called_once()
+        assert panel._attr_alarm_state == AlarmControlPanelState.ARMED_HOME
