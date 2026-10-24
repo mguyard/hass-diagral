@@ -170,3 +170,5 @@ cython_debug/
 .mcp.json
 #  Personal Claude Code settings. The shared ones live in .claude/settings.json.
 .claude/settings.local.json
+#  Pinned semantic-release toolchain, installed by release.yaml with npm ci.
+.github/release/node_modules/
