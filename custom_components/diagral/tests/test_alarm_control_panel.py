@@ -4,6 +4,7 @@ Tests _get_ha_state(), _validate_code(), and _is_code_arm_required()
 without making real API calls or instantiating the full entity.
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from custom_components.diagral.alarm_control_panel import DiagralAlarmControlPanel
@@ -224,3 +225,53 @@ class TestHandleCoordinatorUpdate:
         assert panel._attr_alarm_state == current_state
         assert "trigger" in panel._attr_extra_state_attributes
         panel.async_write_ha_state.assert_called_once()
+
+
+def make_alerted_panel() -> DiagralAlarmControlPanel:
+    """Return an armed panel that knows one group, ready to receive an alert."""
+    panel = make_panel_mock("never", None, AlarmControlPanelState.ARMED_AWAY)
+    panel._attr_name = "Central"
+    panel._alarm_config = SimpleNamespace(
+        groups=[SimpleNamespace(index=1, name="Ground floor")]
+    )
+    panel._attr_extra_state_attributes = {}
+    panel.async_write_ha_state = MagicMock()
+    return panel
+
+
+class TestHandleEventAlert:
+    """Tests for _handle_event_alert()."""
+
+    def test_intrusion_in_a_group_triggers_with_its_name(self):
+        """An intrusion alert triggers the panel and names its group."""
+        panel = make_alerted_panel()
+        panel._handle_event_alert({"data": {"alarm_code": "1130", "group_index": "01"}})
+        assert panel._attr_alarm_state == AlarmControlPanelState.TRIGGERED
+        assert panel._attr_extra_state_attributes["trigger"] == {
+            "group_name": "Ground floor",
+            "group_id": 1,
+        }
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            {"alarm_code": "1130"},
+            {"alarm_code": "1130", "group_index": None},
+            {"alarm_code": "1130", "group_index": "NIGHT_MODE_GROUP_CODE"},
+        ],
+        ids=["no-group-key", "group-none", "group-code"],
+    )
+    def test_intrusion_without_group_still_triggers(self, data):
+        """An intrusion alert without a group must still trigger the panel."""
+        panel = make_alerted_panel()
+        panel._handle_event_alert({"data": data})
+        assert panel._attr_alarm_state == AlarmControlPanelState.TRIGGERED
+        assert "trigger" not in panel._attr_extra_state_attributes
+        panel.async_write_ha_state.assert_called_once()
+
+    def test_other_alert_leaves_the_state(self):
+        """An alert that is not an intrusion leaves the panel as it was."""
+        panel = make_alerted_panel()
+        panel._handle_event_alert({"data": {"alarm_code": "1301", "group_index": "01"}})
+        assert panel._attr_alarm_state == AlarmControlPanelState.ARMED_AWAY
+        panel.async_write_ha_state.assert_not_called()
