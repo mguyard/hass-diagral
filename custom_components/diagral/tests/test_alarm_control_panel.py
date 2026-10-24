@@ -521,3 +521,26 @@ class TestWebhookActions:
         ):
             await panel.action_unregister_webhook()
         assert raised.value.translation_key == "webhook_unregistration_failed"
+
+
+class TestWebhookSubscriptions:
+    """Each panel only listens to the webhooks of its own central."""
+
+    async def test_panel_subscribes_to_its_entry_signals(self):
+        """With two centrals, an alert of one must not trigger the other."""
+        panel = make_panel_mock("never", None, AlarmControlPanelState.DISARMED)
+        panel._entry_id = "entry1"
+        panel.hass = MagicMock()
+        panel.async_on_remove = MagicMock()
+        with (
+            patch.object(
+                panel_module.DiagralEntity, "async_added_to_hass", AsyncMock()
+            ),
+            patch.object(panel_module, "async_dispatcher_connect") as connect,
+        ):
+            await panel.async_added_to_hass()
+
+        assert {call.args[1] for call in connect.call_args_list} == {
+            "signal-diagral-entry1-webhook-STATUS",
+            "signal-diagral-entry1-webhook-ALERT",
+        }

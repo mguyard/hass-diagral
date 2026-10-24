@@ -68,7 +68,7 @@ coordinator.data["anomalies"]       # Anomalies, or a falsy value when there are
 2. Find the entry whose `runtime_data.webhook_id` matches.
 3. `STATUS` and `ANOMALY` → `coordinator.async_request_refresh()`.
 4. `ALERT` and `ANOMALY` → `enrich_data_alert_anomaly` fills `detail.device_label` from `devices_infos` (device type lower-cased + `s`, matched on index).
-5. `publish_event` pops `alarm_type`, sends dispatcher signal `signal-diagral-webhook-<TYPE>` and fires `DIAGRAL_EVENT` on the bus with `{"type": ..., "data": ...}`.
+5. `publish_event` pops `alarm_type`, sends the dispatcher signals `signal-diagral-webhook-<TYPE>` (global, kept for existing listeners) and `signal-diagral-<entry_id>-webhook-<TYPE>` (what the panel listens to), and fires `DIAGRAL_EVENT` on the bus with `{"type", "data", "entry_id", "entity_id"}`. `logbook.py` describes it in the activity log.
 
 ### 2.5 Alarm panel (`alarm_control_panel.py`)
 

@@ -39,6 +39,7 @@ from .const import (
     CONF_ALARMPANEL_ACTIONTYPE_CODE,
     CONF_ALARMPANEL_CODE,
     DOMAIN,
+    ENTRY_WEBHOOK_SIGNAL,
     INPUT_GROUPS,
     SERVICE_ARM_GROUP,
     SERVICE_DISARMGROUP,
@@ -380,7 +381,9 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
-                f"signal-{DOMAIN}-webhook-STATUS",
+                ENTRY_WEBHOOK_SIGNAL.format(
+                    entry_id=self._entry_id, alarm_type="STATUS"
+                ),
                 self._handle_event_status,
             )
         )
@@ -388,7 +391,9 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
-                f"signal-{DOMAIN}-webhook-ALERT",
+                ENTRY_WEBHOOK_SIGNAL.format(
+                    entry_id=self._entry_id, alarm_type="ALERT"
+                ),
                 self._handle_event_alert,
             )
         )
