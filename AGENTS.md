@@ -116,6 +116,8 @@ Home Assistant requires Python 3.14 since 2026.3, and CI tests on 3.14 only. Do 
 
 Never commit or push directly to `beta` or `main` — semantic-release owns them. Always confirm the current branch with `git branch --show-current` before committing.
 
+Dependabot **security** PRs always target `main`, the default branch: `target-branch: dev` in `dependabot.yml` only applies to version updates. Never merge one into `main`. Carry its change to a branch cut from `dev`, open the PR there, and close the Dependabot PR with a link — see the `git-conventions` skill.
+
 Because `main` is the default branch, a `Closes #N` keyword only fires when the change reaches `main`, not when a PR merges into `dev`. Issues therefore stay open through the beta cycle by design.
 
 ## Commits

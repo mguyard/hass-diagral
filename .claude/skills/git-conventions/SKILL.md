@@ -148,3 +148,19 @@ Refs #<issue_number>
 4. `git diff origin/dev --stat` — check the scope
 5. Write the title and body from the template into a file
 6. Show it to the user; open with `gh pr create --base dev` only once they agree
+
+---
+
+## 4. Dependabot PRs
+
+- **Version updates** target `dev` (`target-branch` in `.github/dependabot.yml`), grouped into one PR a month. Merge them like any PR once CI is green; bring the branch up to date with `gh pr update-branch <n>` when `dev` moved.
+- **Security updates** always target `main`, whatever `dependabot.yml` says, and ignore its grouping and commit prefix. Never merge one into `main`: that would release from `main` outside the `dev` → `beta` → `main` cycle and leave `dev` behind. Instead:
+
+  ```bash
+  git checkout dev && git pull --ff-only
+  git checkout -b fix/security-<dependency>
+  git cherry-pick <dependabot commit>          # or redo the bump by hand
+  git commit --amend                           # repository format, e.g. fix(deps): 🐛 …
+  ```
+
+  Open the PR to `dev`, then close the Dependabot PR with a comment linking to it (`gh pr close <n> --delete-branch --comment "…"`). Use `fix` so the change appears in the changelog, and suggest a prompt beta/stable release to the maintainer when the advisory is serious.
