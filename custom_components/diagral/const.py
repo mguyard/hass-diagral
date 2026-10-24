@@ -26,6 +26,14 @@ ALARMPANEL_CODE_MIN_LENGTH = 4
 ALARM_INTRUSION_CODES = frozenset({1130, 1139, 1141})
 
 DEFAULT_SCAN_INTERVAL = 300
+# A transient read failure is retried with a longer deadline, after a longer
+# pause, and the whole refresh never runs into the next poll.
+READ_ATTEMPT_TIMEOUTS = (30, 45, 60)
+READ_RETRY_PAUSES = (5, 10)
+READ_RETRY_BUDGET = DEFAULT_SCAN_INTERVAL // 2
+HTTP_SERVER_ERROR = 500
+# pydiagral's per-request ceiling: a caller can shorten a deadline, never extend it.
+DIAGRAL_REQUEST_TIMEOUT = max(READ_ATTEMPT_TIMEOUTS)
 
 HA_CLOUD_DOMAIN = ".nabu.casa"
 
