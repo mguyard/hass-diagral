@@ -86,7 +86,7 @@ git diff --name-only HEAD | grep -q "^custom_components/" && echo "tests require
 
 ### 2.2 Run the suite
 
-Use the canonical commands in `testing-hass-diagral` §3. Capture the pytest summary line.
+Use the canonical commands in `testing-hass-diagral` §3, then the ruff gate in §8 of the same skill. Capture the pytest summary line.
 
 ### 2.3 Fix loop
 

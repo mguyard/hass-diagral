@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 import logging
 import re
@@ -35,6 +36,7 @@ from homeassistant.helpers.selector import (
 
 from . import DiagralConfigEntry
 from .const import (
+    ALARMPANEL_CODE_MIN_LENGTH,
     CONF_ALARMPANEL_ACTIONTYPE_CODE,
     CONF_ALARMPANEL_ACTIONTYPE_CODE_OPTIONS,
     CONF_ALARMPANEL_CODE,
@@ -67,19 +69,16 @@ def is_valid_pin(pin: str) -> bool:
 
 def is_valid_alarmpanel_code(code: int) -> bool:
     """Check if the alarm panel code is valid."""
-    # The alarm panel code must be a positive integer with at least 4 digits
-    if isinstance(code, int) and len(str(code)) >= 4:
-        return True
-    # Else, the code is invalid
-    return False
+    return isinstance(code, int) and len(str(code)) >= ALARMPANEL_CODE_MIN_LENGTH
 
 
 async def validate_account(
     account_info: AccountInfoData,
-    previous_data: DiagralConfigEntry | None = {},
+    previous_data: Mapping[str, Any] | None = None,
     ephemeral: bool = True,
 ) -> ValidateConnectionData | None:
     """Validate the user input allows us to connect to Diagral API."""
+    previous_data = previous_data or {}
 
     # Need to identify if submitted informations was modified
     username_changed = account_info.username != previous_data.get(CONF_USERNAME, None)
@@ -172,7 +171,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_account()
 
         # Build form
-        STEP_SERIALID = vol.Schema(
+        serialid_schema = vol.Schema(
             {
                 vol.Required(CONF_SERIAL_ID): str,
             }
@@ -180,7 +179,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=STEP_SERIALID,
+            data_schema=serialid_schema,
             errors=errors or {},
             description_placeholders={
                 "setup_guide_url": "https://docs.page/mguyard/hass-diagral/integration/setup#how-to-find-your-system-serial-id",
@@ -239,7 +238,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                         errors["base"] = "unknown"
 
         # Build form
-        STEP_ACCOUNT = vol.Schema(
+        account_schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): str,
                 vol.Required(CONF_PASSWORD): str,
@@ -249,7 +248,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="account",
-            data_schema=STEP_ACCOUNT,
+            data_schema=account_schema,
             errors=errors or {},
             last_step=False,
         )
@@ -336,7 +335,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                         errors["base"] = "unknown"
 
         # Build form
-        STEP_OPTIONS = vol.Schema(
+        options_schema = vol.Schema(
             {
                 vol.Required("alarmpanel_options"): section(
                     vol.Schema(
@@ -353,11 +352,17 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                                     ],
                                 )
                             ),
-                            vol.Optional(CONF_ALARMPANEL_CODE, default=vol.UNDEFINED): vol.Any(
+                            vol.Optional(
+                                CONF_ALARMPANEL_CODE, default=vol.UNDEFINED
+                            ): vol.Any(
                                 None,
                                 vol.All(
                                     vol.Coerce(int),
-                                    NumberSelector(NumberSelectorConfig(mode=NumberSelectorMode.BOX, step=1)),
+                                    NumberSelector(
+                                        NumberSelectorConfig(
+                                            mode=NumberSelectorMode.BOX, step=1
+                                        )
+                                    ),
                                 ),
                             ),
                         }
@@ -369,9 +374,11 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="options",
-            data_schema=STEP_OPTIONS,
+            data_schema=options_schema,
             errors=errors or {},
-            description_placeholders={"options_url": "https://docs.page/mguyard/hass-diagral/integration/setup#options"},
+            description_placeholders={
+                "options_url": "https://docs.page/mguyard/hass-diagral/integration/setup#options"
+            },
             last_step=True,
         )
 
@@ -435,7 +442,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                     )
 
         # Build form
-        STEP_ACCOUNT_RECONFIGURE = vol.Schema(
+        reconfigure_schema = vol.Schema(
             {
                 vol.Required(
                     CONF_USERNAME, default=config_entry.data[CONF_USERNAME]
@@ -451,7 +458,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=STEP_ACCOUNT_RECONFIGURE,
+            data_schema=reconfigure_schema,
             errors=errors or {},
         )
 
@@ -522,7 +529,7 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
         # Build form
         stored_code = options["alarmpanel_options"][CONF_ALARMPANEL_CODE]
         code_default = stored_code if stored_code is not None else vol.UNDEFINED
-        STEP_OPTIONS = vol.Schema(
+        options_schema = vol.Schema(
             {
                 vol.Required("alarmpanel_options"): section(
                     vol.Schema(
@@ -548,7 +555,11 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
                                 None,
                                 vol.All(
                                     vol.Coerce(int),
-                                    NumberSelector(NumberSelectorConfig(mode=NumberSelectorMode.BOX, step=1)),
+                                    NumberSelector(
+                                        NumberSelectorConfig(
+                                            mode=NumberSelectorMode.BOX, step=1
+                                        )
+                                    ),
                                 ),
                             ),
                         }
@@ -560,9 +571,11 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=STEP_OPTIONS,
+            data_schema=options_schema,
             errors=errors or {},
-            description_placeholders={"options_url": "https://docs.page/mguyard/hass-diagral/integration/setup#options"},
+            description_placeholders={
+                "options_url": "https://docs.page/mguyard/hass-diagral/integration/setup#options"
+            },
             last_step=True,
         )
 

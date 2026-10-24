@@ -4,6 +4,13 @@
     "python.testing.pytestArgs": [
         "custom_components/diagral/tests"
     ],
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "explicit"
+        }
+    },
     "github.copilot.chat.commitMessageGeneration.instructions": [
         {
             "file": "AGENTS.md"
