@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import DIAGRAL_EVENT, DOMAIN
+from .const import DIAGRAL_EVENT, DOMAIN, ENTRY_WEBHOOK_SIGNAL, WEBHOOK_SIGNAL
 from .coordinator import DiagralDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -123,10 +123,14 @@ def publish_event(hass: HomeAssistant, data: dict, entry_id: str) -> None:
     """Publish event to the event bus."""
     event_type = data.pop("alarm_type", None)
     _LOGGER.debug("Publishing event %s : %s", event_type, data)
+    signal_data = {"type": event_type, "data": data}
+    async_dispatcher_send(
+        hass, WEBHOOK_SIGNAL.format(alarm_type=event_type), signal_data
+    )
     async_dispatcher_send(
         hass,
-        f"signal-{DOMAIN}-webhook-{event_type}",
-        {"type": event_type, "data": data},
+        ENTRY_WEBHOOK_SIGNAL.format(entry_id=entry_id, alarm_type=event_type),
+        signal_data,
     )
 
     event_data = {

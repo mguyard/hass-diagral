@@ -4,6 +4,10 @@ DOMAIN = "diagral"
 BRAND = "Diagral"
 # Bus event fired for every webhook; a public contract used in automations
 DIAGRAL_EVENT = "DIAGRAL_EVENT"
+# Dispatcher signals of a webhook: the global one is kept for existing listeners,
+# the entities of an entry only listen to their own central.
+WEBHOOK_SIGNAL = "signal-" + DOMAIN + "-webhook-{alarm_type}"
+ENTRY_WEBHOOK_SIGNAL = "signal-" + DOMAIN + "-{entry_id}-webhook-{alarm_type}"
 
 CONFIG_VERSION = 2
 CONFIG_MINOR_VERSION = 1

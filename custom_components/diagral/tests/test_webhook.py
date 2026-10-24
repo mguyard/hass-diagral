@@ -266,3 +266,15 @@ class TestPublishedEvent:
         assert event_data["entry_id"] == "loaded"
         assert event_data["entity_id"] == "alarm_control_panel.x"
         assert event_data["type"] == "STATUS"
+
+    async def test_signals_are_sent_per_entry(self):
+        """Each panel hears its own central; the global signal is kept."""
+        hass, _ = make_hass_with_entries()
+
+        with patch("custom_components.diagral.webhook.async_dispatcher_send") as send:
+            await handle_webhook(hass, WEBHOOK_ID, make_request(PRODUCTION_STATUS))
+
+        assert {call.args[1] for call in send.call_args_list} == {
+            "signal-diagral-webhook-STATUS",
+            "signal-diagral-loaded-webhook-STATUS",
+        }
