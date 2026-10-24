@@ -79,7 +79,6 @@ async def async_setup_entry(
     # Create the alarm control panel entity
     async_add_entities(
         [DiagralAlarmControlPanel(hass, entry, entry.entry_id, coordinator, config)],
-        True,
     )
 
 
@@ -122,27 +121,27 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
 
         # Update the status of the alarm
         new_state: AlarmControlPanelState | None = self._get_ha_state(system_status)
-        if not new_state or new_state == self.state:
-            return
+        if new_state and new_state != self.state:
+            # If the alarm is triggered, keep the trigger until disarm
+            if (
+                self.state == AlarmControlPanelState.TRIGGERED
+                and new_state != AlarmControlPanelState.DISARMED
+            ):
+                _LOGGER.info(
+                    "Alarm state remains triggered despite change from %s to %s",
+                    self.state,
+                    new_state,
+                )
+                self._attr_alarm_state = self.state
+            else:  # Otherwise, update the state
+                _LOGGER.info("Alarm state changed from %s to %s", self.state, new_state)
+                self._attr_alarm_state = new_state
+                self._attr_extra_state_attributes.pop("trigger", None)
 
-        # If the alarm is triggered, keep the trigger until disarm
-        if (
-            self.state == AlarmControlPanelState.TRIGGERED
-            and new_state != AlarmControlPanelState.DISARMED
-        ):
-            _LOGGER.info(
-                "Alarm state remains triggered despite change from %s to %s",
-                self.state,
-                new_state,
-            )
-            self._attr_alarm_state = self.state
-        else:  # Otherwise, update the state
-            _LOGGER.info("Alarm state changed from %s to %s", self.state, new_state)
-            self._attr_alarm_state = new_state
-            self._attr_extra_state_attributes.pop("trigger", None)
+            # Update the code requirement
+            self._attr_code_arm_required = self._is_code_arm_required()
 
-        # Update the code requirement
-        self._attr_code_arm_required = self._is_code_arm_required()
+        # Always write state so availability follows the coordinator
         self.async_write_ha_state()
 
     def _get_ha_state(

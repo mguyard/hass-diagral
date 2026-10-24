@@ -213,9 +213,14 @@ class TestHandleCoordinatorUpdate:
         ],
         ids=["same-state", "unknown-status"],
     )
-    def test_no_change_is_not_written(self, current_state, status):
-        """An unchanged or unknown status leaves the panel untouched."""
+    def test_no_change_is_still_written(self, current_state, status):
+        """An unchanged or unknown status keeps the state but still writes it.
+
+        Otherwise an entity added while the coordinator was failing stays
+        'unavailable' after the coordinator recovers.
+        """
         panel = make_updating_panel(current_state, status)
         panel._handle_coordinator_update()
         assert panel._attr_alarm_state == current_state
-        panel.async_write_ha_state.assert_not_called()
+        assert "trigger" in panel._attr_extra_state_attributes
+        panel.async_write_ha_state.assert_called_once()
