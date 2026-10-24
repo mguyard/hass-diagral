@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
+from datetime import datetime
 
 from pydiagral import DiagralAPI
 from pydiagral.models import ApiKeyWithSecret
@@ -22,6 +24,16 @@ class DiagralData:
     coordinator: DiagralDataUpdateCoordinator
     api: DiagralAPI
     webhook_id: str
+    webhook_status: str = "pending"
+    webhook_last_received: datetime | None = None
+    webhook_last_error: str | None = None
+    webhook_retry_attempts: int = 0
+    webhook_url: str | None = field(default=None, repr=False)
+    webhook_local_registered: bool = False
+    webhook_is_cloudhook: bool = False
+    webhook_task: asyncio.Task | None = field(default=None, repr=False)
+    webhook_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    stopping: bool = False
 
 
 @dataclass

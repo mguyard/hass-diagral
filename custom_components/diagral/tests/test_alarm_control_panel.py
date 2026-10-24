@@ -162,7 +162,14 @@ def make_updating_panel(
     """Return a panel whose coordinator reports the given Diagral status."""
     panel = make_panel_mock("never", None, current_state)
     panel.coordinator = MagicMock()
-    panel.coordinator.data = {"system_status": MagicMock(status=status)}
+    panel.coordinator.last_update_success = True
+    panel.coordinator.data = {
+        "system_status": MagicMock(status=status, activated_groups=[]),
+        "alarm_config": MagicMock(groups=[]),
+        "devices_infos": MagicMock(),
+        "groups": [],
+        "anomalies": None,
+    }
     panel._attr_extra_state_attributes = {"trigger": {"group_id": 1}}
     panel.async_write_ha_state = MagicMock()
     return panel
@@ -213,9 +220,17 @@ class TestHandleCoordinatorUpdate:
         ],
         ids=["same-state", "unknown-status"],
     )
-    def test_no_change_is_not_written(self, current_state, status):
-        """An unchanged or unknown status leaves the panel untouched."""
+    def test_unchanged_state_still_publishes_availability(self, current_state, status):
+        """Publish outage and recovery while preserving the last known alarm state."""
         panel = make_updating_panel(current_state, status)
+        observations = []
+        panel.async_write_ha_state.side_effect = lambda: observations.append(
+            (panel.available, panel._attr_alarm_state)
+        )
+        panel.coordinator.last_update_success = False
         panel._handle_coordinator_update()
+        panel.coordinator.last_update_success = True
+        panel._handle_coordinator_update()
+        assert observations == [(False, current_state), (True, current_state)]
         assert panel._attr_alarm_state == current_state
-        panel.async_write_ha_state.assert_not_called()
+        assert panel.async_write_ha_state.call_count == 2

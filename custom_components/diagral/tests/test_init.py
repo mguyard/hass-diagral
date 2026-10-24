@@ -24,6 +24,7 @@ from custom_components.diagral.const import (
     CONFIG_VERSION,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
 )
+from custom_components.diagral.models import DiagralData
 from pydiagral.exceptions import DiagralAPIError
 import pytest
 
@@ -77,7 +78,18 @@ def make_entry(stored_url: str | None = None) -> MagicMock:
     entry = MagicMock()
     entry.entry_id = "entry1"
     entry.title = "fake home (FAKECENTRAL01)"
-    entry.data = {}
+    entry.data = {"webhook_id": WEBHOOK_ID}
+    entry.runtime_data = DiagralData(
+        config=None,
+        coordinator=None,
+        api=None,
+        webhook_id=WEBHOOK_ID,
+        webhook_url=stored_url,
+        webhook_local_registered=True,
+        webhook_is_cloudhook=bool(
+            stored_url and stored_url.startswith("https://hooks.nabu.casa/")
+        ),
+    )
     if stored_url is not None:
         entry.data[CONF_WEBHOOK_URL_HASH] = url_hash(stored_url)
     return entry
@@ -105,7 +117,14 @@ async def run_register(
 ) -> tuple[str | None, MagicMock]:
     """Call register_webhook with Home Assistant helpers patched."""
     hass = MagicMock()
+    entry.runtime_data.api = api
+    entry.runtime_data.webhook_local_registered = False
+    hass.config_entries.async_update_entry.side_effect = lambda target, **kwargs: (
+        setattr(target, "data", kwargs["data"])
+    )
     with (
+        patch("custom_components.diagral.async_dispatcher_send"),
+        patch("custom_components.diagral._start_webhook_registration"),
         patch("custom_components.diagral.get_url", return_value=external_url),
         patch("custom_components.diagral.webhook_generate_id", return_value=WEBHOOK_ID),
         patch("custom_components.diagral.webhook_async_register"),
@@ -206,7 +225,10 @@ class TestUnregisterOwnership:
         api = make_api(OWN_OLD_URL)
         entry = make_entry(OWN_OLD_URL)
         hass = MagicMock()
-        with patch("custom_components.diagral.webhook_async_unregister") as local:
+        with (
+            patch("custom_components.diagral.webhook_async_unregister") as local,
+            patch("custom_components.diagral.async_dispatcher_send"),
+        ):
             await unregister_webhook(hass, entry, api, WEBHOOK_ID, "test")
 
         api.delete_webhook.assert_awaited_once()
@@ -224,7 +246,10 @@ class TestUnregisterOwnership:
         """A subscription the entry cannot prove it owns is not deleted."""
         api = make_api(OTHER_URL)
         hass = MagicMock()
-        with patch("custom_components.diagral.webhook_async_unregister") as local:
+        with (
+            patch("custom_components.diagral.webhook_async_unregister") as local,
+            patch("custom_components.diagral.async_dispatcher_send"),
+        ):
             await unregister_webhook(hass, make_entry(stored), api, WEBHOOK_ID, "t")
 
         api.delete_webhook.assert_not_awaited()
@@ -273,9 +298,10 @@ class TestLogsHideSecrets:
         """Deleting a cloudhook does not log its id."""
         api = make_api(CLOUDHOOK_URL)
 
-        await unregister_webhook(
-            MagicMock(), make_entry(CLOUDHOOK_URL), api, WEBHOOK_ID, "test"
-        )
+        with patch("custom_components.diagral.async_dispatcher_send"):
+            await unregister_webhook(
+                MagicMock(), make_entry(CLOUDHOOK_URL), api, WEBHOOK_ID, "test"
+            )
 
         cloud.async_delete_cloudhook.assert_awaited_once()
         assert WEBHOOK_ID not in debug_log.text

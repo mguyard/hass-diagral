@@ -81,6 +81,32 @@
             },
             "active_groups": {
                 "name": "Active Groups"
+            },
+            "cloud_connection": {
+                "name": "Diagral connection",
+                "state": {
+                    "initializing": "Initializing",
+                    "connected": "Connected",
+                    "unavailable": "Unavailable"
+                }
+            },
+            "last_success": {
+                "name": "Last successful communication"
+            },
+            "webhook_status": {
+                "name": "Instant notifications",
+                "state": {
+                    "pending": "Pending",
+                    "registered": "Subscription registered",
+                    "received": "Event received",
+                    "retrying": "Retry scheduled",
+                    "retry_exhausted": "Retries exhausted",
+                    "conflict": "Another subscription detected",
+                    "disabled": "Disabled"
+                }
+            },
+            "webhook_last_received": {
+                "name": "Last notification received"
             }
         }
     },

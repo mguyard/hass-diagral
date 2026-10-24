@@ -15,8 +15,14 @@ from pydiagral.models import (
     SystemStatus,
 )
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+)
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 import homeassistant.util.dt as dt_util
 
@@ -50,6 +56,43 @@ SENSORS: tuple[DiagralSensorEntityDescription, ...] = (
     ),
 )
 
+DIAGNOSTIC_SENSORS = (
+    SensorEntityDescription(
+        key="cloud_connection",
+        translation_key="cloud_connection",
+        device_class=SensorDeviceClass.ENUM,
+        options=["initializing", "connected", "unavailable"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="last_success",
+        translation_key="last_success",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="webhook_status",
+        translation_key="webhook_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=[
+            "pending",
+            "registered",
+            "received",
+            "retrying",
+            "retry_exhausted",
+            "conflict",
+            "disabled",
+        ],
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="webhook_last_received",
+        translation_key="webhook_last_received",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -62,6 +105,69 @@ async def async_setup_entry(
     for sensor in SENSORS:
         if sensor.exists_fn(coordinator):
             async_add_entities([DiagralSensor(coordinator, sensor, entry)])
+    async_add_entities(
+        [
+            DiagralDiagnosticSensor(coordinator, description, entry)
+            for description in DIAGNOSTIC_SENSORS
+        ]
+    )
+
+
+class DiagralDiagnosticSensor(DiagralEntity, SensorEntity):
+    """Connection health remains readable even while cloud data is unavailable."""
+
+    def __init__(self, coordinator, description, entry) -> None:
+        """Bind a health sensor to its coordinator and config entry."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_{DOMAIN}_{description.key}"
+
+    @property
+    def available(self) -> bool:
+        """Keep failure diagnostics available when cloud observations fail."""
+        return True
+
+    @property
+    def native_value(self):
+        """Return the latest health status or successful observation time."""
+        key = self.entity_description.key
+        if key == "cloud_connection":
+            return self.coordinator.communication_status
+        if key == "last_success":
+            return self.coordinator.last_success
+        return getattr(self._entry.runtime_data, key)
+
+    @property
+    def extra_state_attributes(self):
+        """Expose failure counts and safe error categories for status sensors."""
+        if self.entity_description.key == "cloud_connection":
+            return {
+                "consecutive_failures": self.coordinator.consecutive_failures,
+                "last_error": self.coordinator.last_error,
+            }
+        if self.entity_description.key == "webhook_status":
+            return {
+                "retry_attempts": self._entry.runtime_data.webhook_retry_attempts,
+                "last_error": self._entry.runtime_data.webhook_last_error,
+            }
+        return None
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to webhook health changes for this config entry."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"signal-{DOMAIN}-{self._entry.entry_id}-webhook-health",
+                self._handle_webhook_health,
+            )
+        )
+
+    @callback
+    def _handle_webhook_health(self) -> None:
+        """Publish health changes independently of the cloud polling cycle."""
+        self.async_write_ha_state()
 
 
 class DiagralSensor(DiagralEntity, SensorEntity):
@@ -83,6 +189,10 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             "alarm_config", {}
         )
         self._attr_unique_id = f"{self._entry_id}_{DOMAIN}_{self._alarm_config.alarm.central.serial}_{description.key}"
+        # The coordinator's first successful refresh precedes entity creation.
+        # Initialize from that snapshot without another cloud read or a state
+        # write before this entity has been attached to Home Assistant.
+        self._update_value_from_coordinator()
 
     @property
     def icon(self) -> str | None:
@@ -92,44 +202,32 @@ class DiagralSensor(DiagralEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        if self.coordinator.last_update_success:
+            self._update_value_from_coordinator()
+        # A failed poll still needs to publish the availability change, but must
+        # not give old data a new updated_at timestamp.
+        self.async_write_ha_state()
 
-        _LOGGER.debug(
-            "_handle_coordinator_update called for %s (%s)",
-            self.name,
-            self.entity_description.key,
-        )
+    def _update_value_from_coordinator(self) -> None:
+        """Compute the sensor's value from the current snapshot without HA IO."""
         alarm_config: AlarmConfiguration = self.coordinator.data.get("alarm_config")
         anomalies: Anomalies = self.coordinator.data.get("anomalies")
         groups: list[Group] = self.coordinator.data.get("groups", [])
         system_status: SystemStatus = self.coordinator.data.get("system_status")
         devices_infos: DeviceList = self.coordinator.data.get("devices_infos")
         if not alarm_config:
-            _LOGGER.warning("No alarm_config in coordinator data for %s", self.name)
+            _LOGGER.warning("No alarm configuration in coordinator data")
             return
-
-        _LOGGER.debug("Anomalies received: %s", anomalies)
-        _LOGGER.debug("Groups received: %s", groups)
-        _LOGGER.debug("System status received: %s", system_status)
-        _LOGGER.debug("Devices infos received: %s", devices_infos)
 
         if self.entity_description.key == "anomalies":
             self._update_anomalies(anomalies, groups, devices_infos)
         if self.entity_description.key == "active_groups":
             self._update_active_groups(system_status, groups, alarm_config)
 
-        _LOGGER.debug("State updated for %s: %s", self.name, self.state)
-        self.async_write_ha_state()
-
     def _update_anomalies(
         self, anomalies: Anomalies, groups: list[Group], devices_infos: DeviceList
     ) -> None:
         """Update the anomalies data."""
-        _LOGGER.debug(
-            "Update anomalies sensor. Anomalies: %s / Groups: %s / DeviceInfos: %s",
-            anomalies,
-            groups,
-            devices_infos,
-        )
         if anomalies:
             # Count the number of anomalies
             anomaly_count = sum(
@@ -239,13 +337,6 @@ class DiagralSensor(DiagralEntity, SensorEntity):
         alarm_config: AlarmConfiguration,
     ) -> None:
         """Update the active groups sensor."""
-        _LOGGER.debug(
-            "Update active_groups sensor. SystemStatus: %s / Groups: %s / AlarmConfig: %s",
-            system_status,
-            groups,
-            alarm_config,
-        )
-
         if system_status.status == "PRESENCE":
             # If the system is in presence mode, we grab the groups from the alarm configuration
             group_list = alarm_config.presence_group
@@ -269,4 +360,3 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             "updated_at": dt_util.now().isoformat(),
         }
         _LOGGER.debug("Active groups count: %s", active_groups_count)
-        _LOGGER.debug("Groups info: %s", groups_info)

@@ -1,16 +1,15 @@
 """Diagral Alarm Control Panel integration for Home Assistant."""
 
+import asyncio
+from collections.abc import Awaitable, Callable
+from functools import partial
 import logging
 from typing import Any
 
+from aiohttp import ClientError
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import DiagralAPIError
-from pydiagral.models import (
-    AlarmConfiguration,
-    Group,
-    SystemStatus,
-    WebHookNotificationUser,
-)
+from pydiagral.models import AlarmConfiguration, Group, SystemStatus
 import voluptuous as vol
 
 from homeassistant.components.alarm_control_panel import (
@@ -20,6 +19,7 @@ from homeassistant.components.alarm_control_panel import (
     CodeFormat,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -27,8 +27,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import DiagralConfigEntry, register_webhook, unregister_webhook
 from .const import (
     ALARM_INTRUSION_CODES,
+    COMMAND_TIMEOUT,
     CONF_ALARMPANEL_ACTIONTYPE_CODE,
     CONF_ALARMPANEL_CODE,
+    CONFIRMATION_ATTEMPTS,
+    CONFIRMATION_DELAY,
+    CONFIRMATION_TIMEOUT,
     DOMAIN,
     INPUT_GROUPS,
     SERVICE_ARM_GROUP,
@@ -79,7 +83,6 @@ async def async_setup_entry(
     # Create the alarm control panel entity
     async_add_entities(
         [DiagralAlarmControlPanel(hass, entry, entry.entry_id, coordinator, config)],
-        True,
     )
 
 
@@ -108,6 +111,7 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         )
         self._changed_by: str = ""
         self._api: DiagralAPI = entry.runtime_data.api
+        self._command_lock = asyncio.Lock()
         self._attr_code_arm_required: bool = self._is_code_arm_required()
         self._attr_supported_features = (
             AlarmControlPanelEntityFeature.ARM_AWAY
@@ -118,38 +122,28 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        system_status: SystemStatus = self.coordinator.data.get("system_status")
+        if self.coordinator.last_update_success:
+            self._alarm_config = self.coordinator.data["alarm_config"]
+            system_status: SystemStatus = self.coordinator.data.get("system_status")
+            new_state = self._get_ha_state(system_status)
+            # Preserve a confirmed intrusion until a fresh disarmed state arrives.
+            if new_state is not None and not (
+                self._attr_alarm_state == AlarmControlPanelState.TRIGGERED
+                and new_state != AlarmControlPanelState.DISARMED
+            ):
+                if new_state != self._attr_alarm_state:
+                    self._attr_extra_state_attributes.pop("trigger", None)
+                self._attr_alarm_state = new_state
+            self._attr_code_arm_required = self._is_code_arm_required()
 
-        # Update the status of the alarm
-        new_state: AlarmControlPanelState | None = self._get_ha_state(system_status)
-        if not new_state or new_state == self.state:
-            return
-
-        # If the alarm is triggered, keep the trigger until disarm
-        if (
-            self.state == AlarmControlPanelState.TRIGGERED
-            and new_state != AlarmControlPanelState.DISARMED
-        ):
-            _LOGGER.info(
-                "Alarm state remains triggered despite change from %s to %s",
-                self.state,
-                new_state,
-            )
-            self._attr_alarm_state = self.state
-        else:  # Otherwise, update the state
-            _LOGGER.info("Alarm state changed from %s to %s", self.state, new_state)
-            self._attr_alarm_state = new_state
-            self._attr_extra_state_attributes.pop("trigger", None)
-
-        # Update the code requirement
-        self._attr_code_arm_required = self._is_code_arm_required()
+        # Availability can change even when the physical alarm state has not.
         self.async_write_ha_state()
 
     def _get_ha_state(
         self, system_status: SystemStatus
     ) -> AlarmControlPanelState | None:
         """Convert Diagral status to Home Assistant state."""
-        if system_status:
+        if system_status and isinstance(system_status.status, str):
             if system_status.status.lower() == "off":
                 return AlarmControlPanelState.DISARMED
             if system_status.status.lower() == "group":
@@ -193,16 +187,16 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
             )
         return True  # For all other cases, require code
 
-    def _validate_code(self, to_state, code_provided: int | None = None) -> bool:
+    def _validate_code(
+        self,
+        to_state: AlarmControlPanelState,
+        code_provided: str | int | None = None,
+    ) -> bool:
         """Validate given code."""
         code = self._config.options.alarmpanel_options[CONF_ALARMPANEL_CODE]
         trigger = self._config.options.alarmpanel_options[
             CONF_ALARMPANEL_ACTIONTYPE_CODE
         ]
-
-        # Convert code to int if not None
-        if code_provided is not None:
-            code_provided = int(code_provided)
 
         if trigger == "never":
             _LOGGER.debug("Code validation not required")
@@ -215,73 +209,128 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
             if code is None:
                 _LOGGER.error("Code is not set in the configuration")
                 return False
-            return code_provided == code
+            try:
+                return code_provided is not None and int(code_provided) == int(code)
+            except TypeError, ValueError:
+                return False
         return True
 
-    async def async_alarm_disarm(self, code: int | None = None) -> None:
-        """Send disarm command."""
-        if self._validate_code(
-            to_state=AlarmControlPanelState.DISARMED, code_provided=code
-        ):
+    def _require_valid_code(
+        self, to_state: AlarmControlPanelState, code: str | int | None
+    ) -> None:
+        """Reject an invalid panel code before making any cloud request."""
+        if not self._validate_code(to_state, code):
+            raise ServiceValidationError("Invalid or missing Diagral alarm panel code")
+
+    async def _async_execute_command(
+        self,
+        command: Callable[[], Awaitable[SystemStatus]],
+        expected: Callable[[SystemStatus], bool],
+    ) -> None:
+        """Send once, then confirm using fresh reads without replaying a mutation."""
+        async with self._command_lock:
             try:
-                await self._api.stop_system()
-                await self.coordinator.async_request_refresh()
-            except DiagralAPIError as e:
-                _LOGGER.error("Failed to disarm Diagral alarm : %s", e)
-        else:
-            _LOGGER.error("Invalid code provided for disarming")
+                async with asyncio.timeout(COMMAND_TIMEOUT):
+                    await command()
+            except DiagralAPIError, ClientError, TimeoutError:
+                raise HomeAssistantError(
+                    "Diagral command could not be confirmed. Check the alarm state "
+                    "before retrying."
+                ) from None
+
+            try:
+                async with asyncio.timeout(CONFIRMATION_TIMEOUT):
+                    for attempt in range(CONFIRMATION_ATTEMPTS):
+                        # async_refresh waits for an actual new read; the debounced
+                        # async_request_refresh may return before a scheduled read.
+                        await self.coordinator.async_refresh()
+                        status = (self.coordinator.data or {}).get("system_status")
+                        if (
+                            self.coordinator.last_update_success
+                            and status is not None
+                            and expected(status)
+                        ):
+                            return
+                        if attempt + 1 < CONFIRMATION_ATTEMPTS:
+                            await asyncio.sleep(CONFIRMATION_DELAY)
+            except TimeoutError as err:
+                # A confirmation deadline may cancel a coordinator refresh before
+                # its normal listener notification. Publish unavailable explicitly.
+                self.coordinator.async_set_update_error(err)
+            except DiagralAPIError, ClientError:
+                pass
+            raise HomeAssistantError(
+                "Diagral command was sent, but the requested state was not confirmed. "
+                "Check the alarm state before retrying."
+            )
+
+    async def async_alarm_disarm(self, code: str | None = None) -> None:
+        """Send disarm command."""
+        self._require_valid_code(AlarmControlPanelState.DISARMED, code)
+        await self._async_execute_command(
+            self._api.stop_system, lambda status: status.status.lower() == "off"
+        )
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Send arm away command."""
-        if self._validate_code(
-            to_state=AlarmControlPanelState.ARMED_AWAY, code_provided=code
-        ):
-            try:
-                await self._api.start_system()
-                await self.coordinator.async_request_refresh()
-            except DiagralAPIError as e:
-                _LOGGER.error("Failed to arm Diagral alarm in away mode: %s", e)
-        else:
-            _LOGGER.error("Invalid code provided for arming away")
+        self._require_valid_code(AlarmControlPanelState.ARMED_AWAY, code)
+        expected_groups = {group.index for group in self._alarm_config.groups}
+        await self._async_execute_command(
+            self._api.start_system,
+            # During the exit delay Diagral reports TEMPO_GROUP with an empty
+            # activated_groups list. Once armed, GROUP also describes partial
+            # arming, so it confirms away mode only when every configured group
+            # is active.
+            lambda status: (
+                status.status.lower() == "tempo_group"
+                or (
+                    status.status.lower() == "group"
+                    and bool(expected_groups)
+                    and expected_groups.issubset(status.activated_groups)
+                )
+            ),
+        )
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         """Send arm home command."""
-        if self._validate_code(
-            to_state=AlarmControlPanelState.ARMED_HOME, code_provided=code
+        self._require_valid_code(AlarmControlPanelState.ARMED_HOME, code)
+        await self._async_execute_command(
+            self._api.presence, lambda status: status.status.lower() == "presence"
+        )
+
+    def _validate_group_ids(self, group_ids: int | list[int]) -> list[int]:
+        """Reject empty or unknown group selections locally."""
+        if isinstance(group_ids, int):
+            group_ids = [group_ids]
+        known_groups = {group.index for group in self._alarm_config.groups}
+        if (
+            not isinstance(group_ids, list)
+            or not group_ids
+            or any(
+                isinstance(group_id, bool)
+                or not isinstance(group_id, int)
+                or group_id not in known_groups
+                for group_id in group_ids
+            )
         ):
-            try:
-                await self._api.presence()
-                await self.coordinator.async_request_refresh()
-            except DiagralAPIError as e:
-                _LOGGER.error("Failed to arm Diagral alarm in home mode: %s", e)
-        else:
-            _LOGGER.error("Invalid code provided for arming home")
+            raise ServiceValidationError("Select one or more configured Diagral groups")
+        return list(dict.fromkeys(group_ids))
 
     async def action_arm_groups(self, group_ids: int | list[int]) -> None:
         """Activate one or more groups."""
-        _LOGGER.debug("Arming group %s with API instance: %s", group_ids, id(self._api))
-        if isinstance(group_ids, int):
-            group_ids = [group_ids]
-            _LOGGER.debug("Armed group(s) after transformation: %s", group_ids)
-        try:
-            await self._api.activate_group(group_ids)
-            await self.coordinator.async_request_refresh()
-        except DiagralAPIError as e:
-            _LOGGER.error("Failed to arm group(s): %s", e)
+        group_ids = self._validate_group_ids(group_ids)
+        await self._async_execute_command(
+            partial(self._api.activate_group, group_ids),
+            lambda status: set(group_ids).issubset(status.activated_groups),
+        )
 
     async def action_disarm_groups(self, group_ids: int | list[int]) -> None:
         """Disarm one or more groups."""
-        _LOGGER.debug(
-            "Disarming group %s with API instance: %s", group_ids, id(self._api)
+        group_ids = self._validate_group_ids(group_ids)
+        await self._async_execute_command(
+            partial(self._api.disable_group, group_ids),
+            lambda status: set(group_ids).isdisjoint(status.activated_groups),
         )
-        if isinstance(group_ids, int):
-            group_ids = [group_ids]
-            _LOGGER.debug("Disarmed group(s) after transformation: %s", group_ids)
-        try:
-            await self._api.disable_group(group_ids)
-            await self.coordinator.async_request_refresh()
-        except DiagralAPIError as e:
-            _LOGGER.error("Failed to disarm group(s): %s", e)
 
     async def action_register_webhook(self) -> None:
         """Register the webhook for Diagral."""
@@ -290,7 +339,8 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
             self.hass, entry, entry.runtime_data.api, "HA Action", take_over=True
         )
         # Force the webhook_id in the entry runtime data to be sure it is saved
-        entry.runtime_data.webhook_id = webhook_id
+        if webhook_id is not None:
+            entry.runtime_data.webhook_id = webhook_id
 
     async def action_unregister_webhook(self) -> None:
         """Unregister the webhook for Diagral."""
@@ -312,7 +362,7 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
-                f"signal-{DOMAIN}-webhook-STATUS",
+                f"signal-{DOMAIN}-{self._entry_id}-webhook-STATUS",
                 self._handle_event_status,
             )
         )
@@ -320,7 +370,7 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
-                f"signal-{DOMAIN}-webhook-ALERT",
+                f"signal-{DOMAIN}-{self._entry_id}-webhook-ALERT",
                 self._handle_event_alert,
             )
         )
@@ -328,27 +378,31 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
     @callback
     def _handle_event_status(self, event) -> None:
         """Handle incoming event for STATUS events."""
-        _LOGGER.debug("Alarm Control Panel Received event: %s", event)
-        user_info: WebHookNotificationUser | None = event["data"].get("user", None)
-        if user_info:
-            changed_by: str = user_info.username
-            _LOGGER.debug("Alarm State changed by %s", changed_by)
-            self._changed_by = changed_by
-            self.async_write_ha_state()
+        if event.get("entry_id") != self._entry_id:
+            return
+        user_info = event["data"].get("user")
+        self._changed_by = (
+            user_info.get("username", "") if isinstance(user_info, dict) else ""
+        )
+        self.async_write_ha_state()
 
     @callback
     def _handle_event_alert(self, event) -> None:
         """Handle incoming event for ALERT events."""
-        _LOGGER.debug("%s received event: %s", self.name, event)
-        event_alarm_code = int(event["data"].get("alarm_code"))
+        if event.get("entry_id") != self._entry_id:
+            return
+        try:
+            event_alarm_code = int(event["data"].get("alarm_code"))
+        except TypeError, ValueError:
+            return
         if event_alarm_code in ALARM_INTRUSION_CODES:
+            self._attr_extra_state_attributes.pop("trigger", None)
             # Set the group name and id
             groups: list[Group] = self._alarm_config.groups
-            group_index: int | None = (
-                int(event["data"].get("group_index"))
-                if "group_index" in event["data"]
-                else None
-            )
+            try:
+                group_index = int(event["data"].get("group_index"))
+            except TypeError, ValueError:
+                group_index = None
             if group_index:
                 group: Group = next(
                     (group for group in groups if group.index == group_index), None
@@ -362,4 +416,5 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
                 if trigger_info:
                     self._attr_extra_state_attributes["trigger"] = trigger_info
             self._attr_alarm_state = AlarmControlPanelState.TRIGGERED
+            self._attr_code_arm_required = self._is_code_arm_required()
             self.async_write_ha_state()

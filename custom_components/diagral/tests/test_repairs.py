@@ -75,3 +75,18 @@ async def test_confirm_aborts_when_take_over_fails():
 
     assert result["type"] == "abort"
     assert result["reason"] == "take_over_failed"
+
+
+async def test_confirm_does_not_report_pending_retry_as_success():
+    """Background registration retries do not imply a completed repair."""
+    entry = make_loaded_entry()
+    entry.runtime_data.webhook_id = "persisted-id"
+    flow = make_flow(entry)
+    with patch(
+        "custom_components.diagral.repairs.register_webhook",
+        AsyncMock(return_value=None),
+    ):
+        result = await flow.async_step_confirm({})
+    assert result["type"] == "abort"
+    assert result["reason"] == "take_over_failed"
+    assert entry.runtime_data.webhook_id == "persisted-id"

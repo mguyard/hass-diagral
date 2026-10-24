@@ -1,5 +1,7 @@
-"""Module to handle incoming webhooks from Diagral."""
+"""Validate and route incoming Diagral webhooks to their owning entry."""
 
+from dataclasses import asdict
+from datetime import UTC, datetime
 import logging
 
 from aiohttp.web import Request
@@ -9,105 +11,98 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import DOMAIN
-from .coordinator import DiagralDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _validated_notification(payload: object) -> WebHookNotification:
+    """Use the library's validated parser, including numeric code/index support."""
+    return WebHookNotification.from_dict(payload)
 
 
 async def handle_webhook(
     hass: HomeAssistant, webhook_id: str, request: Request
 ) -> None:
-    """Handle incoming webhook from Diagral."""
+    """Handle only valid notifications for a loaded entry and its transmitter."""
+    entry = next(
+        (
+            candidate
+            for candidate in hass.config_entries.async_loaded_entries(DOMAIN)
+            if (runtime := getattr(candidate, "runtime_data", None)) is not None
+            and runtime.webhook_id == webhook_id
+            and runtime.webhook_local_registered
+            and not runtime.stopping
+        ),
+        None,
+    )
+    if entry is None:
+        _LOGGER.debug("Received a webhook that matches no loaded Diagral entry")
+        return
+    runtime = entry.runtime_data
     try:
-        data_received = await request.json()
-        _LOGGER.debug("Received webhook data: %s", data_received)
-        data = WebHookNotification.from_dict(data_received)
-        _LOGGER.debug("Received webhook data (parsed): %s", data)
+        data = _validated_notification(await request.json())
+    except ValueError, TypeError, KeyError, AttributeError:
+        _LOGGER.warning("Ignoring malformed Diagral webhook")
+        return
+    # Never route a transmitter's notification into another alarm panel.
+    if data.transmitter_id != runtime.config.serial_id or runtime.stopping:
+        _LOGGER.warning("Ignoring Diagral webhook with an unexpected transmitter")
+        return
 
-        # Only loaded entries have runtime_data; a disabled one would raise here
-        entry_id = next(
-            (
-                entry.entry_id
-                for entry in hass.config_entries.async_loaded_entries(DOMAIN)
-                if entry.runtime_data.webhook_id == webhook_id
-            ),
-            None,
+    coordinator = runtime.coordinator
+    current_data = coordinator.data or {}
+    if data.alarm_type in ("ALERT", "ANOMALY"):
+        data = enrich_data_alert_anomaly(
+            data, current_data.get("devices_infos"), current_data.get("groups", [])
         )
-        if entry_id is None:
-            _LOGGER.error("Received a webhook that matches no loaded Diagral entry")
-            return
-
-        # Retrieve the config entry from the entry_id
-        entry = hass.config_entries.async_get_entry(entry_id)
-        if entry is None:
-            _LOGGER.error("No config entry found for entry_id: %s", entry_id)
-            return
-
-        # Retrieve the alarm_config from the coordinator
-        coordinator: DiagralDataUpdateCoordinator = entry.runtime_data.coordinator
-        devices_infos: DeviceList = coordinator.data.get("devices_infos", {})
-        groups = coordinator.data.get("groups", {})
-
-        # Check the alarm type and handle the request accordingly
-        if data.alarm_type in ["STATUS", "ANOMALY"]:
-            _LOGGER.debug("Received status change webhook (type: %s)", data.alarm_type)
-            await coordinator.async_request_refresh()
-
-        # Enrich the data with additional information
-        if data.alarm_type in ["ALERT", "ANOMALY"]:
-            enriched_data = enrich_data_alert_anomaly(data, devices_infos, groups)
-        else:
-            enriched_data = data
-        # Publish the event to the event bus
-        publish_event(hass, enriched_data.__dict__)
-
-    except ValueError:
-        _LOGGER.error("Received invalid JSON data from webhook")
+    event_data = asdict(data)
+    event_data["date_time"] = data.date_time.isoformat()
+    runtime.webhook_last_received = datetime.now(UTC)
+    runtime.webhook_status = "received"
+    runtime.webhook_last_error = None
+    async_dispatcher_send(hass, f"signal-{DOMAIN}-{entry.entry_id}-webhook-health")
+    publish_event(hass, event_data, entry.entry_id)
+    if data.alarm_type in ("STATUS", "ANOMALY"):
+        await coordinator.async_request_refresh()
 
 
 def enrich_data_alert_anomaly(
-    data: WebHookNotification, devices_infos: DeviceList, groups: dict
+    data: WebHookNotification,
+    devices_infos: DeviceList | None,
+    groups: dict,
 ) -> WebHookNotification:
-    """Enrich the data with additional information."""
-
-    # If the device_type or device_index is None, skip the enrichment
-    if data.detail.device_type is None or data.detail.device_index is None:
-        _LOGGER.debug("Device type or index is None, skipping enrichment")
+    """Add a known device label without assuming complete configuration data."""
+    if (
+        not data.detail
+        or not data.detail.device_type
+        or data.detail.device_index is None
+    ):
         return data
-
-    webhook_device_types = (
-        data.detail.device_type.lower() + "s"
-    )  # Adding 's' to match the key in devices_infos
-    webhook_device_index = int(data.detail.device_index)
-
-    device_info: DeviceInfos | None = None
-    _LOGGER.debug("Webhook device types: %s", webhook_device_types)
-    _LOGGER.debug("Enriching data with device_infos: %s", devices_infos)
-    # if webhook_device_types in devices_infos:
-    if hasattr(devices_infos, webhook_device_types):
-        device_list = getattr(devices_infos, webhook_device_types)
-        device_info = next(
-            (info for info in device_list if info.index == webhook_device_index),
-            None,
-        )
+    try:
+        webhook_device_index = int(data.detail.device_index)
+    except TypeError, ValueError:
+        return data
+    webhook_device_types = data.detail.device_type.lower() + "s"
+    device_info: DeviceInfos | None = next(
+        (
+            info
+            for info in (getattr(devices_infos, webhook_device_types, None) or [])
+            if info.index == webhook_device_index
+        ),
+        None,
+    )
     if device_info:
         data.detail.device_label = device_info.label
     return data
 
 
-def publish_event(hass: HomeAssistant, data: dict) -> None:
-    """Publish event to the event bus."""
-    event_type = data.pop("alarm_type", None)
-    _LOGGER.debug("Publishing event %s : %s", event_type, data)
+def publish_event(hass: HomeAssistant, data: dict, entry_id: str) -> None:
+    """Publish a serializable public event and an entry-scoped internal signal."""
+    event_data = dict(data)
+    event_type = event_data.pop("alarm_type", None)
+    envelope = {"entry_id": entry_id, "type": event_type, "data": event_data}
+    async_dispatcher_send(hass, f"signal-{DOMAIN}-webhook-{event_type}", envelope)
     async_dispatcher_send(
-        hass,
-        f"signal-{DOMAIN}-webhook-{event_type}",
-        {"type": event_type, "data": data},
+        hass, f"signal-{DOMAIN}-{entry_id}-webhook-{event_type}", envelope
     )
-
-    event_data = {
-        "type": event_type,
-        "data": data,
-    }
-
-    hass.bus.async_fire(f"{DOMAIN.upper()}_EVENT", event_data)
+    hass.bus.async_fire(f"{DOMAIN.upper()}_EVENT", envelope)

@@ -110,6 +110,9 @@ def make_hass_with_entries() -> tuple[MagicMock, MagicMock]:
     loaded = MagicMock()
     loaded.entry_id = "loaded"
     loaded.runtime_data.webhook_id = WEBHOOK_ID
+    loaded.runtime_data.webhook_local_registered = True
+    loaded.runtime_data.stopping = False
+    loaded.runtime_data.config.serial_id = "FAKECENTRAL01"
     loaded.runtime_data.coordinator.data = {"devices_infos": None, "groups": []}
     loaded.runtime_data.coordinator.async_request_refresh = AsyncMock()
 

@@ -119,19 +119,23 @@ async def validate_account(
                     title=f"{alarm_name} ({account_info.serial_id})",
                     keys=connection.keys,
                 )
+        except AuthenticationError as error:
+            _LOGGER.error("Diagral authentication failed (%s)", type(error).__name__)
+            raise InvalidAuth from None
         except (
             ConfigurationError,
-            AuthenticationError,
             ValidationError,
             ClientError,
             SessionError,
             DiagralAPIError,
         ) as error:
-            _LOGGER.error("Error during validation: %s", str(error))
-            raise CannotConnect from error
-        except Exception:
-            _LOGGER.exception("Unexpected error during validation")
-            raise
+            _LOGGER.error("Error during validation (%s)", type(error).__name__)
+            raise CannotConnect from None
+        except Exception as error:
+            _LOGGER.error(
+                "Unexpected error during validation (%s)", type(error).__name__
+            )
+            raise CannotConnect from None
     else:
         _LOGGER.debug("No account information has changed, skipping validation")
         return None
@@ -220,22 +224,15 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                     self.account_password = user_input[CONF_PASSWORD]
                     self.account_pincode = user_input[CONF_PIN_CODE]
                     return await self.async_step_options()
-                except CannotConnect as error:
-                    if error.__cause__ is not None:
-                        errors["base"] = str(error.__cause__)
-                    else:
-                        errors["base"] = "cannot_connect"
-                except InvalidAuth as error:
-                    if error.__cause__ is not None:
-                        errors["base"] = str(error.__cause__)
-                    else:
-                        errors["base"] = "invalid_auth"
+                except CannotConnect:
+                    errors["base"] = "cannot_connect"
+                except InvalidAuth:
+                    errors["base"] = "invalid_auth"
                 except Exception as error:
-                    _LOGGER.exception("Unexpected exception")
-                    if error.__cause__ is not None:
-                        errors["base"] = str(error.__cause__)
-                    else:
-                        errors["base"] = "unknown"
+                    _LOGGER.error(
+                        "Unexpected configuration error (%s)", type(error).__name__
+                    )
+                    errors["base"] = "unknown"
 
         # Build form
         account_schema = vol.Schema(
@@ -317,22 +314,15 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                         },
                         options=user_input,
                     )
-                except CannotConnect as error:
-                    if error.__cause__ is not None:
-                        errors["base"] = str(error.__cause__)
-                    else:
-                        errors["base"] = "cannot_connect"
-                except InvalidAuth as error:
-                    if error.__cause__ is not None:
-                        errors["base"] = str(error.__cause__)
-                    else:
-                        errors["base"] = "invalid_auth"
+                except CannotConnect:
+                    errors["base"] = "cannot_connect"
+                except InvalidAuth:
+                    errors["base"] = "invalid_auth"
                 except Exception as error:
-                    _LOGGER.exception("Unexpected exception")
-                    if error.__cause__ is not None:
-                        errors["base"] = str(error.__cause__)
-                    else:
-                        errors["base"] = "unknown"
+                    _LOGGER.error(
+                        "Unexpected configuration error (%s)", type(error).__name__
+                    )
+                    errors["base"] = "unknown"
 
         # Build form
         options_schema = vol.Schema(
@@ -414,22 +404,15 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                         previous_data=config_entry.data,
                         ephemeral=True,
                     )
-                except CannotConnect as error:
-                    if error.__cause__ is not None:
-                        errors["base"] = str(error.__cause__)
-                    else:
-                        errors["base"] = "cannot_connect"
-                except InvalidAuth as error:
-                    if error.__cause__ is not None:
-                        errors["base"] = str(error.__cause__)
-                    else:
-                        errors["base"] = "invalid_auth"
+                except CannotConnect:
+                    errors["base"] = "cannot_connect"
+                except InvalidAuth:
+                    errors["base"] = "invalid_auth"
                 except Exception as error:
-                    _LOGGER.exception("Unexpected exception")
-                    if error.__cause__ is not None:
-                        errors["base"] = str(error.__cause__)
-                    else:
-                        errors["base"] = "unknown"
+                    _LOGGER.error(
+                        "Unexpected configuration error (%s)", type(error).__name__
+                    )
+                    errors["base"] = "unknown"
                 else:
                     if info is None:
                         return self.async_abort(reason="no_changes")
