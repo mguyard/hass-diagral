@@ -23,3 +23,19 @@ updates:
     commit-message:
       # Trailing space: Dependabot adds no colon, so the gitmoji fits
       prefix: "chore(deps): 🔧 "
+
+  # The semantic-release toolchain pinned for release.yaml. A release only runs
+  # on main and beta, so check each upgrade with a dry run before merging it.
+  - package-ecosystem: npm
+    directory: /.github/release
+    target-branch: dev
+    schedule:
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/Paris
+    groups:
+      semantic-release:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps): 🔧 "

@@ -138,7 +138,9 @@ Tests: ✅ N passed, ❌ 0 failed, ⚠️ 0 errors
 
 The pre-commit test gate, the pull request description template and the prepare-PR workflow live in the `git-conventions` skill.
 
-`.releaserc` uses semantic-release's default (Angular) presets: only `feat`, `fix` and `perf` — plus reverts and breaking changes — appear in the changelog and trigger a release. A `docs`, `refactor` or `chore` commit is invisible to users — a change they must know about needs a rendered type.
+`release.config.cjs` uses semantic-release's default (Angular) presets: only `feat`, `fix` and `perf` — plus reverts and breaking changes — appear in the changelog and trigger a release. A `docs`, `refactor` or `chore` commit is invisible to users — a change they must know about needs a rendered type.
+
+The changelog credits contributors: an author other than the maintainer appears as `(by …)`, and each `Co-authored-by:` trailer as `(co-authored by …)` — a GitHub login when the address is a noreply one, the name otherwise, never an e-mail address, and never an assistant or a bot. When carrying over someone else's work, add `Co-authored-by: Name <id+login@users.noreply.github.com>` so they are credited. The toolchain is pinned in `.github/release/` and updated by Dependabot; dry-run an upgrade before merging it, since a release only runs on `beta` and `main`.
 
 ## Pull requests
 
