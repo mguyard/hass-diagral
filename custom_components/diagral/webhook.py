@@ -14,6 +14,14 @@ from .coordinator import DiagralDataUpdateCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 
+def _same_central(transmitter_id: str | None, serial_id: str) -> bool:
+    """Return whether a notification comes from the entry's central.
+
+    Diagral sends the central's serial as `transmitter_id`.
+    """
+    return (transmitter_id or "").strip().upper() == serial_id.strip().upper()
+
+
 async def handle_webhook(
     hass: HomeAssistant, webhook_id: str, request: Request
 ) -> None:
@@ -41,6 +49,11 @@ async def handle_webhook(
         entry = hass.config_entries.async_get_entry(entry_id)
         if entry is None:
             _LOGGER.error("No config entry found for entry_id: %s", entry_id)
+            return
+
+        # A notification of another central must never drive this entry
+        if not _same_central(data.transmitter_id, entry.runtime_data.config.serial_id):
+            _LOGGER.warning("Ignoring a Diagral webhook sent by another central")
             return
 
         # Retrieve the alarm_config from the coordinator

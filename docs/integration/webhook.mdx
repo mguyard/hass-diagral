@@ -38,7 +38,7 @@ You can confirm this by checking the "INFO" logs in Home Assistant
 
 The end of the webhook URL is replaced by `<redacted>` in the logs: it contains the webhook ID, and anyone who knows it could send fake alarm events to your Home Assistant. Only the host is shown, so you can still check which address was used.
 
-The webhook address stays the same across restarts: the subscription is only updated when your external URL or your Home Assistant Cloud setup changes.
+The webhook address stays the same across restarts: the subscription is only updated when your external URL or your Home Assistant Cloud setup changes. A notification sent by another Diagral system than the one configured is ignored.
 
 ## Registration failure
 
