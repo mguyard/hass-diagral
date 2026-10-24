@@ -39,6 +39,7 @@ custom_components/diagral/
 ├── diagnostics.py          # Diagnostics endpoint, TO_REDACT
 ├── entity.py               # DiagralEntity(CoordinatorEntity)
 ├── icons.json              # Service icons
+├── logbook.py              # Describes DIAGRAL_EVENT in the activity log, attached to the panel
 ├── manifest.json           # pydiagral pin, version (managed by semantic-release)
 ├── models.py               # DiagralData, DiagralConfigData, DiagralOptionsData, AccountInfoData…
 ├── pyproject.toml          # pytest configuration

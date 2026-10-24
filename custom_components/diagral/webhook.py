@@ -5,10 +5,12 @@ import logging
 from aiohttp.web import Request
 from pydiagral.models import DeviceInfos, DeviceList, WebHookNotification
 
+from homeassistant.components.alarm_control_panel import DOMAIN as PANEL_DOMAIN
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import DOMAIN
+from .const import DIAGRAL_EVENT, DOMAIN
 from .coordinator import DiagralDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,7 +74,7 @@ async def handle_webhook(
         else:
             enriched_data = data
         # Publish the event to the event bus
-        publish_event(hass, enriched_data.__dict__)
+        publish_event(hass, enriched_data.__dict__, entry.entry_id)
 
     except ValueError:
         _LOGGER.error("Received invalid JSON data from webhook")
@@ -108,7 +110,16 @@ def enrich_data_alert_anomaly(
     return data
 
 
-def publish_event(hass: HomeAssistant, data: dict) -> None:
+def _panel_entity_id(hass: HomeAssistant, entry_id: str) -> str | None:
+    """Return the alarm panel of the config entry, if registered."""
+    entities = er.async_entries_for_config_entry(er.async_get(hass), entry_id)
+    return next(
+        (entity.entity_id for entity in entities if entity.domain == PANEL_DOMAIN),
+        None,
+    )
+
+
+def publish_event(hass: HomeAssistant, data: dict, entry_id: str) -> None:
     """Publish event to the event bus."""
     event_type = data.pop("alarm_type", None)
     _LOGGER.debug("Publishing event %s : %s", event_type, data)
@@ -121,6 +132,10 @@ def publish_event(hass: HomeAssistant, data: dict) -> None:
     event_data = {
         "type": event_type,
         "data": data,
+        # Tells two centrals apart in automations
+        "entry_id": entry_id,
+        # The logbook only lists an event under an entity named in its data
+        "entity_id": _panel_entity_id(hass, entry_id),
     }
 
-    hass.bus.async_fire(f"{DOMAIN.upper()}_EVENT", event_data)
+    hass.bus.async_fire(DIAGRAL_EVENT, event_data)
