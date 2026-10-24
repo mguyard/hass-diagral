@@ -53,3 +53,5 @@ SERVICE_UNREGISTER_WEBHOOK = "unregister_webhook"
 INPUT_GROUPS = "group_ids"
 
 ISSUE_WEBHOOK_OWNED_ELSEWHERE = "webhook_owned_elsewhere"
+ISSUE_WEBHOOK_REGISTRATION_FAILED = "webhook_registration_failed"
+ISSUE_WEBHOOK_NO_URL = "webhook_no_url"

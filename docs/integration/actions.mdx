@@ -84,6 +84,8 @@ Register webhook in Diagral Cloud - **Only one webhook can be registered for an 
 
 If the subscription currently points to another installation, this action takes it over: the other installation stops receiving events. See [Existing subscription](/integration/webhook#existing-subscription).
 
+The action fails with an error when Diagral or Home Assistant Cloud does not answer, or when Home Assistant has no address for the webhook. See [Registration failure](/integration/webhook#registration-failure).
+
     ```yaml
     action: diagral.register_webhook
     target:
@@ -96,6 +98,8 @@ If the subscription currently points to another installation, this action takes 
 
 <Property name="action" type="diagral.unregister_webhook" required>
 Unregister Webhook in Diagral Cloud
+
+The action fails with an error when Diagral cannot read or delete the subscription.
 
     ```yaml
     action: diagral.unregister_webhook

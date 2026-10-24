@@ -477,3 +477,47 @@ class TestExitDelay:
         panel._api.get_system_status.return_value = read
         await getattr(panel, method)(*args)
         assert published_status(panel).status == "TEMPO_GROUP"
+
+
+def make_webhook_panel() -> DiagralAlarmControlPanel:
+    """Return a panel whose loaded entry can (un)register the webhook."""
+    panel = make_panel_mock("never", None, AlarmControlPanelState.DISARMED)
+    panel._entry_id = "entry1"
+    panel.hass = MagicMock()
+    panel.hass.config_entries.async_get_entry.return_value.runtime_data.webhook_id = (
+        "WEBHOOKID"
+    )
+    return panel
+
+
+class TestWebhookActions:
+    """The webhook actions fail visibly instead of only logging."""
+
+    @pytest.mark.parametrize(
+        "reason", ["webhook_registration_failed", "webhook_no_url"]
+    )
+    async def test_register_failure_raises(self, reason):
+        """A registration that cannot succeed raises a translated error."""
+        panel = make_webhook_panel()
+        with (
+            patch.object(
+                panel_module,
+                "register_webhook",
+                AsyncMock(side_effect=panel_module.WebhookUnavailable(reason)),
+            ),
+            pytest.raises(HomeAssistantError) as raised,
+        ):
+            await panel.action_register_webhook()
+        assert raised.value.translation_key == reason
+
+    async def test_unregister_failure_raises(self):
+        """An unregistration Diagral refuses raises a translated error."""
+        panel = make_webhook_panel()
+        with (
+            patch.object(
+                panel_module, "unregister_webhook", AsyncMock(return_value=False)
+            ),
+            pytest.raises(HomeAssistantError) as raised,
+        ):
+            await panel.action_unregister_webhook()
+        assert raised.value.translation_key == "webhook_unregistration_failed"

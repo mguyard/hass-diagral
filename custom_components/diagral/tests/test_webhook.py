@@ -15,6 +15,7 @@ from pydiagral.models import (
     WebHookNotification,
     WebHookNotificationDetail,
 )
+import pytest
 
 
 def make_notification(
@@ -110,6 +111,7 @@ def make_hass_with_entries() -> tuple[MagicMock, MagicMock]:
     loaded = MagicMock()
     loaded.entry_id = "loaded"
     loaded.runtime_data.webhook_id = WEBHOOK_ID
+    loaded.runtime_data.config.serial_id = "FAKECENTRAL01"
     loaded.runtime_data.coordinator.data = {"devices_infos": None, "groups": []}
     loaded.runtime_data.coordinator.async_request_refresh = AsyncMock()
 
@@ -187,3 +189,53 @@ class TestHandleWebhook:
 
         assert "matches no loaded Diagral entry" in caplog.text
         assert "SECRETUNKNOWNID" not in caplog.text
+
+
+# A production STATUS notification, serial and user name anonymised: no
+# `detail`, an `alarm_family` the model does not know, a group code instead
+# of an index, and eight fractional digits in `date_time`.
+PRODUCTION_STATUS = {
+    "transmitter_id": "FAKECENTRAL01",
+    "alarm_code": "3407",
+    "alarm_description": "REMOTE-ARMING-OF-GROUP",
+    "group_index": "PRESENCE_GROUP_CODE",
+    "alarm_family": "ON_OFF",
+    "date_time": "2026-10-24T23:22:47.59959433Z",
+    "user": {"username": "Fake User", "user_type": "owner"},
+}
+
+
+class TestTransmitterCheck:
+    """A notification is only accepted from the entry's own central."""
+
+    @pytest.mark.parametrize(
+        "transmitter_id",
+        ["FAKECENTRAL01", " fakecentral01 "],
+        ids=["same-serial", "case-and-spaces"],
+    )
+    async def test_own_central_is_accepted(self, transmitter_id):
+        """The production payload of the entry's central is handled."""
+        hass, loaded = make_hass_with_entries()
+        payload = {**PRODUCTION_STATUS, "transmitter_id": transmitter_id}
+
+        with patch("custom_components.diagral.webhook.async_dispatcher_send"):
+            await handle_webhook(hass, WEBHOOK_ID, make_request(payload))
+
+        loaded.runtime_data.coordinator.async_request_refresh.assert_awaited_once()
+        hass.bus.async_fire.assert_called_once()
+
+    async def test_other_transmitter_is_ignored(self, caplog):
+        """A notification from another central drives nothing, logs no id."""
+        hass, loaded = make_hass_with_entries()
+        payload = {**PRODUCTION_STATUS, "transmitter_id": "OTHERCENTRAL99"}
+
+        with patch(
+            "custom_components.diagral.webhook.async_dispatcher_send"
+        ) as dispatch:
+            await handle_webhook(hass, WEBHOOK_ID, make_request(payload))
+
+        loaded.runtime_data.coordinator.async_request_refresh.assert_not_awaited()
+        dispatch.assert_not_called()
+        hass.bus.async_fire.assert_not_called()
+        assert "OTHERCENTRAL99" not in caplog.text
+        assert "FAKECENTRAL01" not in caplog.text

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pydiagral.exceptions import DiagralAPIError
-
 from homeassistant.components.repairs import (
     ConfirmRepairFlow,
     RepairsFlow,
@@ -12,11 +10,15 @@ from homeassistant.components.repairs import (
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 
-from . import register_webhook
+from . import WebhookUnavailable, register_webhook
+from .const import ISSUE_WEBHOOK_REGISTRATION_FAILED
 
 
 class TakeOverWebhookFlow(ConfirmRepairFlow):
     """Point the central's webhook subscription back to this installation."""
+
+    take_over = True
+    failed_reason = "take_over_failed"
 
     def __init__(self, entry_id: str) -> None:
         """Initialize the flow for one config entry."""
@@ -26,7 +28,7 @@ class TakeOverWebhookFlow(ConfirmRepairFlow):
     async def async_step_confirm(
         self, user_input: dict[str, str] | None = None
     ) -> RepairsFlowResult:
-        """Take over the subscription once the user confirms."""
+        """Register the webhook once the user confirms."""
         if user_input is None:
             return await super().async_step_confirm()
 
@@ -35,14 +37,25 @@ class TakeOverWebhookFlow(ConfirmRepairFlow):
             return self.async_abort(reason="entry_not_loaded")
         try:
             webhook_id = await register_webhook(
-                self.hass, entry, entry.runtime_data.api, "Repair", take_over=True
+                self.hass,
+                entry,
+                entry.runtime_data.api,
+                "Repair",
+                take_over=self.take_over,
             )
-        except DiagralAPIError:
-            return self.async_abort(reason="take_over_failed")
+        except WebhookUnavailable:
+            return self.async_abort(reason=self.failed_reason)
         if webhook_id is None:
-            return self.async_abort(reason="take_over_failed")
+            return self.async_abort(reason=self.failed_reason)
         entry.runtime_data.webhook_id = webhook_id
         return self.async_create_entry(data={})
+
+
+class RetryWebhookFlow(TakeOverWebhookFlow):
+    """Retry a webhook registration that failed, still sparing a foreign one."""
+
+    take_over = False
+    failed_reason = "retry_failed"
 
 
 async def async_create_fix_flow(
@@ -50,6 +63,8 @@ async def async_create_fix_flow(
     issue_id: str,
     data: dict[str, str | int | float | None] | None,
 ) -> RepairsFlow:
-    """Create the fix flow for a webhook owned by another installation."""
+    """Create the fix flow of a webhook repair issue."""
     assert data is not None
+    if issue_id.startswith(ISSUE_WEBHOOK_REGISTRATION_FAILED):
+        return RetryWebhookFlow(str(data["entry_id"]))
     return TakeOverWebhookFlow(str(data["entry_id"]))

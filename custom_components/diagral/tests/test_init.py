@@ -12,6 +12,7 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.diagral import (
+    WebhookUnavailable,
     async_migrate_entry,
     async_remove_entry,
     async_setup_entry,
@@ -24,12 +25,16 @@ from custom_components.diagral.const import (
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
     DIAGRAL_REQUEST_TIMEOUT,
+    ISSUE_WEBHOOK_NO_URL,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
+    ISSUE_WEBHOOK_REGISTRATION_FAILED,
 )
 from pydiagral.exceptions import DiagralAPIError
 import pytest
 
+from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.network import NoURLAvailableError
 
 WEBHOOK_ID = "SECRETWEBHOOKID"
 OWN_HOST = "https://ha.example.com"
@@ -106,16 +111,31 @@ async def run_register(
     external_url: str = OWN_HOST,
     *,
     take_over: bool = False,
+    local: MagicMock | None = None,
 ) -> tuple[str | None, MagicMock]:
     """Call register_webhook with Home Assistant helpers patched."""
     hass = MagicMock()
+    local = local or MagicMock()
     with (
         patch("custom_components.diagral.get_url", return_value=external_url),
         patch("custom_components.diagral.webhook_generate_id", return_value=WEBHOOK_ID),
-        patch("custom_components.diagral.webhook_async_register"),
+        patch("custom_components.diagral.webhook_async_register", local.register),
+        patch("custom_components.diagral.webhook_async_unregister", local.unregister),
     ):
         result = await register_webhook(hass, entry, api, "test", take_over=take_over)
     return result, hass
+
+
+def deleted_issues(issues: MagicMock) -> set[str]:
+    """Return the ids of the repair issues the integration deleted."""
+    return {call.args[2] for call in issues.async_delete_issue.call_args_list}
+
+
+WEBHOOK_ISSUES = {
+    f"{ISSUE_WEBHOOK_OWNED_ELSEWHERE}_entry1",
+    f"{ISSUE_WEBHOOK_REGISTRATION_FAILED}_entry1",
+    f"{ISSUE_WEBHOOK_NO_URL}_entry1",
+}
 
 
 def stored_hash(hass: MagicMock) -> str | None:
@@ -138,7 +158,7 @@ class TestRegisterOwnership:
         assert result == WEBHOOK_ID
         api.register_webhook.assert_awaited_once()
         assert stored_hash(hass) == url_hash(OWN_NEW_URL)
-        issues.async_delete_issue.assert_called_once()
+        assert deleted_issues(issues) == WEBHOOK_ISSUES
 
     async def test_own_subscription_is_updated(self, cloud, issues):
         """A subscription matching the stored hash is updated in place."""
@@ -198,7 +218,7 @@ class TestRegisterOwnership:
         assert result == WEBHOOK_ID
         api.update_webhook.assert_awaited_once()
         issues.async_create_issue.assert_not_called()
-        issues.async_delete_issue.assert_called_once()
+        assert deleted_issues(issues) == WEBHOOK_ISSUES
         assert stored_hash(hass) == url_hash(OWN_NEW_URL)
 
 
@@ -268,9 +288,9 @@ class TestLogsHideSecrets:
         api = make_api(None)
         api.register_webhook = AsyncMock(side_effect=DiagralAPIError("refused"))
 
-        result, _ = await run_register(make_entry(), api)
+        with pytest.raises(WebhookUnavailable):
+            await run_register(make_entry(), api)
 
-        assert result is None
         assert WEBHOOK_ID not in debug_log.text
 
     async def test_cloudhook_deletion_hides_webhook_id(self, cloud, debug_log):
@@ -365,3 +385,156 @@ class TestSetupEntry:
             await async_setup_entry(MagicMock(), MagicMock())
 
         assert api_cls.call_args.kwargs["request_timeout"] == DIAGRAL_REQUEST_TIMEOUT
+
+
+def stored_webhook_id(hass: MagicMock) -> str | None:
+    """Return the webhook id written to the entry, if any."""
+    if not hass.config_entries.async_update_entry.called:
+        return None
+    return hass.config_entries.async_update_entry.call_args.kwargs["data"].get(
+        CONF_WEBHOOK_ID
+    )
+
+
+class TestWebhookLifecycle:
+    """The webhook keeps its id, registers locally first, reports failures."""
+
+    async def test_stored_id_is_reused(self, cloud, issues):
+        """An entry that already has a webhook id keeps it across restarts."""
+        entry = make_entry(OWN_OLD_URL)
+        entry.data[CONF_WEBHOOK_ID] = "KEPTWEBHOOKID"
+        local = MagicMock()
+        result, _ = await run_register(entry, make_api(OWN_OLD_URL), local=local)
+
+        assert result == "KEPTWEBHOOKID"
+        assert local.register.call_args.args[3] == "KEPTWEBHOOKID"
+
+    async def test_new_id_is_stored(self, cloud, issues):
+        """A first registration stores the id it generated."""
+        _, hass = await run_register(make_entry(), make_api(None))
+
+        assert stored_webhook_id(hass) == WEBHOOK_ID
+
+    async def test_current_subscription_is_not_rewritten(self, cloud, issues):
+        """A restart with the same id leaves Diagral's subscription alone."""
+        entry = make_entry(OWN_NEW_URL)
+        entry.data[CONF_WEBHOOK_ID] = WEBHOOK_ID
+        api = make_api(OWN_NEW_URL)
+
+        assert (await run_register(entry, api))[0] == WEBHOOK_ID
+        api.update_webhook.assert_not_awaited()
+        api.register_webhook.assert_not_awaited()
+
+    async def test_local_handler_comes_before_the_subscription(self, cloud, issues):
+        """Home Assistant listens before Diagral is told where to send."""
+        order = MagicMock()
+        api = make_api(None)
+        api.register_webhook = AsyncMock(side_effect=lambda **_: order.subscribe())
+        local = MagicMock()
+        local.register.side_effect = lambda *_: order.listen()
+
+        await run_register(make_entry(), api, local=local)
+
+        assert [c[0] for c in order.mock_calls] == ["listen", "subscribe"]
+
+    @pytest.mark.parametrize(
+        "failing",
+        ["get_webhook", "register_webhook"],
+        ids=["read-subscription", "create-subscription"],
+    )
+    async def test_diagral_error_is_reported(self, cloud, issues, failing):
+        """A Diagral error raises WebhookUnavailable and drops the local handler."""
+        api = make_api(None)
+        setattr(api, failing, AsyncMock(side_effect=DiagralAPIError("HTTP 503")))
+        local = MagicMock()
+
+        with pytest.raises(WebhookUnavailable) as raised:
+            await run_register(make_entry(), api, local=local)
+
+        assert raised.value.reason == ISSUE_WEBHOOK_REGISTRATION_FAILED
+        # The handler registered first is removed once Diagral fails
+        assert [c[0] for c in local.mock_calls][-2:] == ["register", "unregister"]
+
+    async def test_no_url_is_reported(self, cloud, issues):
+        """Without an external HTTPS URL, the reason is the missing URL."""
+        api = make_api(None)
+        with (
+            patch("custom_components.diagral.get_url", side_effect=NoURLAvailableError),
+            pytest.raises(WebhookUnavailable) as raised,
+        ):
+            await register_webhook(MagicMock(), make_entry(), api, "test")
+
+        assert raised.value.reason == ISSUE_WEBHOOK_NO_URL
+        api.get_webhook.assert_not_awaited()
+
+    async def test_inactive_cloud_is_reported(self, cloud, issues):
+        """A Nabu Casa URL without an active subscription is a missing URL."""
+        cloud.async_active_subscription.return_value = False
+
+        with pytest.raises(WebhookUnavailable) as raised:
+            await run_register(make_entry(), make_api(None), "https://abc.ui.nabu.casa")
+
+        assert raised.value.reason == ISSUE_WEBHOOK_NO_URL
+
+
+class TestUnregisterResult:
+    """unregister_webhook() tells whether the subscription could be handled."""
+
+    async def test_failed_deletion_returns_false(self, cloud):
+        """A subscription Diagral refuses to delete is reported."""
+        api = make_api(OWN_OLD_URL)
+        api.delete_webhook = AsyncMock(side_effect=DiagralAPIError("HTTP 503"))
+        with patch("custom_components.diagral.webhook_async_unregister"):
+            result = await unregister_webhook(
+                MagicMock(), make_entry(OWN_OLD_URL), api, WEBHOOK_ID, "test"
+            )
+
+        assert result is False
+
+    async def test_deleted_subscription_returns_true(self, cloud):
+        """A deleted subscription is reported as done."""
+        with patch("custom_components.diagral.webhook_async_unregister"):
+            result = await unregister_webhook(
+                MagicMock(),
+                make_entry(OWN_OLD_URL),
+                make_api(OWN_OLD_URL),
+                WEBHOOK_ID,
+                "test",
+            )
+
+        assert result is True
+
+
+class TestSetupReportsWebhookFailure:
+    """A webhook failure at setup raises a repair instead of failing setup."""
+
+    @pytest.mark.parametrize(
+        ("reason", "fixable"),
+        [(ISSUE_WEBHOOK_REGISTRATION_FAILED, True), (ISSUE_WEBHOOK_NO_URL, False)],
+        ids=["diagral-error", "no-url"],
+    )
+    async def test_setup_continues_with_a_repair(self, issues, reason, fixable):
+        """Polling still works, and the repair says why events cannot arrive."""
+        hass = MagicMock()
+        hass.config_entries.async_forward_entry_setups = AsyncMock()
+        entry = make_entry()
+        api_cls = MagicMock()
+        api_cls.return_value.__aenter__ = AsyncMock()
+        with (
+            patch("custom_components.diagral.DiagralConfigData"),
+            patch("custom_components.diagral.asdict", return_value=MagicMock()),
+            patch("custom_components.diagral.DiagralAPI", api_cls),
+            patch("custom_components.diagral.DiagralDataUpdateCoordinator") as coord,
+            patch(
+                "custom_components.diagral.register_webhook",
+                AsyncMock(side_effect=WebhookUnavailable(reason)),
+            ),
+        ):
+            coord.return_value.async_config_entry_first_refresh = AsyncMock()
+            assert await async_setup_entry(hass, entry) is True
+
+        kwargs = issues.async_create_issue.call_args.kwargs
+        assert issues.async_create_issue.call_args.args[2] == f"{reason}_entry1"
+        assert kwargs["translation_key"] == reason
+        assert kwargs["is_fixable"] is fixable
+        assert entry.runtime_data.webhook_id is None

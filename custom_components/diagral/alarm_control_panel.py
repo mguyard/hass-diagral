@@ -27,7 +27,12 @@ from homeassistant.helpers import entity_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DiagralConfigEntry, register_webhook, unregister_webhook
+from . import (
+    DiagralConfigEntry,
+    WebhookUnavailable,
+    register_webhook,
+    unregister_webhook,
+)
 from .const import (
     ALARM_INTRUSION_CODES,
     COMMAND_TIMEOUT,
@@ -340,9 +345,14 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
     async def action_register_webhook(self) -> None:
         """Register the webhook for Diagral."""
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
-        webhook_id = await register_webhook(
-            self.hass, entry, entry.runtime_data.api, "HA Action", take_over=True
-        )
+        try:
+            webhook_id = await register_webhook(
+                self.hass, entry, entry.runtime_data.api, "HA Action", take_over=True
+            )
+        except WebhookUnavailable as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key=err.reason
+            ) from err
         # Force the webhook_id in the entry runtime data to be sure it is saved
         entry.runtime_data.webhook_id = webhook_id
 
@@ -351,13 +361,17 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
         # No need to get the webhook_id as it is saved in the entry.runtime_data
         # directly by the unregister_webhook function
-        await unregister_webhook(
+        if not await unregister_webhook(
             self.hass,
             entry,
             entry.runtime_data.api,
             entry.runtime_data.webhook_id,
             "HA Action",
-        )
+        ):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="webhook_unregistration_failed",
+            )
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
