@@ -10,6 +10,7 @@ All data is synthetic. Nothing here talks to the real Diagral cloud.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from datetime import UTC, datetime
 import itertools
@@ -184,6 +185,7 @@ class FakeCloud:
     def __init__(self) -> None:
         self.systems: dict[str, System] = {}
         self.tokens: set[str] = set()
+        self.faults: list[dict[str, Any]] = []
 
     def system(self, serial: str) -> System:
         if serial not in self.systems:
@@ -214,6 +216,21 @@ async def log_exchanges(request: web.Request, handler) -> web.StreamResponse:
     payload = getattr(response, "text", None) or "-"
     _log(direction, "→ %s %s", response.status, _short(payload))
     return response
+
+
+@web.middleware
+async def inject_faults(request: web.Request, handler) -> web.StreamResponse:
+    """Delay or fail the next API requests queued by /_control/fail."""
+    faults = request.app[CLOUD].faults
+    if not request.path.startswith("/_control"):
+        fault = next((f for f in faults if f["path"] in request.path), None)
+        if fault is not None:
+            faults.remove(fault)
+            _log("CTL", "injecting %s", fault)
+            await asyncio.sleep(fault["delay"])
+            if fault["status"]:
+                return _error(fault["status"], "Injected fault")
+    return await handler(request)
 
 
 def _require_bearer(request: web.Request) -> web.Response | None:
@@ -386,7 +403,23 @@ async def control_state(request: web.Request) -> web.Response:
 async def control_reset(request: web.Request) -> web.Response:
     request.app[CLOUD].systems.clear()
     request.app[CLOUD].tokens.clear()
+    request.app[CLOUD].faults.clear()
     return web.json_response({"reset": True})
+
+
+async def control_fail(request: web.Request) -> web.Response:
+    data = await request.json()
+    faults = request.app[CLOUD].faults
+    if data.get("clear"):
+        faults.clear()
+    else:
+        fault = {
+            "path": data.get("path", "/v1/"),
+            "status": data.get("status"),
+            "delay": float(data.get("delay", 0)),
+        }
+        faults.extend(dict(fault) for _ in range(int(data.get("count", 1))))
+    return web.json_response({"faults": faults})
 
 
 async def control_status(request: web.Request) -> web.Response:
@@ -484,7 +517,7 @@ async def control_notify(request: web.Request) -> web.Response:
 
 
 def build_app() -> web.Application:
-    app = web.Application(middlewares=[log_exchanges])
+    app = web.Application(middlewares=[log_exchanges, inject_faults])
     app[CLOUD] = FakeCloud()
     serial = r"{serial:[^/]+}"
     app.add_routes(
@@ -509,6 +542,7 @@ def build_app() -> web.Application:
             web.post("/_control/anomalies", control_anomalies),
             web.post("/_control/notify", control_notify),
             web.post("/_control/webhook", control_webhook),
+            web.post("/_control/fail", control_fail),
         ]
     )
     return app
