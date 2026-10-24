@@ -11,6 +11,7 @@ from custom_components.diagral.config_flow import (
     CannotConnect,
     DiagralConfigFlow,
     DiagralOptionsFlow,
+    InvalidAuth,
     is_valid_alarmpanel_code,
     is_valid_email,
     is_valid_pin,
@@ -22,6 +23,13 @@ from custom_components.diagral.const import (
     CONF_PIN_CODE,
 )
 from custom_components.diagral.models import AccountInfoData
+from pydiagral.exceptions import (
+    AuthenticationError,
+    ClientError,
+    DiagralAPIError,
+    ServerError,
+)
+import pytest
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
@@ -346,3 +354,85 @@ class TestConfigFlowLogs:
                 }
             )
         assert "24680" not in caplog.text
+
+
+ACCOUNT = AccountInfoData(
+    username="user@example.com",
+    password="secret",
+    serial_id="FAKECENTRAL01",
+    pin_code="1234",
+)
+
+
+class TestValidateAccountErrors:
+    """validate_account() tells a refused login from a failed connection."""
+
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            (AuthenticationError("Authentication rejected by Diagral"), InvalidAuth),
+            (ServerError("Diagral service error (HTTP 503)"), CannotConnect),
+            (ClientError("Diagral request timed out"), CannotConnect),
+            (DiagralAPIError("Diagral API error (HTTP 400)"), CannotConnect),
+        ],
+        ids=["refused-login", "server-error", "network-error", "other-api-error"],
+    )
+    async def test_error_is_classified(self, error, expected):
+        """Only a refused login is reported as invalid authentication."""
+        diagral = MagicMock()
+        diagral.try_connection = AsyncMock(side_effect=error)
+        with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
+            api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+            api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            with pytest.raises(expected):
+                await validate_account(ACCOUNT)
+
+
+def make_step(step: str) -> tuple[DiagralConfigFlow, dict]:
+    """Return a config flow ready to submit the given step, and its input."""
+    flow = TestConfigFlowLogs.make_flow()
+    flow.account_username = ACCOUNT.username
+    flow.account_password = ACCOUNT.password
+    flow.account_pincode = ACCOUNT.pin_code
+    credentials = {
+        CONF_USERNAME: ACCOUNT.username,
+        CONF_PASSWORD: "new-secret",
+        CONF_PIN_CODE: ACCOUNT.pin_code,
+    }
+    if step == "options":
+        return flow, {"alarmpanel_options": {CONF_ALARMPANEL_ACTIONTYPE_CODE: "never"}}
+    if step == "reconfigure":
+        flow.context = {"entry_id": "entry"}
+        flow.hass.config_entries.async_get_entry.return_value.data = {
+            "serial_id": ACCOUNT.serial_id,
+            CONF_USERNAME: ACCOUNT.username,
+            CONF_PASSWORD: ACCOUNT.password,
+            CONF_PIN_CODE: ACCOUNT.pin_code,
+        }
+    return flow, credentials
+
+
+class TestFlowErrorMessages:
+    """Each step shows a translated error, never the exception text."""
+
+    @pytest.mark.parametrize("step", ["account", "options", "reconfigure"])
+    @pytest.mark.parametrize(
+        ("raised", "key"),
+        [
+            (CannotConnect, "cannot_connect"),
+            (InvalidAuth, "invalid_auth"),
+            (RuntimeError, "unknown"),
+        ],
+        ids=["cannot-connect", "invalid-auth", "unexpected"],
+    )
+    async def test_error_shows_translation_key(self, step, raised, key):
+        """The form error is a translation key present in both languages."""
+        flow, user_input = make_step(step)
+
+        async def fail(**_):
+            raise raised from DiagralAPIError("Diagral API error (HTTP 401)")
+
+        with patch("custom_components.diagral.config_flow.validate_account", fail):
+            result = await getattr(flow, f"async_step_{step}")(user_input)
+
+        assert result["errors"] == {"base": key}
