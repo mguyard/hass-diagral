@@ -226,8 +226,13 @@ def _require_bearer(request: web.Request) -> web.Response | None:
 def _require_apikey(
     request: web.Request, system: System, *, pin: bool = False
 ) -> web.Response | None:
-    if request.headers.get("X-APIKEY") not in system.api_keys:
-        return _error(401, "Invalid API key")
+    key = request.headers.get("X-APIKEY") or ""
+    if key not in system.api_keys:
+        # Config entries keep their key across fake cloud restarts; its state does not
+        if not key.startswith("FAKEAK"):
+            return _error(401, "Invalid API key")
+        system.api_keys[key] = "adopted"
+        _log("CTL", "adopted API key %s… issued by a previous run", key[:7])
     if pin and request.headers.get("X-PIN-CODE") != PIN_CODE:
         return _error(403, "Invalid PIN code")
     return None
@@ -409,6 +414,23 @@ async def control_anomalies(request: web.Request) -> web.Response:
     return web.json_response({"anomalies": system.anomalies})
 
 
+async def control_webhook(request: web.Request) -> web.Response:
+    """Set the subscription to any URL, as another installation would, or clear it."""
+    data = await request.json()
+    system = _target(request, data)
+    if isinstance(system, web.Response):
+        return system
+    if data.get("clear"):
+        system.webhook = None
+    else:
+        system.webhook = {
+            "transmitter_id": system.serial,
+            "webhook_url": data["webhook_url"],
+            "subscriptions": {"anomaly": True, "alert": True, "state": True},
+        }
+    return web.json_response({"webhook": system.webhook})
+
+
 NOTIFICATION_DEFAULTS = {
     "STATUS": {"alarm_code": "3401", "alarm_description": "Total system arming"},
     "ALERT": {"alarm_code": "1130", "alarm_description": "Intrusion"},
@@ -486,6 +508,7 @@ def build_app() -> web.Application:
             web.post("/_control/status", control_status),
             web.post("/_control/anomalies", control_anomalies),
             web.post("/_control/notify", control_notify),
+            web.post("/_control/webhook", control_webhook),
         ]
     )
     return app

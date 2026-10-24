@@ -13,10 +13,10 @@ Unit tests prove the logic of a function. They cannot prove that the webhook rou
 
 The maintainer's production Home Assistant uses the **same Diagral central** as the development instance. The central holds a **single** webhook subscription:
 
-- Setting up the integration on another instance calls `register_webhook`, which finds the existing subscription and **re-points it** to the new instance (log: `A Webhook subscription already exists for another URL … Integration will force update`).
-- Unloading the entry there — disabling it, removing it, or the `unregister_webhook` action — **deletes** the subscription outright.
+- Since webhook ownership is tracked, setting up the integration on another instance leaves a subscription it does not own untouched and raises a repair issue instead; unloading only deletes a subscription the entry owns.
+- The **take-over** repair, the `register_webhook` action, and any version of the integration older than ownership tracking still **re-point** the subscription. Production then stops receiving events, silently, until it takes it back.
 
-Either way, production stops receiving events, silently. Restarting Home Assistant does not unload entries, so a dev instance left enabled keeps the subscription until it is unloaded.
+Restarting Home Assistant does not unload entries, so a dev instance that took the subscription over keeps it until production takes it back.
 
 The development config entry backed by the real credentials therefore stays **disabled**. Enabling it is a decision the maintainer takes for a specific session — never on your own.
 
@@ -127,6 +127,7 @@ All on `http://localhost:8099`, JSON bodies. `serial` may be omitted when only o
 | `POST /_control/reset` | — | Forget every system and token |
 | `POST /_control/status` | `{"status": "GROUP", "activated_groups": [1, 2]}` | What the next poll returns (`OFF`, `GROUP`, `TEMPO_GROUP`, `PRESENCE`) |
 | `POST /_control/anomalies` | `{"anomalies": {"sensors": [{"serial": "…", "index": 1, "group": 1, "label": "…", "anomaly_names": [{"id": 1, "name": "Low battery"}]}]}}` or `{"clear": true}` | What `get_anomalies` returns |
+| `POST /_control/webhook` | `{"webhook_url": "https://other.example.net/api/webhook/x"}` or `{"clear": true}` | Sets the subscription as another installation would — to test ownership — or removes it |
 | `POST /_control/notify` | `{"type": "STATUS" \| "ALERT" \| "ANOMALY", "alarm_code": "1130", "group_index": "01", "detail": {…}, "user": {…}}` | POSTs a notification to the webhook Home Assistant registered, host rewritten to `HA_URL`; `"raw": {…}` sends a payload as is |
 
 pydiagral derives `alarm_type` from `alarm_code`, so the code decides how the notification is handled — 1130, 1139, 1141 are intrusions; 3401 an arming; 1384 a low battery.
@@ -136,6 +137,7 @@ Polling goes through the coordinator's debouncer: after `homeassistant.update_en
 ### 4.4 Limits
 
 - The Nabu Casa cloudhook branch cannot be exercised; it stays covered by level 1.
+- State is in memory and lost when the container is rebuilt. A config entry keeps the API key it was given, so the fake adopts any unknown key with its own `FAKEAK` prefix, and logs it; any other key is refused.
 - `server.py` implements what pydiagral 1.6.0 calls. After a pydiagral bump, run `smoke.py` with the new version before trusting the fake.
 - An existing **disabled** diagral entry is a realistic condition, not noise: keep the real entry disabled beside the fake one.
 
