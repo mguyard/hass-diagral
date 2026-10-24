@@ -161,6 +161,10 @@ class System:
         self.api_keys: dict[str, str] = {}
         self.anomalies: dict[str, Any] | None = None
         self.webhook: dict[str, Any] | None = None
+        # Exit delay of a real central: arming reports TEMPO_GROUP first.
+        self.exit_delay = 0.0
+        self.groups_listed_during_delay = True
+        self.arming: asyncio.Task | None = None
 
     @property
     def group_indexes(self) -> list[int]:
@@ -317,8 +321,11 @@ async def system_action(request: web.Request) -> web.Response:
     if denied := _require_apikey(request, system, pin=True):
         return denied
     action = request.match_info["action"]
+    if system.arming is not None:
+        system.arming.cancel()
+        system.arming = None
     if action == "start":
-        system.status, system.activated_groups = "GROUP", system.group_indexes
+        _arm(system, system.group_indexes)
     elif action == "stop":
         system.status, system.activated_groups = "OFF", []
     elif action == "presence":
@@ -327,12 +334,32 @@ async def system_action(request: web.Request) -> web.Response:
     else:
         groups = set((await request.json()).get("groups", []))
         if action == "activate_group":
-            active = set(system.activated_groups) | groups
+            _arm(system, sorted(set(system.activated_groups) | groups))
         else:
             active = set(system.activated_groups) - groups
-        system.activated_groups = sorted(active)
-        system.status = "GROUP" if active else "OFF"
+            system.activated_groups = sorted(active)
+            system.status = "GROUP" if active else "OFF"
     return web.json_response(system.status_payload())
+
+
+def _arm(system: System, groups: list[int]) -> None:
+    """Arm the groups, through TEMPO_GROUP when an exit delay is set."""
+    if not system.exit_delay:
+        system.status, system.activated_groups = "GROUP", groups
+        return
+    system.status = "TEMPO_GROUP"
+    system.activated_groups = groups if system.groups_listed_during_delay else []
+    system.arming = asyncio.create_task(_finish_arming(system, groups))
+
+
+async def _finish_arming(system: System, groups: list[int]) -> None:
+    """End the exit delay, then tell Home Assistant as the real cloud does."""
+    await asyncio.sleep(system.exit_delay)
+    system.status, system.activated_groups = "GROUP", groups
+    system.arming = None
+    _log("CTL", "exit delay over for %s: GROUP %s", system.serial, groups)
+    if system.webhook is not None:
+        await _push(system, _notification(system, {"type": "STATUS"}))
 
 
 async def get_anomalies(request: web.Request) -> web.Response:
@@ -480,6 +507,13 @@ async def control_notify(request: web.Request) -> web.Response:
     if system.webhook is None:
         return _error(409, "Home Assistant has not registered a webhook")
 
+    payload = _notification(system, data)
+    status, url = await _push(system, payload)
+    return web.json_response({"sent_to": url, "payload": payload, "ha_status": status})
+
+
+def _notification(system: System, data: dict[str, Any]) -> dict[str, Any]:
+    """Build a webhook notification, defaults filled per type."""
     kind = data.get("type", "STATUS").upper()
     defaults = NOTIFICATION_DEFAULTS.get(kind, {})
     payload: dict[str, Any] = {
@@ -501,7 +535,11 @@ async def control_notify(request: web.Request) -> web.Response:
     # Raw override, to send malformed or unusual payloads on purpose.
     if "raw" in data:
         payload = data["raw"]
+    return payload
 
+
+async def _push(system: System, payload: dict[str, Any]) -> tuple[int, str]:
+    """POST a notification to the webhook Home Assistant registered."""
     path = urlparse(system.webhook["webhook_url"]).path
     url = f"{HA_URL}{path}"
     _log("OUT", "POST %s body=%s", url, _short(payload))
@@ -511,8 +549,21 @@ async def control_notify(request: web.Request) -> web.Response:
     ):
         text = await response.text()
     _log("OUT", "→ %s %s", response.status, _short(text) or "-")
+    return response.status, url
+
+
+async def control_delay(request: web.Request) -> web.Response:
+    data = await request.json()
+    system = _target(request, data)
+    if isinstance(system, web.Response):
+        return system
+    system.exit_delay = float(data.get("seconds", 0))
+    system.groups_listed_during_delay = bool(data.get("groups_listed", True))
     return web.json_response(
-        {"sent_to": url, "payload": payload, "ha_status": response.status}
+        {
+            "exit_delay": system.exit_delay,
+            "groups_listed": system.groups_listed_during_delay,
+        }
     )
 
 
@@ -543,6 +594,7 @@ def build_app() -> web.Application:
             web.post("/_control/notify", control_notify),
             web.post("/_control/webhook", control_webhook),
             web.post("/_control/fail", control_fail),
+            web.post("/_control/delay", control_delay),
         ]
     )
     return app
