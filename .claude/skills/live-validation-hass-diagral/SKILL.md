@@ -97,8 +97,8 @@ The redirect only acts while `config/.diagral_fake_cloud` exists; the file holds
 
 ### 4.2 Session
 
-1. `fake_cloud.sh up` — builds and starts the container, installs the redirect, writes the marker.
-2. Ask the human to restart Home Assistant. Check `home-assistant.log` shows `DIAGRAL FAKE CLOUD ACTIVE`.
+1. `fake_cloud.sh up` — builds and starts the container, installs the redirect, writes the marker, then prints `status`. All three lines — container running, redirect installed, marker present — must show before Home Assistant is restarted. Never pipe `up` through `head` or anything that closes early: the script stops at the first broken write, and once left the redirect installed without its marker, so the fake entry called the real cloud. The fake credentials were refused, as designed, but check anyway.
+2. Ask the human to restart Home Assistant. The `DIAGRAL FAKE CLOUD ACTIVE` warning only appears once a `DiagralAPI` is created, so before trusting it, check that the Home Assistant process started after the marker was written, then enable the fake entry and confirm the fake cloud receives its first requests (`GET /_control/state` lists the system) within seconds — disable the entry at once if it does not.
 3. If no fake entry exists yet, create one through the config flow over REST — it exercises the whole flow:
 
    ```
