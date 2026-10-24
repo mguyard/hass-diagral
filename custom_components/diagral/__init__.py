@@ -30,6 +30,7 @@ from .const import (
     CONF_SECRET_KEY,
     CONF_SERIAL_ID,
     CONF_WEBHOOK_URL_HASH,
+    CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
     DOMAIN,
     HA_CLOUD_DOMAIN,
@@ -102,10 +103,14 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: DiagralConfigEn
     if config_entry.version == 1:
         new_data = {**config_entry.data}
         if config_entry.minor_version == 1:
+            # A PIN stored as an int has already lost its leading zeros
             new_data[CONF_PIN_CODE] = str(config_entry.data[CONF_PIN_CODE])
 
         hass.config_entries.async_update_entry(
-            config_entry, data=new_data, minor_version=3, version=1
+            config_entry,
+            data=new_data,
+            version=CONFIG_VERSION,
+            minor_version=CONFIG_MINOR_VERSION,
         )
 
     return True
