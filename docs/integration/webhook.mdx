@@ -1,5 +1,6 @@
 ---
 title: Webhook
+description: Configure real-time notifications and manage webhook subscription ownership.
 previous: /integration/entities
 previousTitle: Entities
 next: /integration/events
@@ -9,10 +10,10 @@ nextTitle: Events
 The Diagral cloud supports sending webhooks to your Home Assistant to receive real-time alerts, anomalies, or state changes.
 Notifications are transmitted per system, and **each system can have only one webhook subscription.**
 
-This means that in addition to the regular refresh interval, a refresh can also be triggered upon receiving a webhook of these type :
-* `STATUS` : Status change (Armed, Disarmed, etc...)
-* `ALERT` : Alert is triggered like Intrusion or Silent Panic Alarm 
-* `ANOMALY` : A new anomaly is triggered
+Webhooks update Home Assistant between regular cloud refreshes:
+* `STATUS`: A status change (armed, disarmed, etc.) triggers a cloud refresh.
+* `ALERT`: An alert, such as intrusion or silent panic, updates the alarm panel and publishes an event directly.
+* `ANOMALY`: A new anomaly triggers a cloud refresh.
 
 ## Home Assistant URL
 
@@ -27,21 +28,14 @@ However, if you have both an external access and a Home Assistant Cloud subscrip
 
 ## Implementation
 
-You don't have to do anything to implement webhooks.
-As long as you meet the aforementioned conditions, webhooks will be automatically set up when the integration starts.
-You can confirm this by checking the "INFO" logs in Home Assistant
+Webhooks are set up automatically in the background when the integration starts. Cloud polling remains active if registration fails. The webhook identifier is persisted in the config entry and the local handler is registered before enabling the remote subscription.
 
-```logs
-2024-03-15 09:42:13.627 INFO (MainThread) [custom_components.diagral] Webhook successfully created for HomeSystem (27458196034A82) on : https://my-homeassistant.example.com/<redacted>
-2025-02-26 16:29:00.458 INFO (MainThread) [custom_components.diagral] Webhook successfully registered for HomeSystem (27458196034A82)
-```
+Use the [Instant Notifications and Last Notification Received diagnostic sensors](/integration/entities#connection-diagnostics) to check registration and delivery. Callback URLs contain a secret identifier and are not written to logs.
 
-The end of the webhook URL is replaced by `<redacted>` in the logs: it contains the webhook ID, and anyone who knows it could send fake alarm events to your Home Assistant. Only the host is shown, so you can still check which address was used.
-
-In case of any error, it will also be indicated in the Home Assistant logs.
+After a failed registration, retries are scheduled after 30, 60, 120, 300 and 900 seconds. If all attempts fail, the status becomes `retry_exhausted`. The error category is available in the diagnostic sensor attributes and logs.
 
 <Info>
-In case of error, you can try to restart the integration or use the actions [diagral.unregister_webhook](/integration/actions#unregister-webhook) and [diagral.register_webhook](/integration/actions#register-webhook) to force webhooks to reconfigure.
+After resolving an error, reload the integration or use [diagral.register_webhook](/integration/actions#register-webhook) to retry. [diagral.unregister_webhook](/integration/actions#unregister-webhook) cancels pending retries and removes this entry's handler and subscription when ownership is confirmed.
 </Info>
 
 ## Existing subscription
@@ -51,10 +45,14 @@ Your Diagral system (serial ID) can send its events to a single URL only. When t
 - **This Home Assistant** — for example after a change of your external URL, or after switching between Home Assistant Cloud and a direct external access: the subscription is updated to the new URL, without any action from you.
 - **Another installation** — another Home Assistant, a test instance, or another system using the Diagral webhook: the integration leaves it untouched, because overwriting it would silently stop that installation from receiving events.
 
-In the second case, a repair appears in **Settings > System > Repairs** and a warning is written in the logs. Until it is solved, Home Assistant does not receive webhooks: the alarm state is still refreshed every `5 minutes`, but intrusion alerts (the `triggered` state) and `DIAGRAL_EVENT` events do not arrive.
+The config entry stores a SHA-256 fingerprint of the URL it registered. The integration compares the current subscription against that fingerprint to recognize its own subscription even after its external URL changes. For older entries without a fingerprint, the initial ownership check accepts an identical URL, or direct Home Assistant webhook URLs with the same scheme, host and port and a path beginning with `/api/webhook/`. A shared Nabu Casa hostname alone does not prove ownership.
+
+If the subscription belongs to another installation, the diagnostic status becomes `conflict`, a repair appears in **Settings > System > Repairs**, and a warning is written in the logs. Until it is solved, Home Assistant does not receive webhooks: the alarm state is still refreshed every `5 minutes`, but intrusion alerts (the `triggered` state) and `DIAGRAL_EVENT` events do not arrive.
 
 To make this Home Assistant receive the events, open the repair and confirm, or call the [diagral.register_webhook](/integration/actions#register-webhook) action. The other installation then stops receiving them.
 
 <Info>
 Disabling, reloading or removing the integration only deletes the subscription if it belongs to this Home Assistant. A subscription owned by another installation is never deleted.
 </Info>
+
+On reload, the worker is cancelled and the local handler and API session are released. The Nabu Casa cloudhook mapping is retained to preserve its URL; explicit unregistration or removal of the integration removes the mapping.

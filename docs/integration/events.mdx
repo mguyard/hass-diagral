@@ -1,5 +1,6 @@
 ---
 title: Events
+description: Webhook events and their payloads in Home Assistant.
 previous: /integration/webhook
 previousTitle: Webhook
 next: /integration/actions
@@ -14,6 +15,7 @@ When Diagral integration receive webhooks from the Diagral Cloud, all Webhook re
 ```yaml
 event_type: DIAGRAL_EVENT
 data: # [!code highlight]
+  entry_id: 01JMZ480KZPV5J7M1FX2QQWT47 # [!code highlight]
   type: STATUS # [!code highlight]
   data: # [!code highlight]
     transmitter_id: 1234567890ABCD # [!code highlight]
@@ -38,6 +40,10 @@ context:
 </Card>
 
 The information provided by the received webhook is located in the `data` key.
+
+The event envelope also contains `entry_id`, identifying the Home Assistant config entry. Use it to distinguish multiple alarm entries. Existing `type` and `data` fields are preserved. Nested `detail` and `user` values are dictionaries and `date_time` is an ISO-formatted string, so the event payload is JSON-serializable. Malformed notifications and notifications for another transmitter are ignored.
+
+The existing dispatcher signals `signal-diagral-webhook-<TYPE>` remain available. The integration's own entities use signals scoped to the config entry so that a notification cannot update another alarm entry.
 
 The type can be:
 - `STATUS`

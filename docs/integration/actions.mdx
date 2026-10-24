@@ -1,5 +1,6 @@
 ---
 title: Actions
+description: Commands and webhook actions exposed by the Diagral integration.
 previous: /integration/events
 previousTitle: Events
 next: /misc/contributing
@@ -7,6 +8,10 @@ nextTitle: Misc
 ---
 
 For all actions, you can specify a `target` property to specify the device to send the action or refer to.
+
+Alarm commands are serialized per entry and sent once. Home Assistant reports an error if the cloud rejects a command, or if fresh status reads cannot confirm it within the verification budget (up to three coordinator checks within 30 seconds; each refresh can retry a transient read failure). An unconfirmed result can mean the command was applied but its status could not be read; inspect the alarm before sending another command. A pending exit delay is reported as arming, not as a completed arm.
+
+Empty or unknown group selections are rejected before sending a request. The panel's code option continues to apply to the alarm panel actions; the existing group services do not require a panel code.
 
 ```yaml
 target:
@@ -80,6 +85,8 @@ Register webhook in Diagral Cloud - **Only one webhook can be registered for an 
 
 If the subscription currently points to another installation, this action takes it over: the other installation stops receiving events. See [Existing subscription](/integration/webhook#existing-subscription).
 
+Check the Instant Notifications diagnostic sensor for the result; transient registration failures are retried in the background.
+
     ```yaml
     action: diagral.register_webhook
     target:
@@ -92,6 +99,8 @@ If the subscription currently points to another installation, this action takes 
 
 <Property name="action" type="diagral.unregister_webhook" required>
 Unregister Webhook in Diagral Cloud
+
+Cancels pending registration retries and removes the local handler and any Nabu Casa cloudhook mapping. A remote subscription is deleted only when ownership is confirmed; a subscription owned by another installation is left untouched.
 
     ```yaml
     action: diagral.unregister_webhook

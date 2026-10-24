@@ -16,10 +16,29 @@ The Diagral integration operates in Hub Mode, meaning that all configurations wi
 | Central                   | Alarm Control Panel with 3 modes: Away, Home and Disarmed                                  |
 | Anomalies                 | Sensor displaying the number of anomalies in state and details in attributes               |
 | Active Groups             | Sensor displaying the number of active groups in state and details per group in attributes |
+| Diagral Connection        | Diagnostic sensor reporting whether the latest cloud refresh succeeded                    |
+| Last Successful Communication | Timestamp of the latest successful cloud refresh                                     |
+| Instant Notifications     | Diagnostic sensor reporting webhook registration and reception status                     |
+| Last Notification Received | Timestamp of the latest valid webhook received by this entry                             |
 
 <Info>
-All entities are refreshed every `5 minutes` (fixed) or upon receiving a [Webhook](/integration/webhook) from the Diagral Cloud.
+Cloud data is refreshed every `5 minutes` (fixed), after a command, or upon receiving a status or anomaly [Webhook](/integration/webhook) from the Diagral Cloud. Diagnostic entities also update when webhook registration or reception changes.
 </Info>
+
+## Connection diagnostics
+
+If a cloud refresh fails, the alarm and data sensors become `unavailable`. The previous snapshot is retained internally, but it is not reported as a successful new observation. Recovery is published even when the alarm state has not changed. Transient read failures receive at most one retry within a total 30-second refresh budget.
+
+The four diagnostic sensors remain available during cloud failures:
+
+| Sensor | Values and attributes |
+| --- | --- |
+| Diagral Connection | `initializing`, `connected`, or `unavailable`; attributes include `consecutive_failures` and a non-sensitive `last_error` category |
+| Last Successful Communication | Time of the latest successful refresh; remains unchanged during failures |
+| Instant Notifications | `pending`, `registered`, `received`, `retrying`, `retry_exhausted`, `conflict`, or `disabled`; attributes include `retry_attempts` and `last_error` |
+| Last Notification Received | Time of the latest valid notification received for this entry; unknown until the first notification |
+
+`registered` confirms that the cloud subscription is configured. `received` confirms that a valid notification reached Home Assistant. Registration alone does not prove delivery through the external HTTPS endpoint. A received notification also does not imply that the latest cloud poll succeeded.
 
 ## Central - Details
 
