@@ -34,7 +34,7 @@ async def handle_webhook(
             None,
         )
         if entry_id is None:
-            _LOGGER.error("No entry found for webhook_id: %s", webhook_id)
+            _LOGGER.error("Received a webhook that matches no loaded Diagral entry")
             return
 
         # Retrieve the config entry from the entry_id

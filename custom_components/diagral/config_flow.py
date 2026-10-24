@@ -195,7 +195,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            _LOGGER.debug("Validating Account Credentials: %s", user_input)
+            _LOGGER.debug("Validating account credentials")
             # Check if the user has entered a valid email and pin code
             if not is_valid_email(user_input[CONF_USERNAME]):
                 errors[CONF_USERNAME] = "invalid_email"
@@ -272,7 +272,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                 user_input["alarmpanel_options"][CONF_ALARMPANEL_CODE] = alarmpanelcode
 
             # Check if the user has entered a valid alarm panel code
-            _LOGGER.debug("Validating Options: %s", user_input)
+            _LOGGER.debug("Validating options (code required: %s)", alarmpaneltypecode)
 
             # If the user has selected "never" as action type, we set the code to None
             if alarmpaneltypecode == "never" and alarmpanelcode is not None:
@@ -395,7 +395,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
         self.serialid = config_entry.data[CONF_SERIAL_ID]
 
         if user_input is not None:
-            _LOGGER.debug("Validating Account Credentials: %s", user_input)
+            _LOGGER.debug("Validating account credentials")
             # Check if the user has entered a valid email and pin code
             if not is_valid_email(user_input[CONF_USERNAME]):
                 errors[CONF_USERNAME] = "invalid_email"

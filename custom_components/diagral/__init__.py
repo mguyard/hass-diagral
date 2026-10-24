@@ -107,6 +107,14 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: DiagralConfigEn
     return True
 
 
+def _redact_url(url: str | None) -> str:
+    """Keep scheme and host of a webhook URL; its path carries the secret id."""
+    if not url:
+        return str(url)
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}/<redacted>"
+
+
 async def register_webhook(
     hass: HomeAssistant,
     entry: DiagralConfigEntry,
@@ -166,7 +174,9 @@ async def register_webhook(
                 return None
         else:  # Use the external URL
             webhook_url = f"{external_url}/api/webhook/{webhook_id}"
-            _LOGGER.debug("Selected external URL for webhook : %s", webhook_url)
+            _LOGGER.debug(
+                "Selected external URL for webhook : %s", _redact_url(webhook_url)
+            )
 
         # Check if the webhook is already registered
         try:
@@ -176,8 +186,8 @@ async def register_webhook(
             if actual_webhook is not None:
                 _LOGGER.debug(
                     "Actual Webhook : %s / New Webhook : %s",
-                    actual_webhook,
-                    webhook_url,
+                    _redact_url(actual_webhook.webhook_url),
+                    _redact_url(webhook_url),
                 )
                 if actual_webhook.webhook_url.startswith(
                     f"{urlparse(webhook_url).scheme}://{urlparse(webhook_url).hostname}"
@@ -185,14 +195,14 @@ async def register_webhook(
                     _LOGGER.info(
                         "Webhook already registered for %s on %s. Updating URL to %s",
                         entry.title,
-                        actual_webhook.webhook_url,
-                        webhook_url,
+                        _redact_url(actual_webhook.webhook_url),
+                        _redact_url(webhook_url),
                     )
                 else:
                     _LOGGER.warning(
                         "A Webhook subscription already exists for another URL (%s). Integration will force update of webhook_url to %s",
-                        actual_webhook.webhook_url,
-                        webhook_url,
+                        _redact_url(actual_webhook.webhook_url),
+                        _redact_url(webhook_url),
                     )
                 await api.update_webhook(
                     webhook_url=webhook_url,
@@ -220,7 +230,7 @@ async def register_webhook(
                 _LOGGER.error(
                     "Failed to create webhook for %s on %s : %s",
                     entry.title,
-                    webhook_url,
+                    _redact_url(webhook_url),
                     e,
                 )
                 return None
@@ -228,7 +238,7 @@ async def register_webhook(
                 _LOGGER.info(
                     "Webhook successfully created for %s on : %s",
                     entry.title,
-                    webhook_url,
+                    _redact_url(webhook_url),
                 )
 
         webhook_async_register(
@@ -269,9 +279,7 @@ async def unregister_webhook(
             if actual_webhook is not None and actual_webhook.webhook_url.startswith(
                 "https://hooks.nabu.casa/"
             ):
-                _LOGGER.debug(
-                    "Webhook was a cloudhook. Deleting cloudhook %s", webhook_id
-                )
+                _LOGGER.debug("Webhook was a cloudhook. Deleting cloudhook")
                 try:
                     await cloud_delete_cloudhook(hass, webhook_id)
                 except ValueError as e:
@@ -315,8 +323,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> 
                 try:
                     await diagral.delete_apikey(apikey=apikey)
                     _LOGGER.info(
-                        "API key %s successfully deleted for %s during entry removal",
-                        apikey,
+                        "API key successfully deleted for %s during entry removal",
                         entry.title,
                     )
                 except DiagralAPIError as e:
