@@ -292,6 +292,8 @@ jobs:
         run: |
           pip install pytest pytest-asyncio pytest-cov pytest-timeout pytest-mock pytest-html
           pip install aiohttp aiofiles
+          # Resolve the HA test helpers against the selected core version.
+          pip install "homeassistant==${{ env.HA_VERSION }}" pytest-homeassistant-custom-component
 
       - name: Install integration requirements
         if: env.SKIP_TESTS != 'true'
@@ -327,7 +329,9 @@ jobs:
         run: |
           echo "🧪 Running tests with Home Assistant ${{ env.HA_VERSION }} on Python ${{ matrix.python-version }}"
           cd /tmp/hass-config
-          PYTHONPATH=/tmp/hass-config python -m pytest \
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/tmp/hass-config python -m pytest \
+            -p pytest_asyncio.plugin -p pytest_timeout -p pytest_cov.plugin \
+            -p pytest_html.plugin -p pytest_metadata.plugin -p pytest_mock.plugin \
             custom_components/diagral/tests/ \
             --cov=custom_components/diagral \
             --cov-report=xml \
