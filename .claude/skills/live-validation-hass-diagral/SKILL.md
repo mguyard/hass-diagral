@@ -27,10 +27,10 @@ The development config entry backed by the real credentials therefore stays **di
 | Level | What it proves | Touches the real central | When |
 |---|---|---|---|
 | 1 — pytest with mocks | Logic of each function | No | Always (`testing-hass-diagral`) |
-| 2 — Fake Diagral cloud | Full runtime: setup, polling, webhook register / receive / unregister, events, entity states | No | Any change to runtime behaviour — **not available yet**, see §4 |
+| 2 — Fake Diagral cloud | Full runtime: config flow, setup, polling, webhook register / receive / unregister, events, entity states | No | Any change to runtime behaviour — see §4 |
 | 3 — Real central | Behaviour of the real Diagral API and real hardware | **Yes** | Rarely, with explicit consent: before a significant release, a `pydiagral` bump, or when the real API's behaviour is in question |
 
-Until level 2 exists, a runtime change is validated by level 1 plus, if the maintainer agrees, level 3. State in the pull request which level was used.
+A runtime change is validated by levels 1 and 2; level 3 only if the maintainer asks for it. State in the pull request which level was used.
 
 ---
 
@@ -77,17 +77,67 @@ Read `home-assistant.log` and filter on `custom_components.diagral` and `pydiagr
 
 ---
 
-## 4. Level 2 — Fake Diagral Cloud (planned)
+## 4. Level 2 — Fake Diagral Cloud
 
-Not built yet. The design, so it is not rediscovered:
+Everything lives in `fake_cloud/` next to this file — never in `custom_components/`, which HACS ships to users.
 
-- `pydiagral` builds each request URL from the module global `BASE_URL` at call time (`f"{BASE_URL}/{API_VERSION}/{endpoint}"` in `pydiagral/api.py`). Reassigning `pydiagral.api.BASE_URL` before setup redirects every call — no change to the integration code.
-- The redirect is injected from the Home Assistant venv (a `sitecustomize` gated by an environment variable), never from `custom_components/diagral/`.
-- A small `aiohttp` server implements the endpoints the integration uses — configuration, system details, status, anomalies, start/stop/presence, group activation, webhook get/register/update/delete, API key creation and deletion — ignores the HMAC headers, keeps state in memory, and stores the registered webhook URL.
-- A replay command makes the fake cloud POST a `STATUS`, `ALERT` or `ANOMALY` notification to that URL, with the host rewritten to `localhost:8123`.
-- It runs against a **dedicated config entry with a fake serial and fake credentials**, beside the real entry, which stays disabled. If the redirect ever failed, the real API would reject those credentials: the production central cannot be reached by construction.
-- The Nabu Casa cloudhook branch cannot be exercised this way; it stays covered by level 1.
-- The server and the replay script belong in this skill's directory, not in `custom_components/` — HACS ships that folder to users.
+| File | Role |
+|---|---|
+| `server.py` | `aiohttp` fake of the Diagral API that pydiagral calls, in-memory state, `/_control` endpoints, every exchange logged |
+| `Dockerfile` | Image `diagral-fake-cloud` running `server.py` on port 8099 |
+| `diagral_fake_cloud_redirect.py` | Imported at Python startup through a one-line `.pth`; while the marker file exists it reassigns `pydiagral.api.BASE_URL` and logs `DIAGRAL FAKE CLOUD ACTIVE` each time a `DiagralAPI` is created |
+| `fake_cloud.sh` | `up`, `down`, `status`, `logs` |
+| `smoke.py` | Runs the real pydiagral against the fake, method by method |
+
+### 4.1 How the redirect works
+
+pydiagral builds each URL from the module global `BASE_URL` at call time (`f"{BASE_URL}/{API_VERSION}/{endpoint}"`). Reassigning `pydiagral.api.BASE_URL` redirects every call; patching `pydiagral.constants.BASE_URL` does not. No file of pydiagral or of the integration is modified.
+
+The redirect only acts while `config/.diagral_fake_cloud` exists; the file holds the fake cloud's URL as seen from the Home Assistant container (`http://host.docker.internal:8099`). The `.pth` and the module live in the Home Assistant venv of the container, so a container rebuild removes them.
+
+### 4.2 Session
+
+1. `fake_cloud.sh up` — builds and starts the container, installs the redirect, writes the marker.
+2. Ask the human to restart Home Assistant. Check `home-assistant.log` shows `DIAGRAL FAKE CLOUD ACTIVE`.
+3. If no fake entry exists yet, create one through the config flow over REST — it exercises the whole flow:
+
+   ```
+   POST /api/config/config_entries/flow               {"handler": "diagral"}
+   POST /api/config/config_entries/flow/<flow_id>     {"serial_id": "FAKECENTRAL01"}
+   POST /api/config/config_entries/flow/<flow_id>     {"username": "fake@example.com", "password": "fake-password", "pin_code": "1234"}
+   POST /api/config/config_entries/flow/<flow_id>     {"alarmpanel_options": {"alarmpanel_actiontype_code": "never"}}
+   ```
+
+   The fake accepts only these credentials (overridable with `FAKE_USERNAME`, `FAKE_PASSWORD`, `FAKE_PIN_CODE`), which also lets the config flow's error paths be tested. The entry is persisted, so later sessions re-enable it instead of creating another (websocket `config_entries/disable` with `"disabled_by": null`).
+4. Drive scenarios through the control endpoints (§4.3) and read the result on Home Assistant (§3).
+5. Disable the fake entry while the fake cloud is still up — websocket `config_entries/disable` with `"disabled_by": "user"`. It unloads cleanly and deletes its subscription. Left enabled, it would send its fake credentials to the real Diagral cloud at the next start and retry forever.
+6. `fake_cloud.sh down`, then ask the human to restart Home Assistant. Do not leave the redirect in place at the end of a session.
+
+Identify the fake entry by `FAKECENTRAL01` in its title, and print only states: the real entry's title is the maintainer's alarm name.
+
+`docker logs -f diagral-fake-cloud` (or `fake_cloud.sh logs`) shows every exchange: `IN` for calls from Home Assistant, `OUT` for webhooks pushed to it, `CTL` for control calls. Credentials are redacted; all data is synthetic.
+
+### 4.3 Control endpoints
+
+All on `http://localhost:8099`, JSON bodies. `serial` may be omitted when only one system is known.
+
+| Endpoint | Body | Effect |
+|---|---|---|
+| `GET /_control/state` | — | Systems, statuses, issued keys, anomalies, registered webhook |
+| `POST /_control/reset` | — | Forget every system and token |
+| `POST /_control/status` | `{"status": "GROUP", "activated_groups": [1, 2]}` | What the next poll returns (`OFF`, `GROUP`, `TEMPO_GROUP`, `PRESENCE`) |
+| `POST /_control/anomalies` | `{"anomalies": {"sensors": [{"serial": "…", "index": 1, "group": 1, "label": "…", "anomaly_names": [{"id": 1, "name": "Low battery"}]}]}}` or `{"clear": true}` | What `get_anomalies` returns |
+| `POST /_control/notify` | `{"type": "STATUS" \| "ALERT" \| "ANOMALY", "alarm_code": "1130", "group_index": "01", "detail": {…}, "user": {…}}` | POSTs a notification to the webhook Home Assistant registered, host rewritten to `HA_URL`; `"raw": {…}` sends a payload as is |
+
+pydiagral derives `alarm_type` from `alarm_code`, so the code decides how the notification is handled — 1130, 1139, 1141 are intrusions; 3401 an arming; 1384 a low battery.
+
+Polling goes through the coordinator's debouncer: after `homeassistant.update_entity`, allow ten seconds before reading a state that depends on a second refresh.
+
+### 4.4 Limits
+
+- The Nabu Casa cloudhook branch cannot be exercised; it stays covered by level 1.
+- `server.py` implements what pydiagral 1.6.0 calls. After a pydiagral bump, run `smoke.py` with the new version before trusting the fake.
+- An existing **disabled** diagral entry is a realistic condition, not noise: keep the real entry disabled beside the fake one.
 
 ---
 
