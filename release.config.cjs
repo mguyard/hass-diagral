@@ -54,6 +54,11 @@ module.exports = {
           finalizeContext(context) {
             for (const group of context.commitGroups ?? []) {
               for (const commit of group.commits) {
+                // The template renders every reference as "closes #N": keep
+                // only those a closing keyword such as `Closes` introduced.
+                commit.references = (commit.references ?? []).filter(
+                  (reference) => reference.action
+                );
                 const people = credits(commit);
                 if (people.length > 0) {
                   commit.subject = `${commit.subject} (${people.join(", ")})`;
