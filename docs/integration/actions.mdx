@@ -78,6 +78,8 @@ Disarm one or more groups
 <Property name="action" type="diagral.register_webhook" required>
 Register webhook in Diagral Cloud - **Only one webhook can be registered for an installation**
 
+If the subscription currently points to another installation, this action takes it over: the other installation stops receiving events. See [Existing subscription](/integration/webhook#existing-subscription).
+
     ```yaml
     action: diagral.register_webhook
     target:

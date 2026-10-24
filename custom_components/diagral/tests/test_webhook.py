@@ -1,11 +1,14 @@
-"""Tests for enrich_data_alert_anomaly() in webhook.py (Tier 2).
+"""Tests for webhook.py.
 
-Tests the pure data-enrichment function without any HTTP calls
-or Home Assistant event bus interaction.
+enrich_data_alert_anomaly() is tested as a pure function; handle_webhook()
+with a mocked Home Assistant, request and coordinator.
 """
-from datetime import datetime, timezone
 
-import pytest
+from datetime import UTC, datetime
+import logging
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from custom_components.diagral.webhook import enrich_data_alert_anomaly, handle_webhook
 from pydiagral.models import (
     DeviceInfos,
     DeviceList,
@@ -13,10 +16,10 @@ from pydiagral.models import (
     WebHookNotificationDetail,
 )
 
-from custom_components.diagral.webhook import enrich_data_alert_anomaly
 
-
-def make_notification(device_type: str | None, device_index: str | None) -> WebHookNotification:
+def make_notification(
+    device_type: str | None, device_index: str | None
+) -> WebHookNotification:
     """Build a minimal WebHookNotification for testing enrich_data_alert_anomaly()."""
     detail = WebHookNotificationDetail(
         device_type=device_type,
@@ -31,13 +34,19 @@ def make_notification(device_type: str | None, device_index: str | None) -> WebH
         group_index="1",
         detail=detail,
         user=None,
-        date_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        date_time=datetime(2024, 1, 1, tzinfo=UTC),
     )
 
 
 def make_device_list(**kwargs) -> DeviceList:
     """Build a DeviceList with the provided device type lists."""
-    defaults = dict(cameras=[], commands=[], sensors=[], sirens=[], transmitters=[])
+    defaults = {
+        "cameras": [],
+        "commands": [],
+        "sensors": [],
+        "sirens": [],
+        "transmitters": [],
+    }
     defaults.update(kwargs)
     return DeviceList(**defaults)
 
@@ -86,3 +95,95 @@ class TestEnrichDataAlertAnomaly:
         devices = make_device_list(sensors=[DeviceInfos(index=3, label="Back Door")])
         result = enrich_data_alert_anomaly(data, devices, {})
         assert result.detail.device_label == "Back Door"
+
+
+WEBHOOK_ID = "webhook-of-the-loaded-entry"
+
+
+def make_hass_with_entries() -> tuple[MagicMock, MagicMock]:
+    """Return a hass mock with a disabled diagral entry before a loaded one.
+
+    The disabled entry has no runtime_data, as in Home Assistant.
+    """
+    disabled = MagicMock(spec=["entry_id", "state"])
+    disabled.entry_id = "disabled"
+    loaded = MagicMock()
+    loaded.entry_id = "loaded"
+    loaded.runtime_data.webhook_id = WEBHOOK_ID
+    loaded.runtime_data.coordinator.data = {"devices_infos": None, "groups": []}
+    loaded.runtime_data.coordinator.async_request_refresh = AsyncMock()
+
+    hass = MagicMock()
+    hass.config_entries.async_entries.return_value = [disabled, loaded]
+    hass.config_entries.async_loaded_entries.return_value = [loaded]
+    hass.config_entries.async_get_entry.side_effect = {
+        "disabled": disabled,
+        "loaded": loaded,
+    }.get
+    return hass, loaded
+
+
+def make_request(payload: dict) -> MagicMock:
+    """Return an aiohttp request mock whose JSON body is the payload."""
+    request = MagicMock()
+    request.json = AsyncMock(return_value=payload)
+    return request
+
+
+class TestHandleWebhook:
+    """Tests for handle_webhook()."""
+
+    async def test_disabled_entry_does_not_block_loaded_one(self):
+        """A STATUS webhook reaches the loaded entry despite a disabled sibling."""
+        hass, loaded = make_hass_with_entries()
+        request = make_request(
+            {
+                "transmitter_id": "FAKECENTRAL01",
+                "alarm_code": "3401",
+                "alarm_description": "Total system arming",
+                "group_index": "01",
+                "detail": {},
+                "user": {"username": "Fake User", "user_type": "owner"},
+                "date_time": "2026-01-01T12:00:00Z",
+            }
+        )
+
+        with patch("custom_components.diagral.webhook.async_dispatcher_send"):
+            await handle_webhook(hass, WEBHOOK_ID, request)
+
+        loaded.runtime_data.coordinator.async_request_refresh.assert_awaited_once()
+        hass.bus.async_fire.assert_called_once()
+        assert hass.bus.async_fire.call_args.args[0] == "DIAGRAL_EVENT"
+
+    async def test_unknown_webhook_id_is_ignored(self):
+        """A webhook id matching no loaded entry publishes nothing."""
+        hass, loaded = make_hass_with_entries()
+        request = make_request(
+            {
+                "transmitter_id": "FAKECENTRAL01",
+                "alarm_code": "3401",
+                "date_time": "2026-01-01T12:00:00Z",
+            }
+        )
+
+        await handle_webhook(hass, "unknown-webhook", request)
+
+        loaded.runtime_data.coordinator.async_request_refresh.assert_not_awaited()
+        hass.bus.async_fire.assert_not_called()
+
+    async def test_unknown_webhook_id_not_logged(self, caplog):
+        """The error for an unknown webhook does not echo its id."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        hass, _ = make_hass_with_entries()
+        request = make_request(
+            {
+                "transmitter_id": "FAKECENTRAL01",
+                "alarm_code": "3401",
+                "date_time": "2026-01-01T12:00:00Z",
+            }
+        )
+
+        await handle_webhook(hass, "SECRETUNKNOWNID", request)
+
+        assert "matches no loaded Diagral entry" in caplog.text
+        assert "SECRETUNKNOWNID" not in caplog.text

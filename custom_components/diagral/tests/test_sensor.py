@@ -3,18 +3,18 @@
 Tests _update_anomalies() and _update_active_groups() without making
 real API calls. dt_util is patched to avoid time-dependent output.
 """
-from datetime import datetime, timezone
 
-import pytest
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
-from pydiagral.models import Anomalies, AnomalyDetail, AnomalyName, DeviceList
 
 from custom_components.diagral.sensor import DiagralSensor
-
+from pydiagral.models import Anomalies, AnomalyDetail, AnomalyName, DeviceList
 
 # An empty DeviceList with explicit empty lists to avoid iteration errors
 # (vars(MagicMock()) would contain non-iterable sentinel objects)
-EMPTY_DEVICE_LIST = DeviceList(cameras=[], commands=[], sensors=[], sirens=[], transmitters=[])
+EMPTY_DEVICE_LIST = DeviceList(
+    cameras=[], commands=[], sensors=[], sirens=[], transmitters=[]
+)
 
 
 def make_sensor_mock() -> DiagralSensor:
@@ -42,9 +42,11 @@ class TestUpdateAnomalies:
     def test_empty_anomalies_object_sets_value_to_zero(self):
         """Anomalies object with all None lists must count as 0."""
         sensor = make_sensor_mock()
-        anomalies = Anomalies(created_at=datetime(2024, 1, 1, tzinfo=timezone.utc))
+        anomalies = Anomalies(created_at=datetime(2024, 1, 1, tzinfo=UTC))
         with patch("custom_components.diagral.sensor.dt_util") as mock_dt:
-            mock_dt.as_local.return_value.isoformat.return_value = "2024-01-01T00:00:00+00:00"
+            mock_dt.as_local.return_value.isoformat.return_value = (
+                "2024-01-01T00:00:00+00:00"
+            )
             mock_dt.now.return_value.isoformat.return_value = "2024-01-01T00:00:00"
             sensor._update_anomalies(anomalies, [], EMPTY_DEVICE_LIST)
         assert sensor._attr_native_value == 0
@@ -55,11 +57,13 @@ class TestUpdateAnomalies:
         anomaly1 = AnomalyDetail(anomaly_names=[AnomalyName(id=1, name="Low battery")])
         anomaly2 = AnomalyDetail(anomaly_names=[AnomalyName(id=2, name="Tamper")])
         anomalies = Anomalies(
-            created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            created_at=datetime(2024, 1, 1, tzinfo=UTC),
             sensors=[anomaly1, anomaly2],
         )
         with patch("custom_components.diagral.sensor.dt_util") as mock_dt:
-            mock_dt.as_local.return_value.isoformat.return_value = "2024-01-01T00:00:00+00:00"
+            mock_dt.as_local.return_value.isoformat.return_value = (
+                "2024-01-01T00:00:00+00:00"
+            )
             mock_dt.now.return_value.isoformat.return_value = "2024-01-01T00:00:00"
             sensor._update_anomalies(anomalies, [], EMPTY_DEVICE_LIST)
         assert sensor._attr_native_value == 2
@@ -69,14 +73,19 @@ class TestUpdateAnomalies:
         sensor = make_sensor_mock()
         anomaly = AnomalyDetail(anomaly_names=[AnomalyName(id=1, name="Fault")])
         anomalies = Anomalies(
-            created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            created_at=datetime(2024, 1, 1, tzinfo=UTC),
             sensors=[anomaly],
         )
         with patch("custom_components.diagral.sensor.dt_util") as mock_dt:
-            mock_dt.as_local.return_value.isoformat.return_value = "2024-01-01T00:00:00+00:00"
+            mock_dt.as_local.return_value.isoformat.return_value = (
+                "2024-01-01T00:00:00+00:00"
+            )
             mock_dt.now.return_value.isoformat.return_value = "2024-01-01T12:00:00"
             sensor._update_anomalies(anomalies, [], EMPTY_DEVICE_LIST)
-        assert sensor._attr_extra_state_attributes.get("updated_at") == "2024-01-01T12:00:00"
+        assert (
+            sensor._attr_extra_state_attributes.get("updated_at")
+            == "2024-01-01T12:00:00"
+        )
 
 
 class TestUpdateActiveGroups:
@@ -97,7 +106,11 @@ class TestUpdateActiveGroups:
         system_status.status = "group"
         system_status.activated_groups = [1, 2]
 
-        groups = [self._make_group(1, "Group 1"), self._make_group(2, "Group 2"), self._make_group(3, "Group 3")]
+        groups = [
+            self._make_group(1, "Group 1"),
+            self._make_group(2, "Group 2"),
+            self._make_group(3, "Group 3"),
+        ]
         alarm_config = MagicMock()
 
         with patch("custom_components.diagral.sensor.dt_util") as mock_dt:
@@ -124,7 +137,7 @@ class TestUpdateActiveGroups:
         assert sensor._attr_native_value == 1
 
     def test_groups_info_active_flag_is_correct(self):
-        """groups attribute must correctly flag active vs inactive groups."""
+        """Groups attribute must correctly flag active vs inactive groups."""
         sensor = make_sensor_mock()
 
         system_status = MagicMock()

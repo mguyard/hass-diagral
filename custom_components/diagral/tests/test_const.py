@@ -3,6 +3,7 @@
 Uses importlib to load const.py directly, bypassing the package __init__.py
 which imports Home Assistant modules.
 """
+
 import importlib.util
 import pathlib
 
@@ -133,3 +134,19 @@ class TestConfKeys:
         """CONF_ALARMPANEL_CODE must be defined."""
         assert hasattr(const, "CONF_ALARMPANEL_CODE")
         assert isinstance(const.CONF_ALARMPANEL_CODE, str)
+
+
+class TestAlarmPanelCode:
+    """Tests for alarm panel code constants."""
+
+    def test_alarmpanel_code_min_length(self, const):
+        """The alarm panel code must be at least 4 digits long."""
+        assert const.ALARMPANEL_CODE_MIN_LENGTH == 4
+
+
+class TestAlarmIntrusionCodes:
+    """Tests for ALARM_INTRUSION_CODES."""
+
+    def test_alarm_intrusion_codes(self, const):
+        """Intrusion, confirmed intrusion and confirmed pre-alarm trigger the panel."""
+        assert set(const.ALARM_INTRUSION_CODES) == {1130, 1139, 1141}

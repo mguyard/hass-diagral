@@ -26,6 +26,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DiagralConfigEntry, register_webhook, unregister_webhook
 from .const import (
+    ALARM_INTRUSION_CODES,
     CONF_ALARMPANEL_ACTIONTYPE_CODE,
     CONF_ALARMPANEL_CODE,
     DOMAIN,
@@ -120,28 +121,25 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
 
         # Update the status of the alarm
         new_state: AlarmControlPanelState | None = self._get_ha_state(system_status)
-        if new_state:
-            if new_state != self.state:
-                # If the alarm is triggered, keep the trigger until disarm
-                if (
-                    self.state == AlarmControlPanelState.TRIGGERED
-                    and new_state != AlarmControlPanelState.DISARMED
-                ):
-                    _LOGGER.info(
-                        "Alarm state remains triggered despite change from %s to %s",
-                        self.state,
-                        new_state,
-                    )
-                    self._attr_alarm_state = self.state
-                else:  # Otherwise, update the state
-                    _LOGGER.info(
-                        "Alarm state changed from %s to %s", self.state, new_state
-                    )
-                    self._attr_alarm_state = new_state
-                    self._attr_extra_state_attributes.pop("trigger", None)
+        if new_state and new_state != self.state:
+            # If the alarm is triggered, keep the trigger until disarm
+            if (
+                self.state == AlarmControlPanelState.TRIGGERED
+                and new_state != AlarmControlPanelState.DISARMED
+            ):
+                _LOGGER.info(
+                    "Alarm state remains triggered despite change from %s to %s",
+                    self.state,
+                    new_state,
+                )
+                self._attr_alarm_state = self.state
+            else:  # Otherwise, update the state
+                _LOGGER.info("Alarm state changed from %s to %s", self.state, new_state)
+                self._attr_alarm_state = new_state
+                self._attr_extra_state_attributes.pop("trigger", None)
 
-                # Update the code requirement
-                self._attr_code_arm_required = self._is_code_arm_required()
+            # Update the code requirement
+            self._attr_code_arm_required = self._is_code_arm_required()
 
         # Always write state so availability follows the coordinator
         self.async_write_ha_state()
@@ -186,14 +184,12 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
             self._config.options.alarmpanel_options[CONF_ALARMPANEL_ACTIONTYPE_CODE]
             == "disarm"
         ):
-            if self._attr_alarm_state in (
+            return self._attr_alarm_state in (
                 AlarmControlPanelState.ARMING,
                 AlarmControlPanelState.ARMED_AWAY,
                 AlarmControlPanelState.ARMED_HOME,
                 AlarmControlPanelState.TRIGGERED,
-            ):
-                return True
-            return False  # If the alarm is disarmed, don't require code
+            )
         return True  # For all other cases, require code
 
     def _validate_code(self, to_state, code_provided: int | None = None) -> bool:
@@ -290,7 +286,7 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         """Register the webhook for Diagral."""
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
         webhook_id = await register_webhook(
-            self.hass, entry, entry.runtime_data.api, "HA Action"
+            self.hass, entry, entry.runtime_data.api, "HA Action", take_over=True
         )
         # Force the webhook_id in the entry runtime data to be sure it is saved
         entry.runtime_data.webhook_id = webhook_id
@@ -344,10 +340,6 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         """Handle incoming event for ALERT events."""
         _LOGGER.debug("%s received event: %s", self.name, event)
         event_alarm_code = int(event["data"].get("alarm_code"))
-        # 1130 : INTRUSION
-        # 1139 : INTRUSION-CONFIRMED
-        # 1141 : PREALARM-CONFIRMED
-        ALARM_INTRUSION_CODES = {1130, 1139, 1141}
         if event_alarm_code in ALARM_INTRUSION_CODES:
             # Set the group name and id
             groups: list[Group] = self._alarm_config.groups
