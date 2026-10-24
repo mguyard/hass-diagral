@@ -12,12 +12,16 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.diagral import (
+    async_migrate_entry,
     async_remove_entry,
     register_webhook,
     unregister_webhook,
 )
 from custom_components.diagral.const import (
+    CONF_PIN_CODE,
     CONF_WEBHOOK_URL_HASH,
+    CONFIG_MINOR_VERSION,
+    CONFIG_VERSION,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
 )
 from pydiagral.exceptions import DiagralAPIError
@@ -299,3 +303,41 @@ class TestLogsHideSecrets:
         diagral.delete_apikey.assert_awaited_once_with(apikey="SECRETAPIKEY")
         assert "SECRETAPIKEY" not in debug_log.text
         assert "SECRETPASSWORD" not in debug_log.text
+
+
+def make_versioned_entry(version: int, minor: int, pin) -> MagicMock:
+    """Return a config entry mock stored at the given config version."""
+    entry = MagicMock()
+    entry.version = version
+    entry.minor_version = minor
+    entry.data = {"serial_id": "FAKECENTRAL01", CONF_PIN_CODE: pin}
+    return entry
+
+
+class TestMigrateEntry:
+    """async_migrate_entry() brings any older entry to the current version."""
+
+    @pytest.mark.parametrize(
+        ("minor", "pin", "expected_pin"),
+        [(1, 1234, "1234"), (2, "1234", "1234"), (3, "0123", "0123")],
+        ids=["1.1-int-pin", "1.2", "1.3-already-migrated"],
+    )
+    async def test_version_1_reaches_current_version(self, minor, pin, expected_pin):
+        """Every 1.x entry ends at the current version, PIN stored as text."""
+        hass = MagicMock()
+        entry = make_versioned_entry(1, minor, pin)
+
+        assert await async_migrate_entry(hass, entry) is True
+
+        kwargs = hass.config_entries.async_update_entry.call_args.kwargs
+        assert kwargs["version"] == CONFIG_VERSION
+        assert kwargs["minor_version"] == CONFIG_MINOR_VERSION
+        assert kwargs["data"][CONF_PIN_CODE] == expected_pin
+
+    async def test_future_version_is_refused(self):
+        """An entry from a newer release is not touched."""
+        hass = MagicMock()
+        entry = make_versioned_entry(CONFIG_VERSION + 1, 1, "1234")
+
+        assert await async_migrate_entry(hass, entry) is False
+        hass.config_entries.async_update_entry.assert_not_called()

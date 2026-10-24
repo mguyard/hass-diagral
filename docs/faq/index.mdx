@@ -11,6 +11,14 @@ summary: Frequently Asked Questions
 To change your credentials, go to [the integration configuration](https://my.home-assistant.io/redirect/integration/?domain=diagral), click on the 3 vertical dots icon and select `Reconfigure`.
 </Accordion>
 
+### PIN code starting with 0
+
+<Accordion title="My PIN code starts with 0 and the integration fails to start" icon="question">
+Versions before `1.2.0` stored the PIN code as a number, which drops leading zeros: `0123` was saved as `123`. The integration cannot restore the missing zeros, since the length of a Diagral PIN code varies.
+
+If you configured the integration before `1.2.0` and your PIN code starts with 0, go to [the integration configuration](https://my.home-assistant.io/redirect/integration/?domain=diagral), click on the 3 vertical dots icon, select `Reconfigure` and enter your full PIN code.
+</Accordion>
+
 ### Enable/Disable Code for Arming/Disarming
 
 <Accordion title="How to" icon="question">
