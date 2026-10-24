@@ -343,10 +343,11 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         if event_alarm_code in ALARM_INTRUSION_CODES:
             # Set the group name and id
             groups: list[Group] = self._alarm_config.groups
+            # An alert may name no group, or a group code rather than an index:
+            # the panel must trigger either way.
+            raw_group_index = str(event["data"].get("group_index") or "")
             group_index: int | None = (
-                int(event["data"].get("group_index"))
-                if "group_index" in event["data"]
-                else None
+                int(raw_group_index) if raw_group_index.isdigit() else None
             )
             if group_index:
                 group: Group = next(
