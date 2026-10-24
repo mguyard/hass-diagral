@@ -59,23 +59,23 @@ icon: mdi:alert-box
 friendly_name: Home Alarm Anomalies
 created_at: 2025-02-25T17:45:10.796890+01:00
 updated_at: 2025-02-25T18:14:08.936700+01:00
-anomalies: // [!code highlight]
-  sensors: // [!code highlight]
-    - serial: '123' // [!code highlight]
-      index: 0 // [!code highlight]
-      group: Kitchen // [!code highlight]
-      label: Kitchen Door // [!code highlight]
-      id: 23456789 // [!code highlight]
-      name: sensorAlert // [!code highlight]
-    - id: 98765432 // [!code highlight]
-      name: sensorAlert2 // [!code highlight]
-  central: // [!code highlight]
-    - id: 12805213 // [!code highlight]
-      name: mainPowerSupplyAlert // [!code highlight]
-    - serial: 234 // [!code highlight]
-      group: Détecteurs de Mouvements // [!code highlight]
-      id: 12345678 // [!code highlight]
-      name: mainPowerSupplyAlert2 // [!code highlight]
+anomalies: # [!code highlight]
+  sensors: # [!code highlight]
+    - serial: '123' # [!code highlight]
+      index: 0 # [!code highlight]
+      group: Kitchen # [!code highlight]
+      label: Kitchen Door # [!code highlight]
+      id: 23456789 # [!code highlight]
+      name: sensorAlert # [!code highlight]
+    - id: 98765432 # [!code highlight]
+      name: sensorAlert2 # [!code highlight]
+  central: # [!code highlight]
+    - id: 12805213 # [!code highlight]
+      name: mainPowerSupplyAlert # [!code highlight]
+    - serial: 234 # [!code highlight]
+      group: Détecteurs de Mouvements # [!code highlight]
+      id: 12345678 # [!code highlight]
+      name: mainPowerSupplyAlert2 # [!code highlight]
 ```
 </Card>
 
@@ -85,7 +85,7 @@ All anomalies are under `anomalies` key. The first level (e.g., sensor and centr
 - sirens
 - cameras
 - commands
-- trasceivers
+- transceivers
 - transmitters
 - central
 
@@ -118,19 +118,19 @@ Anomalie {{ anomalies[location]|map(attribute='name')|join(', ') }} on {{ locati
 unit_of_measurement: active groups
 icon: mdi:home-group
 friendly_name: Home Alarm Active Groups
-groups: // [!code highlight]
-  - index: 1 // [!code highlight]
-    name: Kitchen // [!code highlight]
-    active: true // [!code highlight]
-  - index: 2 // [!code highlight]
-    name: Stair // [!code highlight]
-    active: true // [!code highlight]
-  - index: 3 // [!code highlight]
-    name: Bed Room // [!code highlight]
-    active: true // [!code highlight]
-  - index: 4 // [!code highlight]
-    name: Garage // [!code highlight]
-    active: false // [!code highlight]
+groups: # [!code highlight]
+  - index: 1 # [!code highlight]
+    name: Kitchen # [!code highlight]
+    active: true # [!code highlight]
+  - index: 2 # [!code highlight]
+    name: Stair # [!code highlight]
+    active: true # [!code highlight]
+  - index: 3 # [!code highlight]
+    name: Bed Room # [!code highlight]
+    active: true # [!code highlight]
+  - index: 4 # [!code highlight]
+    name: Garage # [!code highlight]
+    active: false # [!code highlight]
 updated_at: "2025-02-26T00:24:28.212737+01:00"
 ```
 </Card>
