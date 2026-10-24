@@ -49,6 +49,9 @@ up() {
   docker exec "$ha" sh -c "echo '$FAKE_URL' > '$MARKER'"
   echo "marker      $MARKER -> $FAKE_URL"
   echo
+  # Read back what is really in place: a truncated run can stop before the marker
+  status
+  echo
   echo "Restart Home Assistant for the redirect to take effect."
 }
 
