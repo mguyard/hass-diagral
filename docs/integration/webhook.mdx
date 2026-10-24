@@ -32,9 +32,11 @@ As long as you meet the aforementioned conditions, webhooks will be automaticall
 You can confirm this by checking the "INFO" logs in Home Assistant
 
 ```logs
-2024-03-15 09:42:13.627 INFO (MainThread) [custom_components.diagral] Webhook successfully created for HomeSystem (27458196034A82) on : https://my-homeassistant.example.com/api/webhook/5af9c3d1e8b7246f0a9c5d8e2b1f4a7c3d6e9b8a2f5c8d7e4b1a9f6c3d2e5b8
+2024-03-15 09:42:13.627 INFO (MainThread) [custom_components.diagral] Webhook successfully created for HomeSystem (27458196034A82) on : https://my-homeassistant.example.com/<redacted>
 2025-02-26 16:29:00.458 INFO (MainThread) [custom_components.diagral] Webhook successfully registered for HomeSystem (27458196034A82)
 ```
+
+The end of the webhook URL is replaced by `<redacted>` in the logs: it contains the webhook ID, and anyone who knows it could send fake alarm events to your Home Assistant. Only the host is shown, so you can still check which address was used.
 
 In case of any error, it will also be indicated in the Home Assistant logs.
 

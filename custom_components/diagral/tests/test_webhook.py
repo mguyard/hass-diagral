@@ -5,6 +5,7 @@ with a mocked Home Assistant, request and coordinator.
 """
 
 from datetime import UTC, datetime
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.diagral.webhook import enrich_data_alert_anomaly, handle_webhook
@@ -169,3 +170,20 @@ class TestHandleWebhook:
 
         loaded.runtime_data.coordinator.async_request_refresh.assert_not_awaited()
         hass.bus.async_fire.assert_not_called()
+
+    async def test_unknown_webhook_id_not_logged(self, caplog):
+        """The error for an unknown webhook does not echo its id."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        hass, _ = make_hass_with_entries()
+        request = make_request(
+            {
+                "transmitter_id": "FAKECENTRAL01",
+                "alarm_code": "3401",
+                "date_time": "2026-01-01T12:00:00Z",
+            }
+        )
+
+        await handle_webhook(hass, "SECRETUNKNOWNID", request)
+
+        assert "matches no loaded Diagral entry" in caplog.text
+        assert "SECRETUNKNOWNID" not in caplog.text

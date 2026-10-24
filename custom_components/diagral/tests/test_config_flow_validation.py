@@ -4,9 +4,12 @@ Tests is_valid_email(), is_valid_pin(), and is_valid_alarmpanel_code()
 which have no side effects and require only Home Assistant to be importable.
 """
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.diagral.config_flow import (
+    CannotConnect,
+    DiagralConfigFlow,
     DiagralOptionsFlow,
     is_valid_alarmpanel_code,
     is_valid_email,
@@ -267,3 +270,79 @@ class TestValidateAccount:
             result = await validate_account(account)
         diagral.try_connection.assert_awaited_once_with(ephemeral=True)
         assert result.keys == "KEYS"
+
+
+class TestConfigFlowLogs:
+    """The config flow must never log credentials or the panel code."""
+
+    @staticmethod
+    def make_flow() -> DiagralConfigFlow:
+        """Return a config flow bound to a mocked Home Assistant."""
+        flow = DiagralConfigFlow()
+        flow.hass = MagicMock()
+        flow.serialid = "FAKECENTRAL01"
+        return flow
+
+    async def test_account_step_hides_credentials(self, caplog):
+        """Submitting the account step logs neither password nor PIN."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        flow = self.make_flow()
+        with (
+            patch(
+                "custom_components.diagral.config_flow.validate_account",
+                AsyncMock(),
+            ),
+            patch.object(flow, "async_step_options", AsyncMock()),
+        ):
+            await flow.async_step_account(
+                {
+                    CONF_USERNAME: "user@example.com",
+                    CONF_PASSWORD: "SECRETPASSWORD",
+                    CONF_PIN_CODE: "97531",
+                }
+            )
+        assert "SECRETPASSWORD" not in caplog.text
+        assert "97531" not in caplog.text
+
+    async def test_reconfigure_step_hides_credentials(self, caplog):
+        """Submitting the reconfigure step logs neither password nor PIN."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        flow = self.make_flow()
+        flow.context = {"entry_id": "entry"}
+        flow.hass.config_entries.async_get_entry.return_value.data = {
+            "serial_id": "FAKECENTRAL01",
+            CONF_USERNAME: "user@example.com",
+            CONF_PASSWORD: "old",
+            CONF_PIN_CODE: "1111",
+        }
+        with patch(
+            "custom_components.diagral.config_flow.validate_account",
+            AsyncMock(side_effect=CannotConnect),
+        ):
+            await flow.async_step_reconfigure(
+                {
+                    CONF_USERNAME: "user@example.com",
+                    CONF_PASSWORD: "SECRETPASSWORD",
+                    CONF_PIN_CODE: "97531",
+                }
+            )
+        assert "SECRETPASSWORD" not in caplog.text
+        assert "97531" not in caplog.text
+
+    async def test_options_step_hides_panel_code(self, caplog):
+        """Submitting the options step does not log the alarm panel code."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        flow = self.make_flow()
+        with patch(
+            "custom_components.diagral.config_flow.validate_account",
+            AsyncMock(side_effect=CannotConnect),
+        ):
+            await flow.async_step_options(
+                {
+                    "alarmpanel_options": {
+                        CONF_ALARMPANEL_ACTIONTYPE_CODE: "always",
+                        CONF_ALARMPANEL_CODE: 24680,
+                    }
+                }
+            )
+        assert "24680" not in caplog.text
