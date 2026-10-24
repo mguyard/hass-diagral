@@ -4,17 +4,26 @@ Tests _get_ha_state(), _validate_code(), and _is_code_arm_required()
 without making real API calls or instantiating the full entity.
 """
 
+import asyncio
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+from custom_components.diagral import alarm_control_panel as panel_module
 from custom_components.diagral.alarm_control_panel import DiagralAlarmControlPanel
 from custom_components.diagral.const import (
     CONF_ALARMPANEL_ACTIONTYPE_CODE,
     CONF_ALARMPANEL_CODE,
 )
+from pydiagral.exceptions import (
+    AuthenticationError,
+    ClientError,
+    DiagralAPIError,
+    ServerError,
+)
 import pytest
 
 from homeassistant.components.alarm_control_panel import AlarmControlPanelState
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 
 def make_panel_mock(
@@ -275,3 +284,196 @@ class TestHandleEventAlert:
         panel._handle_event_alert({"data": {"alarm_code": "1301", "group_index": "01"}})
         assert panel._attr_alarm_state == AlarmControlPanelState.ARMED_AWAY
         panel.async_write_ha_state.assert_not_called()
+
+
+def status(value: str, groups: list[int] | None = None) -> SimpleNamespace:
+    """Return a Diagral system status."""
+    return SimpleNamespace(status=value, activated_groups=groups or [])
+
+
+def make_commanded_panel() -> DiagralAlarmControlPanel:
+    """Return a disarmed panel whose API answers every command."""
+    panel = make_panel_mock("never", None, AlarmControlPanelState.DISARMED)
+    panel.coordinator = MagicMock()
+    panel.coordinator.data = {"system_status": status("OFF")}
+    panel._api = MagicMock()
+    for command in (
+        "stop_system",
+        "start_system",
+        "presence",
+        "activate_group",
+        "disable_group",
+        "get_system_status",
+    ):
+        setattr(panel._api, command, AsyncMock())
+    return panel
+
+
+# (panel method, its arguments, API command, status the command returns)
+COMMANDS = [
+    ("async_alarm_disarm", (), "stop_system", status("OFF")),
+    ("async_alarm_arm_away", (), "start_system", status("GROUP", [1, 2])),
+    ("async_alarm_arm_home", (), "presence", status("PRESENCE", [1])),
+    ("action_arm_groups", ([1, 2],), "activate_group", status("GROUP", [1, 2])),
+    ("action_disarm_groups", ([1],), "disable_group", status("GROUP", [2])),
+]
+COMMAND_IDS = ["disarm", "arm-away", "arm-home", "arm-groups", "disarm-groups"]
+
+
+def published_status(panel: DiagralAlarmControlPanel):
+    """Return the status the panel pushed to the coordinator."""
+    data = panel.coordinator.async_set_updated_data.call_args.args[0]
+    return data["system_status"]
+
+
+class TestCommands:
+    """Commands publish the status Diagral returns and report failures."""
+
+    @pytest.mark.parametrize(
+        ("method", "args", "command", "returned"), COMMANDS, ids=COMMAND_IDS
+    )
+    async def test_success_publishes_returned_status(
+        self, method, args, command, returned
+    ):
+        """The status a command returns is published at once, without polling."""
+        panel = make_commanded_panel()
+        getattr(panel._api, command).return_value = returned
+        await getattr(panel, method)(*args)
+        assert published_status(panel) is returned
+        panel.coordinator.async_request_refresh.assert_not_called()
+        panel._api.get_system_status.assert_not_awaited()
+
+    async def test_invalid_code_is_refused(self):
+        """A wrong code raises a validation error and sends nothing."""
+        panel = make_commanded_panel()
+        panel._config.options.alarmpanel_options = {
+            CONF_ALARMPANEL_ACTIONTYPE_CODE: "always",
+            CONF_ALARMPANEL_CODE: 1234,
+        }
+        with pytest.raises(ServiceValidationError) as raised:
+            await panel.async_alarm_arm_away(code="9999")
+        assert raised.value.translation_key == "invalid_code"
+        panel._api.start_system.assert_not_awaited()
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            AuthenticationError("Authentication rejected by Diagral"),
+            DiagralAPIError("Diagral API error (HTTP 400)", status_code=400),
+        ],
+        ids=["auth", "bad-request"],
+    )
+    async def test_rejected_command_fails(self, error):
+        """A command Diagral refuses fails without a status read."""
+        panel = make_commanded_panel()
+        panel._api.start_system.side_effect = error
+        with pytest.raises(HomeAssistantError) as raised:
+            await panel.async_alarm_arm_away()
+        assert raised.value.translation_key == "command_failed"
+        panel._api.get_system_status.assert_not_awaited()
+        panel.coordinator.async_set_updated_data.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ServerError("Diagral service error (HTTP 503)"),
+            ClientError("timeout"),
+            TimeoutError(),
+        ],
+        ids=["server-error", "network", "timeout"],
+    )
+    async def test_uncertain_command_confirmed_by_status(self, error):
+        """A command whose answer was lost succeeds if the status shows it."""
+        panel = make_commanded_panel()
+        panel._api.start_system.side_effect = error
+        panel._api.get_system_status.return_value = status("GROUP", [1, 2])
+        await panel.async_alarm_arm_away()
+        panel._api.start_system.assert_awaited_once()
+        assert published_status(panel).status == "GROUP"
+
+    @pytest.mark.parametrize(
+        "read",
+        [status("OFF"), ServerError("Diagral service error (HTTP 503)")],
+        ids=["status-unchanged", "status-unreadable"],
+    )
+    async def test_uncertain_command_not_confirmed(self, read):
+        """Without proof the command took effect, it fails and is not resent."""
+        panel = make_commanded_panel()
+        panel._api.start_system.side_effect = ServerError(
+            "Diagral service error (HTTP 503)"
+        )
+        if isinstance(read, Exception):
+            panel._api.get_system_status.side_effect = read
+        else:
+            panel._api.get_system_status.return_value = read
+        with pytest.raises(HomeAssistantError) as raised:
+            await panel.async_alarm_arm_away()
+        assert raised.value.translation_key == "command_not_confirmed"
+        panel._api.start_system.assert_awaited_once()
+
+    async def test_slow_command_is_cut_then_checked(self):
+        """A command that outlives its deadline is checked, not resent."""
+        panel = make_commanded_panel()
+
+        async def hang():
+            await asyncio.Event().wait()
+
+        panel._api.presence.side_effect = hang
+        panel._api.get_system_status.return_value = status("PRESENCE", [1])
+        with patch.object(panel_module, "COMMAND_TIMEOUT", 0.01):
+            await panel.async_alarm_arm_home()
+        panel._api.presence.assert_awaited_once()
+        assert published_status(panel).status == "PRESENCE"
+
+    @pytest.mark.parametrize(
+        ("method", "args", "command", "read"),
+        [
+            ("action_arm_groups", ([1, 2],), "activate_group", status("GROUP", [1])),
+            ("action_disarm_groups", ([1],), "disable_group", status("GROUP", [1, 2])),
+        ],
+        ids=["arm-groups-partial", "disarm-groups-still-active"],
+    )
+    async def test_group_command_needs_every_group(self, method, args, command, read):
+        """A group command is confirmed only if every group changed."""
+        panel = make_commanded_panel()
+        getattr(panel._api, command).side_effect = TimeoutError()
+        panel._api.get_system_status.return_value = read
+        with pytest.raises(HomeAssistantError) as raised:
+            await getattr(panel, method)(*args)
+        assert raised.value.translation_key == "command_not_confirmed"
+
+
+class TestExitDelay:
+    """Arming goes through TEMPO_GROUP during the central's exit delay."""
+
+    async def test_arming_status_is_published(self):
+        """The exit delay status is published, so the panel shows arming."""
+        panel = make_commanded_panel()
+        panel._api.start_system.return_value = status("TEMPO_GROUP", [1, 2])
+        await panel.async_alarm_arm_away()
+        assert published_status(panel).status == "TEMPO_GROUP"
+        assert panel._get_ha_state(published_status(panel)) == (
+            AlarmControlPanelState.ARMING
+        )
+
+    @pytest.mark.parametrize(
+        ("method", "args", "command", "read"),
+        [
+            ("async_alarm_arm_away", (), "start_system", status("TEMPO_GROUP", [1, 2])),
+            (
+                "action_arm_groups",
+                ([1, 2],),
+                "activate_group",
+                status("TEMPO_GROUP", [1, 2]),
+            ),
+            ("action_arm_groups", ([1, 2],), "activate_group", status("TEMPO_GROUP")),
+        ],
+        ids=["arm-away", "arm-groups-listed", "arm-groups-not-listed-yet"],
+    )
+    async def test_exit_delay_confirms_a_lost_answer(self, method, args, command, read):
+        """A command whose answer was lost is confirmed by an exit delay."""
+        panel = make_commanded_panel()
+        getattr(panel._api, command).side_effect = TimeoutError()
+        panel._api.get_system_status.return_value = read
+        await getattr(panel, method)(*args)
+        assert published_status(panel).status == "TEMPO_GROUP"

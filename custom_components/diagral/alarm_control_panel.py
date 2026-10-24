@@ -1,5 +1,7 @@
 """Diagral Alarm Control Panel integration for Home Assistant."""
 
+import asyncio
+from collections.abc import Awaitable, Callable
 import logging
 from typing import Any
 
@@ -20,6 +22,7 @@ from homeassistant.components.alarm_control_panel import (
     CodeFormat,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -27,6 +30,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import DiagralConfigEntry, register_webhook, unregister_webhook
 from .const import (
     ALARM_INTRUSION_CODES,
+    COMMAND_TIMEOUT,
     CONF_ALARMPANEL_ACTIONTYPE_CODE,
     CONF_ALARMPANEL_CODE,
     DOMAIN,
@@ -35,12 +39,41 @@ from .const import (
     SERVICE_DISARMGROUP,
     SERVICE_REGISTER_WEBHOOK,
     SERVICE_UNREGISTER_WEBHOOK,
+    STATUS_GROUP,
+    STATUS_OFF,
+    STATUS_PRESENCE,
+    STATUS_TEMPO_GROUP,
 )
-from .coordinator import DiagralDataUpdateCoordinator
+from .coordinator import DiagralDataUpdateCoordinator, is_transient_error
 from .entity import DiagralEntity
 from .models import DiagralConfigData
 
 _LOGGER = logging.getLogger(__name__)
+
+ARMED_STATUSES = (STATUS_GROUP, STATUS_TEMPO_GROUP)
+
+
+def _status_in(status: SystemStatus, *values: str) -> bool:
+    """Return whether the Diagral status is one of the given values."""
+    return status.status.lower() in values
+
+
+def _groups_armed(group_ids: list[int]) -> Callable[[SystemStatus], bool]:
+    """Return a check that every given group is armed or arming."""
+
+    def check(status: SystemStatus) -> bool:
+        active = set(status.activated_groups or [])
+        # The exit delay may not list the arming groups yet.
+        if _status_in(status, STATUS_TEMPO_GROUP) and not active:
+            return True
+        return _status_in(status, *ARMED_STATUSES) and set(group_ids) <= active
+
+    return check
+
+
+def _groups_disarmed(group_ids: list[int]) -> Callable[[SystemStatus], bool]:
+    """Return a check that none of the given groups is armed."""
+    return lambda status: not set(group_ids) & set(status.activated_groups or [])
 
 
 async def async_setup_entry(
@@ -149,13 +182,13 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
     ) -> AlarmControlPanelState | None:
         """Convert Diagral status to Home Assistant state."""
         if system_status:
-            if system_status.status.lower() == "off":
+            if _status_in(system_status, STATUS_OFF):
                 return AlarmControlPanelState.DISARMED
-            if system_status.status.lower() == "group":
+            if _status_in(system_status, STATUS_GROUP):
                 return AlarmControlPanelState.ARMED_AWAY
-            if system_status.status.lower() == "tempo_group":
+            if _status_in(system_status, STATUS_TEMPO_GROUP):
                 return AlarmControlPanelState.ARMING
-            if system_status.status.lower() == "presence":
+            if _status_in(system_status, STATUS_PRESENCE):
                 return AlarmControlPanelState.ARMED_HOME
         return None
 
@@ -217,70 +250,92 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
             return code_provided == code
         return True
 
+    def _check_code(self, to_state: AlarmControlPanelState, code) -> None:
+        """Refuse an action whose code is wrong or missing."""
+        if not self._validate_code(to_state=to_state, code_provided=code):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="invalid_code"
+            )
+
+    async def _async_send_command(
+        self,
+        command: Callable[[], Awaitable[SystemStatus]],
+        took_effect: Callable[[SystemStatus], bool],
+    ) -> None:
+        """Send a command once and publish the status Diagral returns.
+
+        A command whose answer is lost may still have been executed: one status
+        read decides, and the command is never resent.
+        """
+        try:
+            async with asyncio.timeout(COMMAND_TIMEOUT):
+                status = await command()
+        except (DiagralAPIError, TimeoutError) as err:
+            if not is_transient_error(err):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN, translation_key="command_failed"
+                ) from err
+            _LOGGER.warning(
+                "Diagral command answer lost (%s), checking the alarm status",
+                type(err).__name__,
+            )
+            status = await self._async_read_status()
+            if status is None or not took_effect(status):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN, translation_key="command_not_confirmed"
+                ) from err
+        self.coordinator.async_set_updated_data(
+            {**self.coordinator.data, "system_status": status}
+        )
+
+    async def _async_read_status(self) -> SystemStatus | None:
+        """Read the alarm status, or None when Diagral does not answer."""
+        try:
+            async with asyncio.timeout(COMMAND_TIMEOUT):
+                return await self._api.get_system_status()
+        except (DiagralAPIError, TimeoutError) as err:
+            _LOGGER.warning("Diagral status unreadable (%s)", type(err).__name__)
+            return None
+
     async def async_alarm_disarm(self, code: int | None = None) -> None:
         """Send disarm command."""
-        if self._validate_code(
-            to_state=AlarmControlPanelState.DISARMED, code_provided=code
-        ):
-            try:
-                await self._api.stop_system()
-                await self.coordinator.async_request_refresh()
-            except DiagralAPIError as e:
-                _LOGGER.error("Failed to disarm Diagral alarm : %s", e)
-        else:
-            _LOGGER.error("Invalid code provided for disarming")
+        self._check_code(AlarmControlPanelState.DISARMED, code)
+        await self._async_send_command(
+            self._api.stop_system, lambda status: _status_in(status, STATUS_OFF)
+        )
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Send arm away command."""
-        if self._validate_code(
-            to_state=AlarmControlPanelState.ARMED_AWAY, code_provided=code
-        ):
-            try:
-                await self._api.start_system()
-                await self.coordinator.async_request_refresh()
-            except DiagralAPIError as e:
-                _LOGGER.error("Failed to arm Diagral alarm in away mode: %s", e)
-        else:
-            _LOGGER.error("Invalid code provided for arming away")
+        self._check_code(AlarmControlPanelState.ARMED_AWAY, code)
+        await self._async_send_command(
+            self._api.start_system,
+            lambda status: _status_in(status, *ARMED_STATUSES),
+        )
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         """Send arm home command."""
-        if self._validate_code(
-            to_state=AlarmControlPanelState.ARMED_HOME, code_provided=code
-        ):
-            try:
-                await self._api.presence()
-                await self.coordinator.async_request_refresh()
-            except DiagralAPIError as e:
-                _LOGGER.error("Failed to arm Diagral alarm in home mode: %s", e)
-        else:
-            _LOGGER.error("Invalid code provided for arming home")
+        self._check_code(AlarmControlPanelState.ARMED_HOME, code)
+        await self._async_send_command(
+            self._api.presence, lambda status: _status_in(status, STATUS_PRESENCE)
+        )
 
     async def action_arm_groups(self, group_ids: int | list[int]) -> None:
         """Activate one or more groups."""
-        _LOGGER.debug("Arming group %s with API instance: %s", group_ids, id(self._api))
         if isinstance(group_ids, int):
             group_ids = [group_ids]
-            _LOGGER.debug("Armed group(s) after transformation: %s", group_ids)
-        try:
-            await self._api.activate_group(group_ids)
-            await self.coordinator.async_request_refresh()
-        except DiagralAPIError as e:
-            _LOGGER.error("Failed to arm group(s): %s", e)
+        _LOGGER.debug("Arming group(s) %s", group_ids)
+        await self._async_send_command(
+            lambda: self._api.activate_group(group_ids), _groups_armed(group_ids)
+        )
 
     async def action_disarm_groups(self, group_ids: int | list[int]) -> None:
         """Disarm one or more groups."""
-        _LOGGER.debug(
-            "Disarming group %s with API instance: %s", group_ids, id(self._api)
-        )
         if isinstance(group_ids, int):
             group_ids = [group_ids]
-            _LOGGER.debug("Disarmed group(s) after transformation: %s", group_ids)
-        try:
-            await self._api.disable_group(group_ids)
-            await self.coordinator.async_request_refresh()
-        except DiagralAPIError as e:
-            _LOGGER.error("Failed to disarm group(s): %s", e)
+        _LOGGER.debug("Disarming group(s) %s", group_ids)
+        await self._async_send_command(
+            lambda: self._api.disable_group(group_ids), _groups_disarmed(group_ids)
+        )
 
     async def action_register_webhook(self) -> None:
         """Register the webhook for Diagral."""
