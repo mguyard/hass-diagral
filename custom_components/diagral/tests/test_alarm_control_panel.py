@@ -3,18 +3,22 @@
 Tests _get_ha_state(), _validate_code(), and _is_code_arm_required()
 without making real API calls or instantiating the full entity.
 """
-import pytest
+
 from unittest.mock import MagicMock
-from homeassistant.components.alarm_control_panel import AlarmControlPanelState
 
 from custom_components.diagral.alarm_control_panel import DiagralAlarmControlPanel
 from custom_components.diagral.const import (
     CONF_ALARMPANEL_ACTIONTYPE_CODE,
     CONF_ALARMPANEL_CODE,
 )
+import pytest
+
+from homeassistant.components.alarm_control_panel import AlarmControlPanelState
 
 
-def make_panel_mock(actiontype_code: str, code: int | None, alarm_state: AlarmControlPanelState) -> DiagralAlarmControlPanel:
+def make_panel_mock(
+    actiontype_code: str, code: int | None, alarm_state: AlarmControlPanelState
+) -> DiagralAlarmControlPanel:
     """Return a DiagralAlarmControlPanel with mocked dependencies.
 
     Bypasses __init__ and sets the minimal attributes needed to test
@@ -150,3 +154,68 @@ class TestValidateCode:
         """'disarm' trigger on ARM transition must pass (code not required for arming)."""
         panel = make_panel_mock("disarm", 1234, AlarmControlPanelState.DISARMED)
         assert panel._validate_code(AlarmControlPanelState.ARMED_AWAY, None) is True
+
+
+def make_updating_panel(
+    current_state: AlarmControlPanelState, status: str
+) -> DiagralAlarmControlPanel:
+    """Return a panel whose coordinator reports the given Diagral status."""
+    panel = make_panel_mock("never", None, current_state)
+    panel.coordinator = MagicMock()
+    panel.coordinator.data = {"system_status": MagicMock(status=status)}
+    panel._attr_extra_state_attributes = {"trigger": {"group_id": 1}}
+    panel.async_write_ha_state = MagicMock()
+    return panel
+
+
+class TestHandleCoordinatorUpdate:
+    """Tests for _handle_coordinator_update()."""
+
+    @pytest.mark.parametrize(
+        ("current_state", "status", "expected_state", "trigger_kept"),
+        [
+            (
+                AlarmControlPanelState.DISARMED,
+                "group",
+                AlarmControlPanelState.ARMED_AWAY,
+                False,
+            ),
+            (
+                AlarmControlPanelState.TRIGGERED,
+                "group",
+                AlarmControlPanelState.TRIGGERED,
+                True,
+            ),
+            (
+                AlarmControlPanelState.TRIGGERED,
+                "off",
+                AlarmControlPanelState.DISARMED,
+                False,
+            ),
+        ],
+        ids=["state-change", "triggered-sticks", "disarm-clears-trigger"],
+    )
+    def test_state_change_is_written(
+        self, current_state, status, expected_state, trigger_kept
+    ):
+        """A new Diagral status updates the panel, except a triggered one."""
+        panel = make_updating_panel(current_state, status)
+        panel._handle_coordinator_update()
+        assert panel._attr_alarm_state == expected_state
+        assert ("trigger" in panel._attr_extra_state_attributes) is trigger_kept
+        panel.async_write_ha_state.assert_called_once()
+
+    @pytest.mark.parametrize(
+        ("current_state", "status"),
+        [
+            (AlarmControlPanelState.ARMED_AWAY, "group"),
+            (AlarmControlPanelState.DISARMED, "unknown"),
+        ],
+        ids=["same-state", "unknown-status"],
+    )
+    def test_no_change_is_not_written(self, current_state, status):
+        """An unchanged or unknown status leaves the panel untouched."""
+        panel = make_updating_panel(current_state, status)
+        panel._handle_coordinator_update()
+        assert panel._attr_alarm_state == current_state
+        panel.async_write_ha_state.assert_not_called()

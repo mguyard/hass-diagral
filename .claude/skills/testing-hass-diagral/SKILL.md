@@ -137,7 +137,21 @@ If the module has no test file yet, create it.
 
 ---
 
-## 8. Test Rules and Naming
+## 8. Ruff Gate
+
+`lint.yaml` runs both commands on every push and PR touching `custom_components/diagral/**`. Run them before committing, with the version CI pins:
+
+```bash
+pip install ruff==0.16.1
+ruff check custom_components/diagral
+ruff format --check custom_components/diagral
+```
+
+`ruff format` may rewrite `except (A, B):` into `except A, B:` — that is PEP 758, valid on Python 3.14. Accept it.
+
+---
+
+## 9. Test Rules and Naming
 
 - Per entity: `unique_id` format, state value, `exists_fn` if defined, the missing-data path
 - Happy path and error path (`DiagralAPIError`, missing coordinator keys, malformed webhook payload)

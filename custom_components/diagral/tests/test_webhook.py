@@ -3,9 +3,10 @@
 Tests the pure data-enrichment function without any HTTP calls
 or Home Assistant event bus interaction.
 """
-from datetime import datetime, timezone
 
-import pytest
+from datetime import UTC, datetime
+
+from custom_components.diagral.webhook import enrich_data_alert_anomaly
 from pydiagral.models import (
     DeviceInfos,
     DeviceList,
@@ -13,10 +14,10 @@ from pydiagral.models import (
     WebHookNotificationDetail,
 )
 
-from custom_components.diagral.webhook import enrich_data_alert_anomaly
 
-
-def make_notification(device_type: str | None, device_index: str | None) -> WebHookNotification:
+def make_notification(
+    device_type: str | None, device_index: str | None
+) -> WebHookNotification:
     """Build a minimal WebHookNotification for testing enrich_data_alert_anomaly()."""
     detail = WebHookNotificationDetail(
         device_type=device_type,
@@ -31,13 +32,19 @@ def make_notification(device_type: str | None, device_index: str | None) -> WebH
         group_index="1",
         detail=detail,
         user=None,
-        date_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        date_time=datetime(2024, 1, 1, tzinfo=UTC),
     )
 
 
 def make_device_list(**kwargs) -> DeviceList:
     """Build a DeviceList with the provided device type lists."""
-    defaults = dict(cameras=[], commands=[], sensors=[], sirens=[], transmitters=[])
+    defaults = {
+        "cameras": [],
+        "commands": [],
+        "sensors": [],
+        "sirens": [],
+        "transmitters": [],
+    }
     defaults.update(kwargs)
     return DeviceList(**defaults)
 

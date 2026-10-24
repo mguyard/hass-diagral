@@ -18,7 +18,7 @@ The rules themselves — invariants, commit format, branches — are in `AGENTS.
 - **Dependencies**: `pydiagral` (pinned in `manifest.json`); HA `alarm_control_panel` and `cloud` (declared in `dependencies`)
   - Documentation: [mguyard.github.io/pydiagral](https://mguyard.github.io/pydiagral/), or Context7. Source: [github.com/mguyard/pydiagral](https://github.com/mguyard/pydiagral).
   - Check the installed version's API before using a class, method or model — do not assume it.
-- **Linter**: none enforced yet (ruff adoption planned as a separate change)
+- **Linter**: `ruff` — `ruff check` and `ruff format --check`, configured in `custom_components/diagral/pyproject.toml`. Line length 88, `E501` deliberately ignored. CI pins `ruff==0.16.1`.
 - **Tests**: `pytest` with `asyncio_mode = "auto"` — see `testing-hass-diagral`
 
 ---
@@ -190,6 +190,7 @@ If any of the following is unclear, ask with `AskUserQuestion` before starting.
 | Check | Where | What it validates |
 |-------|-------|-------------------|
 | pytest | `tests.yaml`, on `dev` | Suite on HA stable and newer beta |
+| ruff | `lint.yaml`, on `dev` | `ruff check` + `ruff format --check` |
 | `hassfest` | `home-assistant.yaml`, on `main`/`beta` | `manifest.json`, translations, `services.yaml`, `quality_scale.yaml` |
 | `hacs/action` | `home-assistant.yaml`, on `main`/`beta` | HACS compatibility |
 | CodeQL | `codeql.yaml`, weekly | Python security analysis |

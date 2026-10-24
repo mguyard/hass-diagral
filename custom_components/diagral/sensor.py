@@ -188,9 +188,11 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                             )
                             for key, value in sorted(
                                 vars(equipment).items(),
-                                key=lambda item: key_order.index(item[0])
-                                if item[0] in key_order
-                                else len(key_order),
+                                key=lambda item: (
+                                    key_order.index(item[0])
+                                    if item[0] in key_order
+                                    else len(key_order)
+                                ),
                             )
                             if value is not None
                         }

@@ -12,7 +12,7 @@ The known divergences, so they do not have to be rediscovered:
 
 | An ECC rule says | This repository does |
 |---|---|
-| Format with `black`, sort imports with `isort` | No formatter or linter is enforced yet. Match the surrounding code, which follows the Home Assistant core layout: imports sorted with `homeassistant` as first party, sorted within sections. Do not run `black` or `isort` over the tree. |
+| Format with `black`, sort imports with `isort` | `ruff format` only — `lint.yaml` runs `ruff format --check`. Imports are sorted by ruff's isort with `force-sort-within-sections` and `known-first-party = ["homeassistant"]`, the Home Assistant core layout, which isort does not reproduce by default. |
 | Prefer `@dataclass(frozen=True)`, never mutate | `DiagralData` is mutable by design: it is Home Assistant's `runtime_data`, and `webhook_id` is reassigned when the webhook is registered or unregistered. Entity descriptions, on the other hand, are frozen. |
 | `pytest --cov=src`, `@pytest.mark.unit` / `.integration` | There is no `src/` — see Commands below. No marker is registered in `pyproject.toml`, so those two raise `PytestUnknownMarkWarning`. Tests are grouped in `Test*` classes. |
 | Load secrets from `.env` with `python-dotenv`, scan with `bandit` | Credentials are entered in the config flow and stored in the config entry; there is no `.env`. Security scanning is CodeQL, weekly. |
@@ -69,12 +69,16 @@ custom_components/diagral/
 ## Commands
 
 ```bash
+# Lint and format — ruff, configured in custom_components/diagral/pyproject.toml
+ruff check custom_components/diagral
+ruff format --check custom_components/diagral
+
 # Tests — anywhere homeassistant and the pinned pydiagral are importable.
 # pyproject.toml sets pythonpath = ["../.."], so no PYTHONPATH is needed.
 python -m pytest custom_components/diagral/tests/ -v
 ```
 
-There is no linter configured yet: no `ruff`/`flake8` config, no lint workflow. Adopting ruff is planned as a separate change. Until then, keep lines and imports consistent with the surrounding code.
+CI pins `ruff==0.16.1`; a newer release must not be able to turn a green PR red on its own. Line length is 88, and `E501` is deliberately ignored — formatting is the formatter's job, not the linter's. The two deferred `homeassistant.components.cloud` imports keep a targeted `# noqa: PLC0415` rather than a project-wide ignore.
 
 Every test needs Home Assistant **and** `pydiagral`, including `test_const.py`: pytest imports the package `__init__.py` before `conftest.py`. See the `testing-hass-diagral` skill for the environments.
 
@@ -82,13 +86,17 @@ There is no Makefile and no `requirements_test.txt`.
 
 ## Python 3.14
 
-Home Assistant requires Python 3.14 since 2026.3, and CI tests on 3.14 only. Do not suggest workarounds for older versions.
+Home Assistant requires Python 3.14 since 2026.3, and CI tests on 3.14 only. Do not suggest workarounds for older versions, and do not flag 3.14-only syntax.
+
+- `except ValueError, TypeError:` without parentheses is valid (PEP 758) and is what `ruff format` produces here.
+- Annotations are evaluated lazily (PEP 649). Forward references need no quotes.
 
 ## CI
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
 | `tests.yaml` | push / PR on `dev`, paths `custom_components/diagral/**`; weekly; manual | pytest on HA stable + beta (when newer), Python 3.14, coverage to Codecov |
+| `lint.yaml` | push / PR on `dev`, same paths; manual | `ruff check` + `ruff format --check` |
 | `home-assistant.yaml` | push / PR on `main`, `beta`; daily; manual | hassfest + HACS validation |
 | `semantic-prs.yml` | PR opened / edited / synchronized | validates the PR title against Conventional Commits |
 | `release.yaml` | push on `main`, `beta` | semantic-release |
@@ -96,7 +104,7 @@ Home Assistant requires Python 3.14 since 2026.3, and CI tests on 3.14 only. Do 
 | `labelers.yml` | push on `main`, manual | issue and PR labels |
 | `lock-stale.yml` | daily | locks and marks stale issues |
 
-`tests.yaml` is path-filtered: a change outside `custom_components/diagral/**` does not run it. hassfest does not run on `dev` — a broken `manifest.json` or translation file is only caught when it reaches `beta`.
+`tests.yaml` and `lint.yaml` are path-filtered: a change outside `custom_components/diagral/**` does not run them. hassfest does not run on `dev` — a broken `manifest.json` or translation file is only caught when it reaches `beta`.
 
 ## Branches
 
@@ -134,7 +142,7 @@ The pre-commit test gate, the pull request description template and the prepare-
 
 - Title follows the commit format; `semantic-prs.yml` enforces it.
 - Target `dev`, always.
-- Run the full suite before opening. Fix everything first.
+- Run the full suite and `ruff` before opening. Fix everything first.
 - Describe what changed and why, and how it was verified.
 
 ## Testing

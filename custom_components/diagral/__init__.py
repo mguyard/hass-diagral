@@ -76,7 +76,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
     except DiagralAPIError as err:
         _LOGGER.error("Failed to set up Diagral integration: %s", err)
         raise ConfigEntryNotReady from err
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         _LOGGER.exception("Unexpected error setting up Diagral integration")
         return False
     else:
@@ -156,7 +156,7 @@ async def register_webhook(
                         "Cloud subscription not active. Webhook will not be created"
                     )
                     return None
-            except (CloudNotConnected, CloudNotAvailable):
+            except CloudNotConnected, CloudNotAvailable:
                 _LOGGER.error(
                     "Cloud not connected or not available. Webhook will not be created"
                 )
@@ -247,7 +247,9 @@ async def unregister_webhook(
     source: str = "Unknown",
 ) -> None:
     """Unregister the webhook for Diagral."""
-    from homeassistant.components.cloud import async_delete_cloudhook as cloud_delete_cloudhook  # noqa: PLC0415
+    from homeassistant.components.cloud import (  # noqa: PLC0415
+        async_delete_cloudhook as cloud_delete_cloudhook,
+    )
 
     _LOGGER.debug(
         "Webhook unregistration requested by '%s' for %s", source, entry.title
