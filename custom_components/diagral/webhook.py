@@ -24,11 +24,11 @@ async def handle_webhook(
         data = WebHookNotification.from_dict(data_received)
         _LOGGER.debug("Received webhook data (parsed): %s", data)
 
-        # Retrieve the entry_id from the webhook_id
+        # Only loaded entries have runtime_data; a disabled one would raise here
         entry_id = next(
             (
                 entry.entry_id
-                for entry in hass.config_entries.async_entries(DOMAIN)
+                for entry in hass.config_entries.async_loaded_entries(DOMAIN)
                 if entry.runtime_data.webhook_id == webhook_id
             ),
             None,
