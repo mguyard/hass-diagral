@@ -51,12 +51,15 @@ coordinator.data["anomalies"]       # Anomalies, or a falsy value when there are
 
 ### 2.3 Webhook registration (`__init__.py`)
 
-- The URL comes from `get_url(require_ssl=True, allow_internal=False, allow_cloud=True, prefer_external=True)`. No URL → no webhook, setup continues.
+- The webhook id is kept in `entry.data[CONF_WEBHOOK_ID]` (redacted in diagnostics), so the URL survives restarts and a subscription already pointing to it is not rewritten. A new id is generated only for an entry that has none.
+- The URL comes from `get_url(require_ssl=True, allow_internal=False, allow_cloud=True, prefer_external=True)` (`_async_webhook_url`).
+- **Failures raise `WebhookUnavailable(reason)`**, never return `None` silently: `webhook_no_url` (no external HTTPS URL, or no active Nabu Casa subscription) or `webhook_registration_failed` (a Diagral or cloud error). At setup, `report_webhook_unavailable` turns it into a repair issue of that key and setup continues, polling only; the `register_webhook` action turns it into a translated `HomeAssistantError`.
+- The local handler is registered **before** the subscription, so no event is lost once Diagral points here, and removed again if the subscription fails or is left to another installation.
 - If it ends with `HA_CLOUD_DOMAIN` (`.nabu.casa`) and a Nabu Casa subscription is active, a **cloudhook** is created; otherwise the URL is `<external_url>/api/webhook/<webhook_id>`.
 - **Ownership.** Each entry stores `webhook_url_hash` in `entry.data`: the SHA-256 of the URL it registered (never the URL, which carries the secret webhook id). The central's subscription is "ours" when its URL hashes to that value; an entry without a stored hash (set up before ownership was tracked) falls back once to comparing scheme and host.
 - `api.get_webhook()` → no subscription: **register** one. Our subscription: **update** it. Someone else's: leave it untouched, log a warning with the host only, and raise the fixable repair issue `webhook_owned_elsewhere_<entry_id>` (severity ERROR: intrusion alerts only arrive by webhook). `take_over=True` — passed by the repair's fix flow (`repairs.py`) and by the `register_webhook` action — updates a foreign subscription anyway.
-- After a successful register or update, the hash is stored and the repair issue deleted. Subscriptions cover anomaly, alert and state.
-- `unregister_webhook` deletes the subscription only when its hash matches, then forgets the hash; it deletes our cloudhook if the subscription was one, always unregisters the local webhook, and clears `runtime_data.webhook_id`.
+- After a successful register or update, the hash and the webhook id are stored and the three webhook repair issues deleted. Subscriptions cover anomaly, alert and state.
+- `unregister_webhook` deletes the subscription only when its hash matches, then forgets the hash; it deletes our cloudhook if the subscription was one, always unregisters the local webhook, and clears `runtime_data.webhook_id`. It returns `False` when the subscription could not be read or deleted; the `unregister_webhook` action then raises. The stored webhook id is kept for the next registration.
 - Two installations behind Nabu Casa share the `hooks.nabu.casa` host: only the hash tells their subscriptions apart. See `AGENTS.md` → Validation.
 
 ### 2.4 Incoming webhook (`webhook.py`)
@@ -314,7 +317,7 @@ Do not work around a `pydiagral` bug or gap in the integration — fix `pydiagra
 ### 10.5 Diagnostics and repairs
 
 - `diagnostics.py` must never expose credentials, keys, the PIN or the webhook id. Extend `TO_REDACT` whenever a new secret enters the payload.
-- `repairs.py` holds one fixable issue, `webhook_owned_elsewhere` (§2.3). Every issue must stay actionable: what is happening, why it matters, the exact steps to resolve it — in both `en.json` and `fr.json`, under `issues`. Scope issue ids per config entry.
+- `repairs.py` holds the fix flows of the webhook issues (§2.3): `webhook_owned_elsewhere` (take over) and `webhook_registration_failed` (retry, without taking over). `webhook_no_url` is not fixable: its description says what to configure. Every issue must stay actionable: what is happening, why it matters, the exact steps to resolve it — in both `en.json` and `fr.json`, under `issues`. Scope issue ids per config entry.
 
 ### 10.6 Finding examples
 

@@ -60,7 +60,7 @@ custom_components/diagral/
 - Every entity needs a `translation_key`, present in **both** `translations/en.json` and `translations/fr.json`. The same holds for services, config and options strings.
 - Every new entity needs a row in `docs/integration/entities.mdx`.
 - Constants live in `const.py`. No magic strings or numbers inline.
-- `homeassistant.components.cloud` is imported **inside** `register_webhook` / `unregister_webhook`, deliberately: importing it at module level pulls in dependencies the test environment does not have. Keep the `# noqa: PLC0415`.
+- `homeassistant.components.cloud` is imported **inside** the functions that use it (`_async_webhook_url`, `unregister_webhook`), deliberately: importing it at module level pulls in dependencies the test environment does not have. Keep the `# noqa: PLC0415`.
 - Webhook signals are `signal-diagral-webhook-<TYPE>` (dispatcher) and `DIAGRAL_EVENT` (bus). Both are public contracts used in user automations — see `docs/integration/events.mdx`.
 - `_LOGGER = logging.getLogger(__name__)`. Never `print()`.
 - All I/O is `async`/`await`. No blocking calls in async context.

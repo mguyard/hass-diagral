@@ -18,7 +18,7 @@ from homeassistant.components.webhook import (
     async_unregister as webhook_async_unregister,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_WEBHOOK_ID, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
@@ -35,7 +35,9 @@ from .const import (
     DIAGRAL_REQUEST_TIMEOUT,
     DOMAIN,
     HA_CLOUD_DOMAIN,
+    ISSUE_WEBHOOK_NO_URL,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
+    ISSUE_WEBHOOK_REGISTRATION_FAILED,
 )
 from .coordinator import DiagralDataUpdateCoordinator
 from .models import DiagralConfigData, DiagralData
@@ -72,8 +74,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
         coordinator = DiagralDataUpdateCoordinator(hass, api)
         await coordinator.async_config_entry_first_refresh()
 
-        # Register the webhook
-        webhook_id = await register_webhook(hass, entry, api, "setup_entry")
+        try:
+            webhook_id = await register_webhook(hass, entry, api, "setup_entry")
+        except WebhookUnavailable as err:
+            # Polling still works; the repair says why events cannot arrive
+            report_webhook_unavailable(hass, entry, err.reason)
+            webhook_id = None
 
         entry.runtime_data = DiagralData(
             config=config, coordinator=coordinator, api=api, webhook_id=webhook_id
@@ -144,17 +150,181 @@ def _owns_subscription(
 
 
 def _remember_subscription(
-    hass: HomeAssistant, entry: DiagralConfigEntry, url: str | None
+    hass: HomeAssistant,
+    entry: DiagralConfigEntry,
+    url: str | None,
+    webhook_id: str | None = None,
 ) -> None:
     """Store, or forget, the fingerprint of the subscription this entry owns."""
     data = {k: v for k, v in entry.data.items() if k != CONF_WEBHOOK_URL_HASH}
     if url is not None:
         data[CONF_WEBHOOK_URL_HASH] = _url_hash(url)
+    if webhook_id is not None:
+        data[CONF_WEBHOOK_ID] = webhook_id
     hass.config_entries.async_update_entry(entry, data=data)
 
 
-def _owned_elsewhere_issue_id(entry: DiagralConfigEntry) -> str:
-    return f"{ISSUE_WEBHOOK_OWNED_ELSEWHERE}_{entry.entry_id}"
+def _issue_id(issue: str, entry: DiagralConfigEntry) -> str:
+    return f"{issue}_{entry.entry_id}"
+
+
+class WebhookUnavailable(Exception):
+    """The webhook could not be registered, so no Diagral event can arrive."""
+
+    def __init__(self, reason: str) -> None:
+        """Keep the repair issue key that explains the failure."""
+        super().__init__(reason)
+        self.reason = reason
+
+
+def report_webhook_unavailable(
+    hass: HomeAssistant, entry: DiagralConfigEntry, reason: str
+) -> None:
+    """Raise the repair issue that explains why no event can arrive."""
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        _issue_id(reason, entry),
+        # Only a Diagral or cloud error can be fixed by retrying
+        is_fixable=reason == ISSUE_WEBHOOK_REGISTRATION_FAILED,
+        # Intrusion alerts only arrive by webhook, never by polling
+        severity=ir.IssueSeverity.ERROR,
+        translation_key=reason,
+        translation_placeholders={"entry_title": entry.title},
+        data={"entry_id": entry.entry_id},
+    )
+
+
+async def _async_webhook_url(hass: HomeAssistant, webhook_id: str) -> str:
+    """Return the URL Diagral should call: a cloudhook behind Nabu Casa."""
+    from homeassistant.components.cloud import (  # noqa: PLC0415
+        CloudNotAvailable,
+        CloudNotConnected,
+        async_active_subscription as cloud_active_subscription,
+        async_get_or_create_cloudhook as cloud_get_or_create_cloudhook,
+    )
+
+    try:
+        external_url = get_url(
+            hass,
+            require_ssl=True,
+            allow_internal=False,
+            allow_cloud=True,
+            prefer_external=True,
+        )
+    except NoURLAvailableError as err:
+        _LOGGER.error(
+            "No URL available for Diagral webhook matching criteria (ssl, external). Webhook will not be created"
+        )
+        raise WebhookUnavailable(ISSUE_WEBHOOK_NO_URL) from err
+    _LOGGER.debug("Returned external URL for webhook : %s", external_url)
+
+    if not external_url.endswith(HA_CLOUD_DOMAIN):
+        webhook_url = f"{external_url}/api/webhook/{webhook_id}"
+        _LOGGER.debug(
+            "Selected external URL for webhook : %s", _redact_url(webhook_url)
+        )
+        return webhook_url
+
+    _LOGGER.debug(
+        "Recommanded external URL is Nabu Casa URL (%s). Selected for webhook",
+        external_url,
+    )
+    try:
+        if not cloud_active_subscription(hass):
+            _LOGGER.error("Cloud subscription not active. Webhook will not be created")
+            raise WebhookUnavailable(ISSUE_WEBHOOK_NO_URL)
+        return await cloud_get_or_create_cloudhook(hass, webhook_id)
+    except CloudNotAvailable as err:
+        _LOGGER.error("Cloud not available. Webhook will not be created")
+        raise WebhookUnavailable(ISSUE_WEBHOOK_NO_URL) from err
+    except (CloudNotConnected, ValueError) as err:
+        _LOGGER.error("Failed to create cloudhook: %s", type(err).__name__)
+        raise WebhookUnavailable(ISSUE_WEBHOOK_REGISTRATION_FAILED) from err
+
+
+async def _async_subscribe(
+    hass: HomeAssistant,
+    entry: DiagralConfigEntry,
+    api: DiagralAPI,
+    webhook_url: str,
+    *,
+    take_over: bool,
+) -> bool:
+    """Point the central's subscription to webhook_url, unless owned elsewhere."""
+    try:
+        actual_webhook: Webhook | None = await api.get_webhook()
+    except DiagralAPIError as err:
+        if "No subscription found for" not in str(err):
+            raise
+        actual_webhook = None
+
+    if actual_webhook is None:
+        await api.register_webhook(
+            webhook_url=webhook_url,
+            subscribe_to_anomaly=True,
+            subscribe_to_alert=True,
+            subscribe_to_state=True,
+        )
+        _LOGGER.info(
+            "Webhook successfully created for %s on : %s",
+            entry.title,
+            _redact_url(webhook_url),
+        )
+        return True
+
+    _LOGGER.debug(
+        "Actual Webhook : %s / New Webhook : %s",
+        _redact_url(actual_webhook.webhook_url),
+        _redact_url(webhook_url),
+    )
+    owned = _owns_subscription(entry, actual_webhook.webhook_url, webhook_url)
+    if not owned and not take_over:
+        _LOGGER.warning(
+            "The Diagral webhook subscription of %s points to another "
+            "installation (%s). It was left untouched: open Settings > "
+            "Repairs to take it over",
+            entry.title,
+            _redact_url(actual_webhook.webhook_url),
+        )
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            _issue_id(ISSUE_WEBHOOK_OWNED_ELSEWHERE, entry),
+            is_fixable=True,
+            # Intrusion alerts only arrive by webhook, never by polling
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=ISSUE_WEBHOOK_OWNED_ELSEWHERE,
+            translation_placeholders={
+                "entry_title": entry.title,
+                "other_host": urlparse(actual_webhook.webhook_url).hostname or "?",
+            },
+            data={"entry_id": entry.entry_id},
+        )
+        return False
+    if actual_webhook.webhook_url == webhook_url:
+        _LOGGER.debug("Webhook subscription of %s is already current", entry.title)
+        return True
+    if owned:
+        _LOGGER.info(
+            "Webhook already registered for %s on %s. Updating URL to %s",
+            entry.title,
+            _redact_url(actual_webhook.webhook_url),
+            _redact_url(webhook_url),
+        )
+    else:
+        _LOGGER.warning(
+            "Taking over the Diagral webhook subscription of %s from %s",
+            entry.title,
+            _redact_url(actual_webhook.webhook_url),
+        )
+    await api.update_webhook(
+        webhook_url=webhook_url,
+        subscribe_to_anomaly=True,
+        subscribe_to_alert=True,
+        subscribe_to_state=True,
+    )
+    return True
 
 
 async def register_webhook(
@@ -167,150 +337,44 @@ async def register_webhook(
 ) -> str | None:
     """Register the webhook for Diagral.
 
-    A subscription this entry cannot prove it owns is left untouched and
-    reported as a repair issue, unless take_over is set.
+    Home Assistant listens before Diagral is told where to send, so no event
+    is lost. A subscription this entry cannot prove it owns is left untouched
+    and reported as a repair issue, unless take_over is set; None is then
+    returned. Raises WebhookUnavailable when no event can be received.
     """
-    from homeassistant.components.cloud import (  # noqa: PLC0415
-        CloudNotAvailable,
-        CloudNotConnected,
-        async_active_subscription as cloud_active_subscription,
-        async_get_or_create_cloudhook as cloud_get_or_create_cloudhook,
-    )
-
     _LOGGER.debug("Webhook registration requested by '%s' for %s", source, entry.title)
-    webhook_id: str = webhook_generate_id()
-    # Get the external URL recommended for the webhook (priority to external before cloud)
+    # A stable id keeps the URL, so a restart does not rewrite the subscription
+    webhook_id: str = entry.data.get(CONF_WEBHOOK_ID) or webhook_generate_id()
+    webhook_url = await _async_webhook_url(hass, webhook_id)
+
+    # The register action re-registers an id that may already be listening
+    webhook_async_unregister(hass, webhook_id)
+    webhook_async_register(hass, DOMAIN, "Diagral Webhook", webhook_id, handle_webhook)
     try:
-        external_url = get_url(
-            hass,
-            require_ssl=True,
-            allow_internal=False,
-            allow_cloud=True,
-            prefer_external=True,
+        subscribed = await _async_subscribe(
+            hass, entry, api, webhook_url, take_over=take_over
         )
-        _LOGGER.debug("Returned external URL for webhook : %s", external_url)
-    except NoURLAvailableError:
+    except DiagralAPIError as err:
+        webhook_async_unregister(hass, webhook_id)
         _LOGGER.error(
-            "No URL available for Diagral webhook matching criteria (ssl, external). Webhook will not be created"
+            "Failed to register the Diagral webhook for %s on %s : %s",
+            entry.title,
+            _redact_url(webhook_url),
+            err,
         )
+        raise WebhookUnavailable(ISSUE_WEBHOOK_REGISTRATION_FAILED) from err
+    if not subscribed:
+        webhook_async_unregister(hass, webhook_id)
         return None
 
-    if external_url is not None:
-        # If the external URL is a Nabu Casa URL, use the cloudhook
-        if external_url.endswith(HA_CLOUD_DOMAIN):
-            _LOGGER.debug(
-                "Recommanded external URL is Nabu Casa URL (%s). Selected for webhook",
-                external_url,
-            )
-            try:
-                if cloud_active_subscription(hass):
-                    webhook_url = await cloud_get_or_create_cloudhook(hass, webhook_id)
-                else:
-                    # If the cloud subscription is not active, we cannot create a webhook
-                    _LOGGER.error(
-                        "Cloud subscription not active. Webhook will not be created"
-                    )
-                    return None
-            except CloudNotConnected, CloudNotAvailable:
-                _LOGGER.error(
-                    "Cloud not connected or not available. Webhook will not be created"
-                )
-                return None
-            except ValueError as e:
-                _LOGGER.error("Failed to create cloudhook: %s", e)
-                return None
-        else:  # Use the external URL
-            webhook_url = f"{external_url}/api/webhook/{webhook_id}"
-            _LOGGER.debug(
-                "Selected external URL for webhook : %s", _redact_url(webhook_url)
-            )
-
-        try:
-            actual_webhook: Webhook | None = await api.get_webhook()
-        except DiagralAPIError as err:
-            if "No subscription found for" not in str(err):
-                raise
-            actual_webhook = None
-
-        if actual_webhook is not None:
-            _LOGGER.debug(
-                "Actual Webhook : %s / New Webhook : %s",
-                _redact_url(actual_webhook.webhook_url),
-                _redact_url(webhook_url),
-            )
-            owned = _owns_subscription(entry, actual_webhook.webhook_url, webhook_url)
-            if not owned and not take_over:
-                _LOGGER.warning(
-                    "The Diagral webhook subscription of %s points to another "
-                    "installation (%s). It was left untouched: open Settings > "
-                    "Repairs to take it over",
-                    entry.title,
-                    _redact_url(actual_webhook.webhook_url),
-                )
-                ir.async_create_issue(
-                    hass,
-                    DOMAIN,
-                    _owned_elsewhere_issue_id(entry),
-                    is_fixable=True,
-                    # Intrusion alerts only arrive by webhook, never by polling
-                    severity=ir.IssueSeverity.ERROR,
-                    translation_key=ISSUE_WEBHOOK_OWNED_ELSEWHERE,
-                    translation_placeholders={
-                        "entry_title": entry.title,
-                        "other_host": urlparse(actual_webhook.webhook_url).hostname
-                        or "?",
-                    },
-                    data={"entry_id": entry.entry_id},
-                )
-                return None
-            if owned:
-                _LOGGER.info(
-                    "Webhook already registered for %s on %s. Updating URL to %s",
-                    entry.title,
-                    _redact_url(actual_webhook.webhook_url),
-                    _redact_url(webhook_url),
-                )
-            else:
-                _LOGGER.warning(
-                    "Taking over the Diagral webhook subscription of %s from %s",
-                    entry.title,
-                    _redact_url(actual_webhook.webhook_url),
-                )
-            await api.update_webhook(
-                webhook_url=webhook_url,
-                subscribe_to_anomaly=True,
-                subscribe_to_alert=True,
-                subscribe_to_state=True,
-            )
-        else:
-            try:
-                await api.register_webhook(
-                    webhook_url=webhook_url,
-                    subscribe_to_anomaly=True,
-                    subscribe_to_alert=True,
-                    subscribe_to_state=True,
-                )
-            except DiagralAPIError as e:
-                _LOGGER.error(
-                    "Failed to create webhook for %s on %s : %s",
-                    entry.title,
-                    _redact_url(webhook_url),
-                    e,
-                )
-                return None
-            _LOGGER.info(
-                "Webhook successfully created for %s on : %s",
-                entry.title,
-                _redact_url(webhook_url),
-            )
-
-        _remember_subscription(hass, entry, webhook_url)
-        ir.async_delete_issue(hass, DOMAIN, _owned_elsewhere_issue_id(entry))
-        webhook_async_register(
-            hass, DOMAIN, "Diagral Webhook", webhook_id, handle_webhook
-        )
-        _LOGGER.info("Webhook successfully registered for %s", entry.title)
-
+    _remember_subscription(hass, entry, webhook_url, webhook_id)
+    for issue in (
+        ISSUE_WEBHOOK_OWNED_ELSEWHERE,
+        ISSUE_WEBHOOK_REGISTRATION_FAILED,
+        ISSUE_WEBHOOK_NO_URL,
+    ):
+        ir.async_delete_issue(hass, DOMAIN, _issue_id(issue, entry))
+    _LOGGER.info("Webhook successfully registered for %s", entry.title)
     return webhook_id
 
 
@@ -320,10 +384,11 @@ async def unregister_webhook(
     api: DiagralAPI,
     webhook_id: str,
     source: str = "Unknown",
-) -> None:
+) -> bool:
     """Unregister the webhook for Diagral.
 
     The central's subscription is only deleted when this entry owns it.
+    Returns False when the subscription could not be read or deleted.
     """
     from homeassistant.components.cloud import (  # noqa: PLC0415
         async_delete_cloudhook as cloud_delete_cloudhook,
@@ -333,13 +398,15 @@ async def unregister_webhook(
         "Webhook unregistration requested by '%s' for %s", source, entry.title
     )
     if not webhook_id:
-        return
+        return True
 
+    done = True
     try:
         actual_webhook: Webhook | None = await api.get_webhook()
     except DiagralAPIError as err:
         if "No subscription found for" not in str(err):
             _LOGGER.error("Failed to read webhook for %s : %s", entry.title, err)
+            done = False
         actual_webhook = None
 
     stored = entry.data.get(CONF_WEBHOOK_URL_HASH)
@@ -352,6 +419,7 @@ async def unregister_webhook(
             await api.delete_webhook()
         except DiagralAPIError as e:
             _LOGGER.error("Failed to delete webhook for %s : %s", entry.title, e)
+            done = False
         else:
             _LOGGER.info("Webhook successfully deleted for %s", entry.title)
             _remember_subscription(hass, entry, None)
@@ -361,7 +429,8 @@ async def unregister_webhook(
                 await cloud_delete_cloudhook(hass, webhook_id)
             except ValueError as e:
                 _LOGGER.error("Failed to delete cloudhook: %s", e)
-    else:
+                done = False
+    elif actual_webhook is not None:
         _LOGGER.info(
             "The Diagral webhook subscription of %s is not owned by this "
             "installation; it was left untouched",
@@ -371,6 +440,7 @@ async def unregister_webhook(
     webhook_async_unregister(hass, webhook_id)
     # Force the webhook_id in the entry runtime data to be sure it is saved
     entry.runtime_data.webhook_id = None
+    return done
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> bool:

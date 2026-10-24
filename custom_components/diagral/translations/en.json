@@ -159,6 +159,25 @@
                     "take_over_failed": "The Diagral cloud refused the change. Check the logs, then try again."
                 }
             }
+        },
+        "webhook_registration_failed": {
+            "title": "Diagral webhook could not be registered: {entry_title}",
+            "fix_flow": {
+                "step": {
+                    "confirm": {
+                        "title": "Retry the Diagral webhook registration",
+                        "description": "Home Assistant could not register its webhook with the Diagral cloud for **{entry_title}**, so it does not receive Diagral events. Intrusion alerts only arrive this way: the alarm panel cannot show *triggered* while this lasts. Polling still updates the arming state every 5 minutes.\n\nThis usually comes from a temporary outage of the Diagral cloud or of Home Assistant Cloud. Confirm below to try again; reloading the integration does the same."
+                    }
+                },
+                "abort": {
+                    "entry_not_loaded": "The Diagral integration is not loaded. Reload it, then try again.",
+                    "retry_failed": "The registration failed again. Check the logs, then try again later."
+                }
+            }
+        },
+        "webhook_no_url": {
+            "title": "No address for the Diagral webhook: {entry_title}",
+            "description": "Home Assistant cannot receive Diagral events for **{entry_title}**: the Diagral cloud needs an HTTPS address reachable from the internet, and none is available. Intrusion alerts only arrive this way: the alarm panel cannot show *triggered* while this lasts. Polling still updates the arming state every 5 minutes.\n\nTo fix it, set an external URL starting with `https://` in **Settings > System > Network**, or connect Home Assistant Cloud with an active subscription. Then reload the Diagral integration."
         }
     },
     "exceptions": {
@@ -170,6 +189,15 @@
         },
         "command_not_confirmed": {
             "message": "Diagral did not confirm the command in time, and the alarm state does not show it. Check the alarm state before trying again."
+        },
+        "webhook_registration_failed": {
+            "message": "The Diagral webhook could not be registered. Check the logs, then try again."
+        },
+        "webhook_no_url": {
+            "message": "No HTTPS address reachable from the internet is available for the Diagral webhook. Set an external URL, or connect Home Assistant Cloud."
+        },
+        "webhook_unregistration_failed": {
+            "message": "The Diagral webhook subscription could not be read or deleted. Check the logs, then try again."
         }
     }
 }

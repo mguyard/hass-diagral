@@ -38,10 +38,19 @@ You can confirm this by checking the "INFO" logs in Home Assistant
 
 The end of the webhook URL is replaced by `<redacted>` in the logs: it contains the webhook ID, and anyone who knows it could send fake alarm events to your Home Assistant. Only the host is shown, so you can still check which address was used.
 
-In case of any error, it will also be indicated in the Home Assistant logs.
+The webhook address stays the same across restarts: the subscription is only updated when your external URL or your Home Assistant Cloud setup changes.
+
+## Registration failure
+
+If the webhook cannot be registered when the integration starts, the integration still starts and the alarm state keeps being refreshed every `5 minutes`. Intrusion alerts (the `triggered` state) and `DIAGRAL_EVENT` events cannot arrive, though, so a repair appears in **Settings > System > Repairs**:
+
+- **Diagral or Home Assistant Cloud did not answer**, usually during a temporary outage: open the repair and confirm to try again, or reload the integration.
+- **No address for the webhook**: Home Assistant has neither an external URL starting with `https://` nor an active Home Assistant Cloud subscription. Set one of them up as described in [Home Assistant URL](#home-assistant-url), then reload the integration.
+
+The error is also written in the Home Assistant logs.
 
 <Info>
-In case of error, you can try to restart the integration or use the actions [diagral.unregister_webhook](/integration/actions#unregister-webhook) and [diagral.register_webhook](/integration/actions#register-webhook) to force webhooks to reconfigure.
+You can also use the actions [diagral.unregister_webhook](/integration/actions#unregister-webhook) and [diagral.register_webhook](/integration/actions#register-webhook) to force the webhook to be reconfigured. They fail with an error explaining why when they cannot complete.
 </Info>
 
 ## Existing subscription
