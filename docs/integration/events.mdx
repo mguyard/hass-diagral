@@ -15,6 +15,8 @@ When Diagral integration receive webhooks from the Diagral Cloud, all Webhook re
 event_type: DIAGRAL_EVENT
 data: # [!code highlight]
   type: STATUS # [!code highlight]
+  entry_id: 01JMZ3ZQ7V9R5S2X8KD4N6TB1C # [!code highlight]
+  entity_id: alarm_control_panel.home_central # [!code highlight]
   data: # [!code highlight]
     transmitter_id: 1234567890ABCD # [!code highlight]
     alarm_code: "3401" # [!code highlight]
@@ -39,6 +41,8 @@ context:
 
 The information provided by the received webhook is located in the `data` key.
 
+`entry_id` identifies the Home Assistant configuration entry of the alarm, and `entity_id` its alarm panel. Use them to tell two alarms apart in an automation.
+
 The type can be:
 - `STATUS`
 - `ALERT`
@@ -50,7 +54,7 @@ The relationship between `alarm_code` and `type` is documented [here](https://mg
 </Info>
 
 Additional fields include:
-- `transmitter_id`: ID of the device that triggered the event
+- `transmitter_id`: Serial ID of the Diagral system that sent the event
 - `alarm_code`: Alarm code defined internally by Diagral
 - `alarm_description`: Description of the `alarm_code` provided by Diagral
 - `group_index`: Group ID or specific group (e.g., NIGHT_MODE_GROUP_CODE) affected by the action that triggered the event
@@ -66,3 +70,13 @@ Additional fields include:
 <Info>
 Username information from events is also stored in the Alarm Control Panel attributes under the `changed_by` field.
 </Info>
+
+## Activity log
+
+Each received webhook also appears in the activity log, in the alarm panel's own log too, for example:
+
+```text
+Diagral STATUS webhook: REMOTE-ARMING-OF-GROUP (3407), by HereMyName
+```
+
+Alerts and anomalies name the device that raised them, when it is known.

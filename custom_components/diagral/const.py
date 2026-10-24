@@ -2,6 +2,8 @@
 
 DOMAIN = "diagral"
 BRAND = "Diagral"
+# Bus event fired for every webhook; a public contract used in automations
+DIAGRAL_EVENT = "DIAGRAL_EVENT"
 
 CONFIG_VERSION = 2
 CONFIG_MINOR_VERSION = 1

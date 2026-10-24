@@ -239,3 +239,30 @@ class TestTransmitterCheck:
         hass.bus.async_fire.assert_not_called()
         assert "OTHERCENTRAL99" not in caplog.text
         assert "FAKECENTRAL01" not in caplog.text
+
+
+class TestPublishedEvent:
+    """DIAGRAL_EVENT names the config entry it belongs to."""
+
+    async def test_event_names_its_entry_and_panel(self):
+        """Automations tell two centrals apart; the panel's logbook lists it."""
+        hass, _ = make_hass_with_entries()
+        entities = [
+            MagicMock(domain="sensor", entity_id="sensor.fake_home_anomalies"),
+            MagicMock(domain="alarm_control_panel", entity_id="alarm_control_panel.x"),
+        ]
+
+        with (
+            patch("custom_components.diagral.webhook.async_dispatcher_send"),
+            patch(
+                "custom_components.diagral.webhook.er.async_entries_for_config_entry",
+                return_value=entities,
+            ),
+        ):
+            await handle_webhook(hass, WEBHOOK_ID, make_request(PRODUCTION_STATUS))
+
+        event_type, event_data = hass.bus.async_fire.call_args.args
+        assert event_type == "DIAGRAL_EVENT"
+        assert event_data["entry_id"] == "loaded"
+        assert event_data["entity_id"] == "alarm_control_panel.x"
+        assert event_data["type"] == "STATUS"
