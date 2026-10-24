@@ -53,9 +53,11 @@ coordinator.data["anomalies"]       # Anomalies, or a falsy value when there are
 
 - The URL comes from `get_url(require_ssl=True, allow_internal=False, allow_cloud=True, prefer_external=True)`. No URL → no webhook, setup continues.
 - If it ends with `HA_CLOUD_DOMAIN` (`.nabu.casa`) and a Nabu Casa subscription is active, a **cloudhook** is created; otherwise the URL is `<external_url>/api/webhook/<webhook_id>`.
-- `api.get_webhook()`: if a subscription exists it is **updated** to the new URL (with a warning when it pointed to another host); otherwise one is **registered**. Subscriptions cover anomaly, alert and state.
-- `unregister_webhook` deletes the subscription, then deletes the cloudhook (if the stored URL is a `hooks.nabu.casa` one) or unregisters the local webhook, and clears `runtime_data.webhook_id`.
-- The central holds **one** subscription. A second Home Assistant using the same central takes it over, and unloading either deletes it. See `AGENTS.md` → Validation.
+- **Ownership.** Each entry stores `webhook_url_hash` in `entry.data`: the SHA-256 of the URL it registered (never the URL, which carries the secret webhook id). The central's subscription is "ours" when its URL hashes to that value; an entry without a stored hash (set up before ownership was tracked) falls back once to comparing scheme and host.
+- `api.get_webhook()` → no subscription: **register** one. Our subscription: **update** it. Someone else's: leave it untouched, log a warning with the host only, and raise the fixable repair issue `webhook_owned_elsewhere_<entry_id>` (severity ERROR: intrusion alerts only arrive by webhook). `take_over=True` — passed by the repair's fix flow (`repairs.py`) and by the `register_webhook` action — updates a foreign subscription anyway.
+- After a successful register or update, the hash is stored and the repair issue deleted. Subscriptions cover anomaly, alert and state.
+- `unregister_webhook` deletes the subscription only when its hash matches, then forgets the hash; it deletes our cloudhook if the subscription was one, always unregisters the local webhook, and clears `runtime_data.webhook_id`.
+- Two installations behind Nabu Casa share the `hooks.nabu.casa` host: only the hash tells their subscriptions apart. See `AGENTS.md` → Validation.
 
 ### 2.4 Incoming webhook (`webhook.py`)
 
@@ -312,7 +314,7 @@ Do not work around a `pydiagral` bug or gap in the integration — fix `pydiagra
 ### 10.5 Diagnostics and repairs
 
 - `diagnostics.py` must never expose credentials, keys, the PIN or the webhook id. Extend `TO_REDACT` whenever a new secret enters the payload.
-- There is no `repairs.py`. If one is added, every issue must be actionable: what is happening, why it matters, the exact steps to resolve it.
+- `repairs.py` holds one fixable issue, `webhook_owned_elsewhere` (§2.3). Every issue must stay actionable: what is happening, why it matters, the exact steps to resolve it — in both `en.json` and `fr.json`, under `issues`. Scope issue ids per config entry.
 
 ### 10.6 Finding examples
 

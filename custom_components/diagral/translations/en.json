@@ -143,5 +143,22 @@
             "description": "Unregister Webhook in Diagral Cloud",
             "name": "Unregister Webhook"
         }
+    },
+    "issues": {
+        "webhook_owned_elsewhere": {
+            "title": "Diagral webhook used by another installation: {entry_title}",
+            "fix_flow": {
+                "step": {
+                    "confirm": {
+                        "title": "Take over the Diagral webhook",
+                        "description": "The Diagral cloud sends the events of **{entry_title}** to another installation (**{other_host}**), so Home Assistant does not receive them. Intrusion alerts only arrive this way: the alarm panel cannot show *triggered* while this lasts. Polling still updates the arming state every 5 minutes.\n\nThe integration no longer overwrites a subscription it did not create. If **{other_host}** is not in use any more, or you want this installation to receive the events, confirm below: the subscription will point here, and **{other_host}** will stop receiving events.\n\nYou can also do this at any time with the `diagral.register_webhook` action."
+                    }
+                },
+                "abort": {
+                    "entry_not_loaded": "The Diagral integration is not loaded. Reload it, then try again.",
+                    "take_over_failed": "The Diagral cloud refused the change. Check the logs, then try again."
+                }
+            }
+        }
     }
 }

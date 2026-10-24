@@ -142,5 +142,22 @@
             "description": "Désinscrire le Webhook du Cloud Diagral",
             "name": "Désinscrire le Webhook"
         }
+    },
+    "issues": {
+        "webhook_owned_elsewhere": {
+            "title": "Webhook Diagral utilisé par une autre installation : {entry_title}",
+            "fix_flow": {
+                "step": {
+                    "confirm": {
+                        "title": "Reprendre le webhook Diagral",
+                        "description": "Le cloud Diagral envoie les événements de **{entry_title}** à une autre installation (**{other_host}**) : Home Assistant ne les reçoit donc pas. Les alertes d'intrusion n'arrivent que par ce canal : le panneau d'alarme ne peut pas passer à *déclenchée* tant que cela dure. Le polling continue de mettre à jour l'état d'armement toutes les 5 minutes.\n\nL'intégration n'écrase plus un abonnement qu'elle n'a pas créé. Si **{other_host}** n'est plus utilisé, ou si vous voulez que cette installation reçoive les événements, confirmez ci-dessous : l'abonnement pointera ici, et **{other_host}** ne recevra plus d'événements.\n\nVous pouvez aussi le faire à tout moment avec l'action `diagral.register_webhook`."
+                    }
+                },
+                "abort": {
+                    "entry_not_loaded": "L'intégration Diagral n'est pas chargée. Rechargez-la, puis réessayez.",
+                    "take_over_failed": "Le cloud Diagral a refusé la modification. Consultez les journaux, puis réessayez."
+                }
+            }
+        }
     }
 }

@@ -287,7 +287,7 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
         """Register the webhook for Diagral."""
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
         webhook_id = await register_webhook(
-            self.hass, entry, entry.runtime_data.api, "HA Action"
+            self.hass, entry, entry.runtime_data.api, "HA Action", take_over=True
         )
         # Force the webhook_id in the entry runtime data to be sure it is saved
         entry.runtime_data.webhook_id = webhook_id
