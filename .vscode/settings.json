@@ -1,17 +1,20 @@
 {
-    "python.testing.pytestArgs": [
-        "tests"
-    ],
-    "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": [
+        "custom_components/diagral/tests"
+    ],
     "github.copilot.chat.commitMessageGeneration.instructions": [
         {
-            "file": ".github/copilot-commit-message-instructions.md"
+            "file": "AGENTS.md"
         }
     ],
-    "chat.subagents.allowInvocationsFromSubagents": true,
-    "flake8.args": [
-        "--max-line-length=150"
-    ],
-    "python.defaultInterpreterPath": "/usr/bin/python3"
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "[markdown]": {
+        "files.trimTrailingWhitespace": false
+    },
+    "[mdx]": {
+        "files.trimTrailingWhitespace": false
+    }
 }

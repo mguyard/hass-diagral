@@ -1,9 +1,15 @@
 {
     "recommendations": [
-      "redhat.vscode-yaml",
-      "esbenp.prettier-vscode",
-      "ms-python.python",
-      "GitHub.vscode-pull-request-github",
-      "github.copilot-chat"
+        "charliermarsh.ruff",
+        "ms-python.python",
+        "redhat.vscode-yaml",
+        "GitHub.vscode-pull-request-github",
+        "github.copilot-chat"
+    ],
+    "unwantedRecommendations": [
+        "ms-python.flake8",
+        "ms-python.black-formatter",
+        "ms-python.autopep8",
+        "ms-python.isort"
     ]
-  }
+}

@@ -163,3 +163,10 @@ cython_debug/
 
 # Exclusion of .DS_Store
 .DS_Store
+
+# Agent tooling
+#  Catalogue of MCP servers dropped in by the ECC plugin: a template to copy
+#  from, not this project's configuration.
+.mcp.json
+#  Personal Claude Code settings. The shared ones live in .claude/settings.json.
+.claude/settings.local.json
