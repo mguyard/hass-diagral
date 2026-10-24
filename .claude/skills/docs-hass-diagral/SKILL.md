@@ -151,15 +151,19 @@ Displays images hosted remotely or under `docs/images/`:
 <Image src="https://example.com/image.png" alt="Description" width="200" />
 ```
 
-### 3.7 `<Badges>` (example)
+### 3.7 Badges in a row
 
-Used on the homepage to display GitHub status badges:
+docs.page has no `<Badges>` component any more: it renders as "Markdown contains an unknown component". A standalone image, Markdown or `<img>`, renders as a block, and inline `style` is ignored. To put badges side by side, use a one-row table per group, with a blank line between groups — otherwise consecutive tables merge and drop cells:
 
 ```mdx
-<Badges>
-    <Image src="https://img.shields.io/github/license/mguyard/hass-diagral?style=default&color=0080ff" alt="License" />
-</Badges>
+| ![License](https://img.shields.io/github/license/mguyard/hass-diagral) | ![Last Commit](https://img.shields.io/github/last-commit/mguyard/hass-diagral) |
+|:---:|:---:|
+
+| ![Stable](https://img.shields.io/github/v/release/mguyard/hass-diagral) | ![Open PRs](https://img.shields.io/github/issues-pr/mguyard/hass-diagral) |
+|:---:|:---:|
 ```
+
+Verified with the local preview on 2026-10-24.
 
 ---
 
@@ -176,11 +180,11 @@ Always specify the language:
 ```mdx
 ````
 
-To highlight specific lines inside a code block, use `// [!code highlight]` at the end of the line:
+To highlight specific lines inside a code block, end the line with `[!code highlight]` written as a comment **in the block's language** — `# [!code highlight]` in YAML, `// [!code highlight]` in JavaScript. With the wrong comment syntax the marker is shown verbatim and nothing is highlighted, which is what `// …` in YAML blocks did on every page until 2026-10-24:
 
 ```yaml
-anomalies: // [!code highlight]
-  sensors: // [!code highlight]
+anomalies: # [!code highlight]
+  sensors: # [!code highlight]
     - serial: '123'
 ```
 

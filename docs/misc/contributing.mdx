@@ -11,37 +11,39 @@ Want to contribute to `Diagral` integration? Great! We have a few small asks tho
 
 
 <Steps>
-  <Step title="Clone this repo">
-    Clone this repo
+  <Step title="Fork and clone this repo">
+    Fork the repository on GitHub, then clone your fork
 
-    ```js
-    git clone https://github.com/mguyard/hass-diagral.git
+    ```bash
+    git clone https://github.com/<your-account>/hass-diagral.git
     ```
 
   </Step>
   <Step title="Create a new branch">
-    Create a new branch in your cloned repo
+    Create a new branch from `dev` in your cloned repo
 
-    ```js
+    ```bash
+    git checkout dev
     git checkout -b new-feature-x
     ```
 
   </Step>
   <Step title="Make your changes">
-    Develop and test your changes locally
-  </Step>
-  <Step title="Commit Your Changes">
-    Commit your changes with a clear and concise message that follows the [Conventional Commits guidelines](https://www.conventionalcommits.org/en/v1.0.0/).
+    Develop your changes, and add or update the tests in `custom_components/diagral/tests/` that cover them.
+    Then run the same checks as the CI, with the `pydiagral` version pinned in `custom_components/diagral/manifest.json`:
 
-    ```js
-    git commit -m 'feat: Implemented new feature x.'
+    ```bash
+    pip install homeassistant pydiagral==<pinned version> pytest pytest-asyncio pytest-timeout pytest-mock ruff==0.16.1
+    python -m pytest custom_components/diagral/tests/ -v
+    ruff check custom_components/diagral
+    ruff format --check custom_components/diagral
     ```
 
   </Step>
   <Step title="Commit Your Changes">
     Commit your changes with a clear and concise message that follows the [Conventional Commits guidelines](https://www.conventionalcommits.org/en/v1.0.0/).
 
-    ```js
+    ```bash
     git commit -m 'feat: Implemented new feature x.'
     ```
 
@@ -49,7 +51,7 @@ Want to contribute to `Diagral` integration? Great! We have a few small asks tho
   <Step title="Push to GitHub">
     Push the changes to your forked repository.
 
-    ```js
+    ```bash
     git push origin new-feature-x
     ```
 
@@ -60,4 +62,4 @@ Want to contribute to `Diagral` integration? Great! We have a few small asks tho
   </Step>
 </Steps>
 
-🎉 Once your PR is reviewed and approved, it will be merged into the beta branch. After final testing, it will be merged into the main branch.
+🎉 Once your PR is reviewed and approved, it is merged into the `dev` branch. It then ships in a beta release, and in a stable release after final testing.
