@@ -150,3 +150,26 @@ class TestAlarmIntrusionCodes:
     def test_alarm_intrusion_codes(self, const):
         """Intrusion, confirmed intrusion and confirmed pre-alarm trigger the panel."""
         assert set(const.ALARM_INTRUSION_CODES) == {1130, 1139, 1141}
+
+
+class TestReadRetries:
+    """Tests for the progressive read retry schedule."""
+
+    def test_one_pause_between_two_attempts(self, const):
+        """There is exactly one pause between two consecutive attempts."""
+        assert len(const.READ_RETRY_PAUSES) == len(const.READ_ATTEMPT_TIMEOUTS) - 1
+
+    def test_deadlines_and_pauses_grow(self, const):
+        """Each attempt and each pause is longer than the previous one."""
+        for schedule in (const.READ_ATTEMPT_TIMEOUTS, const.READ_RETRY_PAUSES):
+            assert list(schedule) == sorted(set(schedule))
+
+    def test_worst_case_fits_half_a_polling_cycle(self, const):
+        """Retries never run into the next poll."""
+        worst_case = sum(const.READ_ATTEMPT_TIMEOUTS) + sum(const.READ_RETRY_PAUSES)
+        assert worst_case <= const.READ_RETRY_BUDGET
+        assert const.READ_RETRY_BUDGET <= const.DEFAULT_SCAN_INTERVAL / 2
+
+    def test_request_ceiling_allows_the_longest_attempt(self, const):
+        """The pydiagral request timeout never cuts an attempt short."""
+        assert max(const.READ_ATTEMPT_TIMEOUTS) <= const.DIAGRAL_REQUEST_TIMEOUT

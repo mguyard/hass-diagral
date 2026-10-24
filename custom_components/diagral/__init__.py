@@ -32,6 +32,7 @@ from .const import (
     CONF_WEBHOOK_URL_HASH,
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
+    DIAGRAL_REQUEST_TIMEOUT,
     DOMAIN,
     HA_CLOUD_DOMAIN,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
@@ -64,6 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
             apikey=config_dict[CONF_API_KEY],
             secret_key=config_dict[CONF_SECRET_KEY],
             pincode=config_dict[CONF_PIN_CODE],
+            request_timeout=DIAGRAL_REQUEST_TIMEOUT,
         )
 
         await api.__aenter__()  # Open the session explicitly  # pylint: disable=C2801

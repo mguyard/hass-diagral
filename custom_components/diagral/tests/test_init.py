@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from custom_components.diagral import (
     async_migrate_entry,
     async_remove_entry,
+    async_setup_entry,
     register_webhook,
     unregister_webhook,
 )
@@ -22,10 +23,13 @@ from custom_components.diagral.const import (
     CONF_WEBHOOK_URL_HASH,
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
+    DIAGRAL_REQUEST_TIMEOUT,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
 )
 from pydiagral.exceptions import DiagralAPIError
 import pytest
+
+from homeassistant.exceptions import ConfigEntryNotReady
 
 WEBHOOK_ID = "SECRETWEBHOOKID"
 OWN_HOST = "https://ha.example.com"
@@ -341,3 +345,23 @@ class TestMigrateEntry:
 
         assert await async_migrate_entry(hass, entry) is False
         hass.config_entries.async_update_entry.assert_not_called()
+
+
+class TestSetupEntry:
+    """async_setup_entry() builds the Diagral client."""
+
+    async def test_client_allows_the_longest_read_attempt(self):
+        """The client's request timeout covers the coordinator's last attempt."""
+        api_cls = MagicMock()
+        api_cls.return_value.__aenter__ = AsyncMock(
+            side_effect=DiagralAPIError("stop after construction")
+        )
+        with (
+            patch("custom_components.diagral.DiagralConfigData"),
+            patch("custom_components.diagral.asdict", return_value=MagicMock()),
+            patch("custom_components.diagral.DiagralAPI", api_cls),
+            pytest.raises(ConfigEntryNotReady),
+        ):
+            await async_setup_entry(MagicMock(), MagicMock())
+
+        assert api_cls.call_args.kwargs["request_timeout"] == DIAGRAL_REQUEST_TIMEOUT

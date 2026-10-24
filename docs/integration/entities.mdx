@@ -19,6 +19,8 @@ The Diagral integration operates in Hub Mode, meaning that all configurations wi
 
 <Info>
 All entities are refreshed every `5 minutes` (fixed) or upon receiving a [Webhook](/integration/webhook) from the Diagral Cloud.
+
+When the Diagral Cloud fails temporarily (server error, timeout, network error), the refresh is retried up to twice, with longer waits, within `2.5 minutes`. Entities become unavailable only if every attempt fails, and recover at the next successful refresh.
 </Info>
 
 ## Central - Details
