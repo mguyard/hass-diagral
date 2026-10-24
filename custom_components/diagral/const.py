@@ -10,6 +10,8 @@ CONF_SERIAL_ID = "serial_id"
 CONF_PIN_CODE = "pin_code"
 CONF_API_KEY = "api_key"
 CONF_SECRET_KEY = "secret_key"
+# SHA-256 of the webhook URL this entry registered, to recognise its subscription
+CONF_WEBHOOK_URL_HASH = "webhook_url_hash"
 CONF_ALARMPANEL_ACTIONTYPE_CODE = "alarmpanel_actiontype_code"
 CONF_ALARMPANEL_ACTIONTYPE_CODE_OPTIONS = [
     "never",
@@ -33,3 +35,5 @@ SERVICE_REGISTER_WEBHOOK = "register_webhook"
 SERVICE_UNREGISTER_WEBHOOK = "unregister_webhook"
 
 INPUT_GROUPS = "group_ids"
+
+ISSUE_WEBHOOK_OWNED_ELSEWHERE = "webhook_owned_elsewhere"

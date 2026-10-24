@@ -156,7 +156,7 @@ The pre-commit test gate, the pull request description template and the prepare-
 
 ## Validation against a running Home Assistant
 
-**The maintainer's production Home Assistant uses the same Diagral central.** The central holds a single webhook subscription: setting up the integration elsewhere re-points it, and unloading it deletes it. Production then silently stops receiving events.
+**The maintainer's production Home Assistant uses the same Diagral central.** The central holds a single webhook subscription. An entry no longer overwrites or deletes a subscription it does not own — it raises a repair issue instead — but the take-over repair, the `register_webhook` action and older versions of the integration still re-point it, and production then silently stops receiving events.
 
 Never enable a config entry backed by real Diagral credentials, never call an arming action, and never register or unregister a webhook against the real central without the maintainer's explicit consent for that specific run. The `live-validation-hass-diagral` skill describes the safe levels, and the restore procedure when the real central is used.
 

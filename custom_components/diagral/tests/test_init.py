@@ -1,9 +1,12 @@
-"""Tests for __init__.py: secrets must never reach the log.
+"""Tests for __init__.py: webhook ownership and secrets in logs.
 
-Webhook ids are bearer secrets — anyone who knows one can post events to
-Home Assistant — and API keys grant access to the Diagral account.
+The central holds a single webhook subscription. An entry only updates or
+deletes it when it can prove the subscription is its own; otherwise it
+raises a repair issue and leaves it alone. Webhook ids are bearer secrets
+and API keys grant access to the Diagral account: neither may be logged.
 """
 
+import hashlib
 import logging
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,11 +16,25 @@ from custom_components.diagral import (
     register_webhook,
     unregister_webhook,
 )
+from custom_components.diagral.const import (
+    CONF_WEBHOOK_URL_HASH,
+    ISSUE_WEBHOOK_OWNED_ELSEWHERE,
+)
 from pydiagral.exceptions import DiagralAPIError
 import pytest
 
 WEBHOOK_ID = "SECRETWEBHOOKID"
+OWN_HOST = "https://ha.example.com"
+OWN_NEW_URL = f"{OWN_HOST}/api/webhook/{WEBHOOK_ID}"
+OWN_OLD_URL = f"{OWN_HOST}/api/webhook/OLDID"
 OTHER_URL = "https://other.example.net/api/webhook/OTHERSECRETID"
+CLOUDHOOK_URL = "https://hooks.nabu.casa/SECRETCLOUDHOOK"
+NO_SUBSCRIPTION = DiagralAPIError("No subscription found for FAKECENTRAL01")
+
+
+def url_hash(url: str) -> str:
+    """Return the hash an entry stores to recognise its subscription."""
+    return hashlib.sha256(url.encode()).hexdigest()
 
 
 class _CloudError(Exception):
@@ -31,12 +48,17 @@ def cloud():
     module.CloudNotAvailable = _CloudError
     module.CloudNotConnected = _CloudError
     module.async_active_subscription.return_value = True
-    module.async_get_or_create_cloudhook = AsyncMock(
-        return_value="https://hooks.nabu.casa/SECRETCLOUDHOOK"
-    )
+    module.async_get_or_create_cloudhook = AsyncMock(return_value=CLOUDHOOK_URL)
     module.async_delete_cloudhook = AsyncMock()
     with patch.dict(sys.modules, {"homeassistant.components.cloud": module}):
         yield module
+
+
+@pytest.fixture
+def issues():
+    """Patch the issue registry helper used by the integration."""
+    with patch("custom_components.diagral.ir") as ir:
+        yield ir
 
 
 @pytest.fixture
@@ -46,97 +68,214 @@ def debug_log(caplog):
     return caplog
 
 
-def make_entry() -> MagicMock:
-    """Return a config entry mock."""
+def make_entry(stored_url: str | None = None) -> MagicMock:
+    """Return a config entry mock, optionally owning a subscription."""
     entry = MagicMock()
+    entry.entry_id = "entry1"
     entry.title = "fake home (FAKECENTRAL01)"
+    entry.data = {}
+    if stored_url is not None:
+        entry.data[CONF_WEBHOOK_URL_HASH] = url_hash(stored_url)
     return entry
 
 
-async def run_register(external_url: str, api: MagicMock) -> str | None:
+def make_api(existing_url: str | None) -> MagicMock:
+    """Return a DiagralAPI mock whose central has the given subscription."""
+    api = MagicMock()
+    if existing_url is None:
+        api.get_webhook = AsyncMock(side_effect=NO_SUBSCRIPTION)
+    else:
+        api.get_webhook = AsyncMock(return_value=MagicMock(webhook_url=existing_url))
+    api.update_webhook = AsyncMock()
+    api.register_webhook = AsyncMock()
+    api.delete_webhook = AsyncMock()
+    return api
+
+
+async def run_register(
+    entry: MagicMock,
+    api: MagicMock,
+    external_url: str = OWN_HOST,
+    *,
+    take_over: bool = False,
+) -> tuple[str | None, MagicMock]:
     """Call register_webhook with Home Assistant helpers patched."""
+    hass = MagicMock()
     with (
         patch("custom_components.diagral.get_url", return_value=external_url),
         patch("custom_components.diagral.webhook_generate_id", return_value=WEBHOOK_ID),
         patch("custom_components.diagral.webhook_async_register"),
     ):
-        return await register_webhook(MagicMock(), make_entry(), api, "test")
+        result = await register_webhook(hass, entry, api, "test", take_over=take_over)
+    return result, hass
 
 
-class TestRegisterWebhookLogs:
-    """register_webhook() must not log webhook ids."""
+def stored_hash(hass: MagicMock) -> str | None:
+    """Return the hash written to the entry, or None if nothing was written."""
+    if not hass.config_entries.async_update_entry.called:
+        return None
+    return hass.config_entries.async_update_entry.call_args.kwargs["data"].get(
+        CONF_WEBHOOK_URL_HASH
+    )
+
+
+class TestRegisterOwnership:
+    """register_webhook() only replaces a subscription it owns."""
+
+    async def test_no_subscription_registers_and_remembers(self, cloud, issues):
+        """Without a subscription, register one and remember it."""
+        api = make_api(None)
+        result, hass = await run_register(make_entry(), api)
+
+        assert result == WEBHOOK_ID
+        api.register_webhook.assert_awaited_once()
+        assert stored_hash(hass) == url_hash(OWN_NEW_URL)
+        issues.async_delete_issue.assert_called_once()
+
+    async def test_own_subscription_is_updated(self, cloud, issues):
+        """A subscription matching the stored hash is updated in place."""
+        api = make_api(OWN_OLD_URL)
+        result, hass = await run_register(make_entry(OWN_OLD_URL), api)
+
+        assert result == WEBHOOK_ID
+        api.update_webhook.assert_awaited_once()
+        assert stored_hash(hass) == url_hash(OWN_NEW_URL)
+
+    async def test_foreign_subscription_is_left_alone(self, cloud, issues):
+        """A subscription owned elsewhere is not touched; a repair is raised."""
+        api = make_api(OTHER_URL)
+        result, hass = await run_register(make_entry(OWN_OLD_URL), api)
+
+        assert result is None
+        api.update_webhook.assert_not_awaited()
+        api.register_webhook.assert_not_awaited()
+        issues.async_create_issue.assert_called_once()
+        kwargs = issues.async_create_issue.call_args.kwargs
+        assert kwargs["translation_key"] == ISSUE_WEBHOOK_OWNED_ELSEWHERE
+        assert kwargs["is_fixable"] is True
+        assert kwargs["data"] == {"entry_id": "entry1"}
+        assert stored_hash(hass) is None
+
+    async def test_same_host_but_other_id_is_foreign_once_tracked(self, cloud, issues):
+        """Two installations behind Nabu Casa share a host: the hash decides."""
+        api = make_api("https://hooks.nabu.casa/SOMEONEELSE")
+        result, _ = await run_register(
+            make_entry(CLOUDHOOK_URL), api, "https://abcdef.ui.nabu.casa"
+        )
+
+        assert result is None
+        api.update_webhook.assert_not_awaited()
 
     @pytest.mark.parametrize(
-        ("external_url", "existing"),
+        ("existing", "owned"),
+        [(OWN_OLD_URL, True), (OTHER_URL, False)],
+        ids=["same-host", "other-host"],
+    )
+    async def test_untracked_entry_falls_back_to_host(
+        self, cloud, issues, existing, owned
+    ):
+        """An entry set up before ownership tracking compares hosts once."""
+        api = make_api(existing)
+        result, hass = await run_register(make_entry(), api)
+
+        assert (result == WEBHOOK_ID) is owned
+        assert api.update_webhook.await_count == int(owned)
+        assert (stored_hash(hass) == url_hash(OWN_NEW_URL)) is owned
+
+    async def test_take_over_replaces_foreign_subscription(self, cloud, issues):
+        """An explicit take-over updates even a foreign subscription."""
+        api = make_api(OTHER_URL)
+        result, hass = await run_register(make_entry(), api, take_over=True)
+
+        assert result == WEBHOOK_ID
+        api.update_webhook.assert_awaited_once()
+        issues.async_create_issue.assert_not_called()
+        issues.async_delete_issue.assert_called_once()
+        assert stored_hash(hass) == url_hash(OWN_NEW_URL)
+
+
+class TestUnregisterOwnership:
+    """unregister_webhook() only deletes a subscription it owns."""
+
+    async def test_own_subscription_is_deleted(self, cloud):
+        """The entry's own subscription is deleted and forgotten."""
+        api = make_api(OWN_OLD_URL)
+        entry = make_entry(OWN_OLD_URL)
+        hass = MagicMock()
+        with patch("custom_components.diagral.webhook_async_unregister") as local:
+            await unregister_webhook(hass, entry, api, WEBHOOK_ID, "test")
+
+        api.delete_webhook.assert_awaited_once()
+        local.assert_called_once_with(hass, WEBHOOK_ID)
+        assert stored_hash(hass) is None
+        assert (
+            CONF_WEBHOOK_URL_HASH
+            not in hass.config_entries.async_update_entry.call_args.kwargs["data"]
+        )
+
+    @pytest.mark.parametrize(
+        "stored", [OWN_OLD_URL, None], ids=["tracked-other", "untracked"]
+    )
+    async def test_foreign_subscription_is_kept(self, cloud, stored):
+        """A subscription the entry cannot prove it owns is not deleted."""
+        api = make_api(OTHER_URL)
+        hass = MagicMock()
+        with patch("custom_components.diagral.webhook_async_unregister") as local:
+            await unregister_webhook(hass, make_entry(stored), api, WEBHOOK_ID, "t")
+
+        api.delete_webhook.assert_not_awaited()
+        local.assert_called_once_with(hass, WEBHOOK_ID)
+
+
+class TestLogsHideSecrets:
+    """No webhook id, API key or password reaches the log."""
+
+    @pytest.mark.parametrize(
+        ("external_url", "existing", "stored"),
         [
-            ("https://ha.example.com", None),
-            ("https://ha.example.com", OTHER_URL),
-            ("https://ha.example.com", "https://ha.example.com/api/webhook/OLDID"),
-            ("https://abcdef.ui.nabu.casa", None),
+            (OWN_HOST, None, None),
+            (OWN_HOST, OTHER_URL, None),
+            (OWN_HOST, OWN_OLD_URL, OWN_OLD_URL),
+            ("https://abcdef.ui.nabu.casa", None, None),
         ],
         ids=["new", "foreign-subscription", "own-subscription", "cloudhook"],
     )
-    async def test_no_webhook_id_in_logs(
-        self, cloud, debug_log, external_url, existing
+    async def test_register_hides_webhook_ids(
+        self, cloud, issues, debug_log, external_url, existing, stored
     ):
-        """No path writes a webhook id, ours or another installation's."""
-        api = MagicMock()
-        if existing is None:
-            api.get_webhook = AsyncMock(
-                side_effect=DiagralAPIError("No subscription found for FAKECENTRAL01")
-            )
-        else:
-            api.get_webhook = AsyncMock(return_value=MagicMock(webhook_url=existing))
-        api.update_webhook = AsyncMock()
-        api.register_webhook = AsyncMock()
-
-        assert await run_register(external_url, api) == WEBHOOK_ID
+        """No registration path writes a webhook id."""
+        await run_register(make_entry(stored), make_api(existing), external_url)
 
         for secret in (WEBHOOK_ID, "OTHERSECRETID", "OLDID", "SECRETCLOUDHOOK"):
             assert secret not in debug_log.text
 
-    async def test_host_is_kept_for_diagnosis(self, cloud, debug_log):
-        """The host stays in the log, only the path is redacted."""
-        api = MagicMock()
-        api.get_webhook = AsyncMock(return_value=MagicMock(webhook_url=OTHER_URL))
-        api.update_webhook = AsyncMock()
+    async def test_host_is_kept_for_diagnosis(self, cloud, issues, debug_log):
+        """The hosts stay in the log, only the paths are redacted."""
+        await run_register(make_entry(), make_api(OTHER_URL))
 
-        await run_register("https://ha.example.com", api)
-
-        assert "ha.example.com" in debug_log.text
         assert "other.example.net" in debug_log.text
 
-    async def test_failed_registration_hides_webhook_id(self, cloud, debug_log):
+    async def test_failed_registration_hides_webhook_id(self, cloud, issues, debug_log):
         """The error logged when Diagral refuses the subscription has no id."""
-        api = MagicMock()
-        api.get_webhook = AsyncMock(
-            side_effect=DiagralAPIError("No subscription found for FAKECENTRAL01")
-        )
+        api = make_api(None)
         api.register_webhook = AsyncMock(side_effect=DiagralAPIError("refused"))
 
-        assert await run_register("https://ha.example.com", api) is None
+        result, _ = await run_register(make_entry(), api)
+
+        assert result is None
         assert WEBHOOK_ID not in debug_log.text
-
-
-class TestUnregisterWebhookLogs:
-    """unregister_webhook() must not log webhook ids."""
 
     async def test_cloudhook_deletion_hides_webhook_id(self, cloud, debug_log):
         """Deleting a cloudhook does not log its id."""
-        api = MagicMock()
-        api.get_webhook = AsyncMock(
-            return_value=MagicMock(webhook_url="https://hooks.nabu.casa/SECRETCLOUD")
+        api = make_api(CLOUDHOOK_URL)
+
+        await unregister_webhook(
+            MagicMock(), make_entry(CLOUDHOOK_URL), api, WEBHOOK_ID, "test"
         )
-        api.delete_webhook = AsyncMock()
 
-        await unregister_webhook(MagicMock(), make_entry(), api, WEBHOOK_ID, "test")
-
+        cloud.async_delete_cloudhook.assert_awaited_once()
         assert WEBHOOK_ID not in debug_log.text
-        assert "SECRETCLOUD" not in debug_log.text
-
-
-class TestRemoveEntryLogs:
-    """async_remove_entry() must not log the API key it deletes."""
+        assert "SECRETCLOUDHOOK" not in debug_log.text
 
     async def test_deleted_api_key_not_logged(self, debug_log):
         """The success message names the entry, not the key."""

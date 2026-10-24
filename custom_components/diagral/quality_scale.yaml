@@ -60,9 +60,7 @@ rules:
   exception-translations: todo
   icon-translations: todo
   reconfiguration-flow: todo
-  repair-issues:
-    status: exempt
-    comment: no known use cases for repair issues or flows, yet
+  repair-issues: done
   stale-devices:
     status: todo
     comment: automate the cleanup process
