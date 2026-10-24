@@ -13,6 +13,10 @@ target:
   device_id: a1b2c3d4e5f6g7h8i9j0
 ```
 
+<Info>
+Arm Group(s), Disarm Group(s) and the alarm panel's own arm and disarm actions fail with an error when the code is wrong, when Diagral refuses the command, or when Diagral does not answer in time and the alarm state does not show the change. A failed action stops the automation that called it. A command is never sent twice: check the alarm state before retrying.
+</Info>
+
 ## Arm Group(s)
 
 <Property name="action" type="diagral.arm_groups" required>

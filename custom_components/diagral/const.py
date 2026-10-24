@@ -37,6 +37,14 @@ DIAGRAL_REQUEST_TIMEOUT = max(READ_ATTEMPT_TIMEOUTS)
 
 HA_CLOUD_DOMAIN = ".nabu.casa"
 
+# Diagral system statuses, as `SystemStatus.status` reports them in lower case
+STATUS_OFF = "off"
+STATUS_GROUP = "group"
+STATUS_TEMPO_GROUP = "tempo_group"
+STATUS_PRESENCE = "presence"
+# A command is never resent: past this deadline, one status read decides.
+COMMAND_TIMEOUT = 30
+
 SERVICE_ARM_GROUP = "arm_groups"
 SERVICE_DISARMGROUP = "disarm_groups"
 SERVICE_REGISTER_WEBHOOK = "register_webhook"

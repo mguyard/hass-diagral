@@ -160,5 +160,16 @@
                 }
             }
         }
+    },
+    "exceptions": {
+        "invalid_code": {
+            "message": "The code is wrong or missing."
+        },
+        "command_failed": {
+            "message": "Diagral refused the command. Check the alarm, then try again."
+        },
+        "command_not_confirmed": {
+            "message": "Diagral did not confirm the command in time, and the alarm state does not show it. Check the alarm state before trying again."
+        }
     }
 }

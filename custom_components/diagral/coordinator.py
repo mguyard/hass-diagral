@@ -27,7 +27,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _is_transient(err: Exception) -> bool:
+def is_transient_error(err: Exception) -> bool:
     """Return whether a failed read may succeed when retried."""
     if isinstance(err, TimeoutError | ClientError | ServerError):
         return True
@@ -77,7 +77,7 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
                 async with asyncio.timeout(timeout):
                     return await self._async_read()
             except (DiagralAPIError, TimeoutError) as err:
-                if attempt == len(timeouts) - 1 or not _is_transient(err):
+                if attempt == len(timeouts) - 1 or not is_transient_error(err):
                     raise
                 pause = READ_RETRY_PAUSES[attempt]
                 _LOGGER.info(

@@ -159,5 +159,16 @@
                 }
             }
         }
+    },
+    "exceptions": {
+        "invalid_code": {
+            "message": "Le code est incorrect ou absent."
+        },
+        "command_failed": {
+            "message": "Diagral a refusé la commande. Vérifiez l'alarme, puis réessayez."
+        },
+        "command_not_confirmed": {
+            "message": "Diagral n'a pas confirmé la commande à temps, et l'état de l'alarme ne la reflète pas. Vérifiez l'état de l'alarme avant de réessayer."
+        }
     }
 }
