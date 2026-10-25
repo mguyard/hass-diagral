@@ -83,6 +83,9 @@ async def async_get_config_entry_diagnostics(
                 "check_interval": WEBHOOK_CHECK_INTERVAL,
             },
             "repairs": repairs,
+            "api_keys": await _api_key_count(
+                entry.runtime_data.api, entry.runtime_data.config.serial_id
+            ),
         },
         "alarm": _alarm_summary(coordinator.data or {}),
         "system": await _system_details(entry.runtime_data.api),
@@ -104,6 +107,22 @@ async def _ping(api: DiagralAPI) -> dict[str, Any]:
     if error:
         return {"reachable": False, "status": None, "error": error}
     return {"reachable": True, "status": ping.status, "error": None}
+
+
+async def _api_key_count(api: DiagralAPI, serial_id: str) -> dict[str, Any]:
+    """Count the central's API keys, never list them: they are secrets."""
+    systems, error = await _query(api.get_systems())
+    if error:
+        return {"count": None, "error": error}
+    keys = next(
+        (
+            system.api_keys
+            for system in systems
+            if system.serial_id.upper() == serial_id.upper()
+        ),
+        None,
+    )
+    return {"count": None if keys is None else len(keys), "error": None}
 
 
 async def _system_details(api: DiagralAPI) -> dict[str, Any]:

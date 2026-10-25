@@ -31,6 +31,8 @@ HA_URL = os.environ.get("HA_URL", "http://host.docker.internal:8123").rstrip("/"
 USERNAME = os.environ.get("FAKE_USERNAME", "fake@example.com")
 PASSWORD = os.environ.get("FAKE_PASSWORD", "fake-password")
 PIN_CODE = os.environ.get("FAKE_PIN_CODE", "1234")
+# The central the fake account owns, listed by `GET /v1/users/systems`
+SERIAL = os.environ.get("FAKE_SERIAL", "FAKECENTRAL01")
 MAX_BODY_LOG = 4000
 
 _LOGGER = logging.getLogger("fake_cloud")
@@ -281,6 +283,19 @@ async def create_api_key(request: web.Request) -> web.Response:
     system.api_keys[api_key] = f"FAKESK{number:04d}"
     return web.json_response(
         {"api_key": api_key, "secret_key": system.api_keys[api_key]}
+    )
+
+
+async def list_systems(request: web.Request) -> web.Response:
+    if denied := _require_bearer(request):
+        return denied
+    cloud = request.app[CLOUD]
+    cloud.system(SERIAL)
+    return web.json_response(
+        [
+            {"serial_id": system.serial, "api_keys": list(system.api_keys)}
+            for system in cloud.systems.values()
+        ]
     )
 
 
@@ -602,6 +617,7 @@ def build_app() -> web.Application:
             web.get("/", health),
             web.post("/v1/users/authenticate/login", login),
             web.post("/v1/users/api_key", create_api_key),
+            web.get("/v1/users/systems", list_systems),
             web.get(f"/v1/users/systems/{serial}/api_keys", list_api_keys),
             web.delete(
                 f"/v1/users/systems/{serial}/api_keys/{{apikey}}", delete_api_key

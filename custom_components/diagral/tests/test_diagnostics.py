@@ -25,6 +25,8 @@ SECRETS = {
     "group": "Ground floor",
     "ip_address": "192.168.1.20",
     "vocal_contact": "0612345678",
+    "listed_key": "SECRETLISTEDKEY",
+    "other_serial": "OTHERCENTRAL99",
 }
 
 
@@ -52,6 +54,16 @@ def make_entry() -> MagicMock:
     entry.runtime_data.webhook_id = SECRETS["webhook_id"]
     entry.runtime_data.api.ping = AsyncMock(
         return_value=SimpleNamespace(status="we're alive")
+    )
+    entry.runtime_data.config.serial_id = SECRETS["serial"]
+    entry.runtime_data.api.get_systems = AsyncMock(
+        return_value=[
+            SimpleNamespace(serial_id=SECRETS["other_serial"], api_keys=["OTHERKEY"]),
+            SimpleNamespace(
+                serial_id=SECRETS["serial"],
+                api_keys=[SECRETS["listed_key"], *(f"KEY{i}" for i in range(12))],
+            ),
+        ]
     )
     entry.runtime_data.api.get_system_details = AsyncMock(
         return_value=SimpleNamespace(
@@ -220,6 +232,38 @@ async def test_refused_credentials_are_told_apart_from_an_outage():
 
     assert result["health"]["cloud"]["ping"]["reachable"] is True
     assert result["system"] == {"error": "AuthenticationError"}
+
+
+async def test_diagnostics_count_the_central_api_keys():
+    """Only the number of this central's keys: piled-up keys show, none leaks."""
+    result = await run_diagnostics()
+
+    assert result["health"]["api_keys"] == {"count": 13, "error": None}
+
+
+async def test_api_key_count_when_the_central_is_not_listed():
+    """A central missing from the account's list gives no count, and no error."""
+    entry = make_entry()
+    entry.runtime_data.api.get_systems = AsyncMock(return_value=[])
+
+    result = await run_diagnostics(entry=entry)
+
+    assert result["health"]["api_keys"] == {"count": None, "error": None}
+
+
+async def test_api_key_count_when_the_login_is_refused():
+    """A refused login is reported by name, without a count."""
+    entry = make_entry()
+    entry.runtime_data.api.get_systems = AsyncMock(
+        side_effect=AuthenticationError("Login refused")
+    )
+
+    result = await run_diagnostics(entry=entry)
+
+    assert result["health"]["api_keys"] == {
+        "count": None,
+        "error": "AuthenticationError",
+    }
 
 
 async def test_package_version_is_read_off_the_event_loop():

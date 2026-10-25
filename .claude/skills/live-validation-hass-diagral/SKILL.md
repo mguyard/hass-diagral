@@ -112,7 +112,7 @@ The redirect only acts while `config/.diagral_fake_cloud` exists; the file holds
    POST /api/config/config_entries/flow/<flow_id>     {"alarmpanel_options": {"alarmpanel_actiontype_code": "never"}}
    ```
 
-   The fake accepts only these credentials (overridable with `FAKE_USERNAME`, `FAKE_PASSWORD`, `FAKE_PIN_CODE`), which also lets the config flow's error paths be tested. The entry is persisted, so later sessions re-enable it instead of creating another (websocket `config_entries/disable` with `"disabled_by": null`).
+   The fake accepts only these credentials (overridable with `FAKE_USERNAME`, `FAKE_PASSWORD`, `FAKE_PIN_CODE`; `FAKE_SERIAL` is the central `GET /v1/users/systems` lists), which also lets the config flow's error paths be tested. The entry is persisted, so later sessions re-enable it instead of creating another (websocket `config_entries/disable` with `"disabled_by": null`).
 4. Drive scenarios through the control endpoints (§4.3) and read the result on Home Assistant (§3).
 5. Disable the fake entry while the fake cloud is still up — websocket `config_entries/disable` with `"disabled_by": "user"`. It unloads cleanly and deletes its subscription. Left enabled, it would send its fake credentials to the real Diagral cloud at the next start and retry forever.
 6. `fake_cloud.sh down`, then ask the human to restart Home Assistant. Do not leave the redirect in place at the end of a session.
