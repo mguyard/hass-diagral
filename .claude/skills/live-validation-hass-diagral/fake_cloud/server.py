@@ -309,6 +309,10 @@ async def get_configuration(request: web.Request) -> web.Response:
     return web.json_response(system.configuration)
 
 
+async def health(request: web.Request) -> web.Response:
+    return web.json_response({"status": "we're alive"})
+
+
 async def get_status(request: web.Request) -> web.Response:
     system = request.app[CLOUD].system(request.match_info["serial"])
     if denied := _require_apikey(request, system, pin=True):
@@ -573,6 +577,7 @@ def build_app() -> web.Application:
     serial = r"{serial:[^/]+}"
     app.add_routes(
         [
+            web.get("/", health),
             web.post("/v1/users/authenticate/login", login),
             web.post("/v1/users/api_key", create_api_key),
             web.get(f"/v1/users/systems/{serial}/api_keys", list_api_keys),

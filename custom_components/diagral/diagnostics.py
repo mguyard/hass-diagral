@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from importlib.metadata import version
 from typing import Any
+
+from pydiagral import DiagralAPIError
+from pydiagral.api import DiagralAPI
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
 from . import DiagralConfigEntry
-from .const import DOMAIN, WEBHOOK_CHECK_INTERVAL
+from .const import DIAGNOSTICS_PING_TIMEOUT, DOMAIN, WEBHOOK_CHECK_INTERVAL
 
 # Users attach this file to public issues: the serial (also the unique id) and
 # the alarm name in the title identify their installation.
@@ -56,6 +60,7 @@ async def async_get_config_entry_diagnostics(
                 "connected": coordinator.last_update_success,
                 "last_success": _iso(coordinator.last_success),
                 "last_error": coordinator.last_error,
+                "ping": await _ping(entry.runtime_data.api),
             },
             "webhook": {
                 "status": coordinator.webhook_status,
@@ -66,6 +71,16 @@ async def async_get_config_entry_diagnostics(
         },
         "alarm": _alarm_summary(coordinator.data or {}),
     }
+
+
+async def _ping(api: DiagralAPI) -> dict[str, Any]:
+    """Tell whether the Diagral cloud answers, whatever the credentials."""
+    try:
+        async with asyncio.timeout(DIAGNOSTICS_PING_TIMEOUT):
+            ping = await api.ping()
+    except (DiagralAPIError, TimeoutError) as err:
+        return {"reachable": False, "status": None, "error": type(err).__name__}
+    return {"reachable": True, "status": ping.status, "error": None}
 
 
 def _iso(moment: datetime | None) -> str | None:
