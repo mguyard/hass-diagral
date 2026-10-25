@@ -232,11 +232,12 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             # Create a mapping from group index to group name
             group_mapping = {group.index: group.name for group in groups}
 
-            # Create a mapping from device index to device label
-            device_mapping = {
-                device.index: device.label
-                for device_list in vars(devices_infos).values()
-                for device in device_list
+            # Diagral numbers devices per type: sensor 1 and siren 1 both exist
+            device_labels = {
+                kind: {device.index: device.label for device in devices or []}
+                for kind, devices in (
+                    vars(devices_infos) if devices_infos else {}
+                ).items()
             }
 
             # Define the order of keys
@@ -249,6 +250,7 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                 if isinstance(getattr(anomalies, attr), list) and all(
                     isinstance(item, AnomalyDetail) for item in getattr(anomalies, attr)
                 ):
+                    labels = device_labels.get(attr, {})
                     # Create a list of details for each anomaly
                     # Order the keys and remove None values
                     details = [
@@ -256,8 +258,8 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                             key: (
                                 group_mapping[value]
                                 if key == "group" and value in group_mapping
-                                else device_mapping[value]
-                                if key == "index" and value in device_mapping
+                                else labels[value]
+                                if key == "index" and value in labels
                                 else value
                             )
                             for key, value in sorted(

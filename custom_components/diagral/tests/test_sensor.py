@@ -18,7 +18,13 @@ from custom_components.diagral.sensor import (
     DiagralHealthSensor,
     DiagralSensor,
 )
-from pydiagral.models import Anomalies, AnomalyDetail, AnomalyName, DeviceList
+from pydiagral.models import (
+    Anomalies,
+    AnomalyDetail,
+    AnomalyName,
+    DeviceInfos,
+    DeviceList,
+)
 import pytest
 
 from homeassistant.components.sensor import SensorDeviceClass
@@ -96,6 +102,64 @@ class TestUpdateAnomalies:
 
         assert sensor._attr_native_value == 1
         assert list(sensor._attr_extra_state_attributes) == ["updated_at", "anomalies"]
+
+    @staticmethod
+    def devices_numbered_one() -> DeviceList:
+        """Return an installation where several device types have a number 1."""
+        return DeviceList(
+            cameras=[],
+            commands=[DeviceInfos(index=1, label="Keypad")],
+            sensors=[DeviceInfos(index=1, label="Front door")],
+            sirens=[DeviceInfos(index=1, label="Outdoor siren")],
+            transmitters=[DeviceInfos(index=1, label="Transmitter")],
+        )
+
+    @pytest.mark.parametrize(
+        ("kind", "name"),
+        [
+            ("sensors", "Front door"),
+            ("sirens", "Outdoor siren"),
+            ("commands", "Keypad"),
+            ("badges", 1),
+        ],
+        ids=["sensor", "siren", "command", "badge-has-no-device-list"],
+    )
+    def test_device_name_comes_from_its_own_type(self, kind, name):
+        """Diagral numbers devices per type: a number is looked up in its own list."""
+        sensor = make_sensor_mock()
+        anomaly = AnomalyDetail(
+            index=1, anomaly_names=[AnomalyName(id=1384, name="lowBattery")]
+        )
+        anomalies = Anomalies(created_at=None, **{kind: [anomaly]})
+
+        sensor._update_anomalies(anomalies, [], self.devices_numbered_one())
+
+        (detail,) = sensor._attr_extra_state_attributes["anomalies"][kind]
+        assert detail["index"] == name
+
+    def test_unknown_device_number_is_kept(self):
+        """A number missing from its list stays a number."""
+        sensor = make_sensor_mock()
+        anomaly = AnomalyDetail(index=7, anomaly_names=[])
+        anomalies = Anomalies(created_at=None, sensors=[anomaly])
+
+        sensor._update_anomalies(anomalies, [], self.devices_numbered_one())
+
+        assert (
+            sensor._attr_extra_state_attributes["anomalies"]["sensors"][0]["index"] == 7
+        )
+
+    def test_device_number_is_kept_without_device_list(self):
+        """Without the devices read yet, the anomaly keeps its number."""
+        sensor = make_sensor_mock()
+        anomaly = AnomalyDetail(index=1, anomaly_names=[])
+        anomalies = Anomalies(created_at=None, sensors=[anomaly])
+
+        sensor._update_anomalies(anomalies, [], None)
+
+        assert (
+            sensor._attr_extra_state_attributes["anomalies"]["sensors"][0]["index"] == 1
+        )
 
     def test_anomalies_updated_at_is_set(self):
         """updated_at attribute must always be set when anomalies exist."""
