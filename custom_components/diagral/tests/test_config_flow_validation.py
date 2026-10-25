@@ -34,6 +34,16 @@ import pytest
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
 
+@pytest.fixture(autouse=True)
+def client_session():
+    """Hand each client the session of the Home Assistant it is given."""
+    with patch(
+        "custom_components.diagral.config_flow.async_get_clientsession",
+        lambda hass: hass.http_session,
+    ):
+        yield
+
+
 class TestIsValidEmail:
     """Tests for is_valid_email()."""
 
@@ -258,7 +268,9 @@ class TestValidateAccount:
             CONF_PIN_CODE: "1234",
         }
         with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
-            result = await validate_account(account, previous_data=previous)
+            result = await validate_account(
+                MagicMock(), account, previous_data=previous
+            )
         assert result is None
         api_cls.assert_not_called()
 
@@ -275,9 +287,36 @@ class TestValidateAccount:
         with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
             api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
             api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
-            result = await validate_account(account)
+            result = await validate_account(MagicMock(), account)
         diagral.try_connection.assert_awaited_once_with(ephemeral=True)
         assert result.keys == "KEYS"
+
+    async def test_client_uses_home_assistant_session(self):
+        """The client shares Home Assistant's HTTP session, closed by HA alone."""
+        hass = MagicMock()
+        diagral = MagicMock()
+        diagral.try_connection = AsyncMock(return_value=MagicMock(keys="KEYS"))
+        with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
+            api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+            api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            await validate_account(hass, ACCOUNT)
+        assert api_cls.call_args.kwargs["session"] is hass.http_session
+
+    @pytest.mark.parametrize(
+        ("alarm_name", "expected_title"),
+        [("Home", "Home (FAKECENTRAL01)"), (None, "Diagral (FAKECENTRAL01)")],
+        ids=["named", "unnamed"],
+    )
+    async def test_title_names_the_alarm(self, alarm_name, expected_title):
+        """The entry title uses the alarm name, or Diagral when it has none."""
+        diagral = MagicMock()
+        diagral.try_connection = AsyncMock(return_value=MagicMock(keys="KEYS"))
+        diagral.get_alarm_name = AsyncMock(return_value=alarm_name)
+        with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
+            api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+            api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            result = await validate_account(MagicMock(), ACCOUNT, ephemeral=False)
+        assert result.title == expected_title
 
 
 class TestConfigFlowLogs:
@@ -385,7 +424,7 @@ class TestValidateAccountErrors:
             api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
             api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
             with pytest.raises(expected):
-                await validate_account(ACCOUNT)
+                await validate_account(MagicMock(), ACCOUNT)
 
 
 def make_step(step: str) -> tuple[DiagralConfigFlow, dict]:
@@ -429,7 +468,7 @@ class TestFlowErrorMessages:
         """The form error is a translation key present in both languages."""
         flow, user_input = make_step(step)
 
-        async def fail(**_):
+        async def fail(*_, **__):
             raise raised from DiagralAPIError("Diagral API error (HTTP 401)")
 
         with patch("custom_components.diagral.config_flow.validate_account", fail):

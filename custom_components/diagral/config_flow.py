@@ -23,9 +23,10 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import section
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -40,6 +41,7 @@ from homeassistant.helpers.selector import (
 from . import DiagralConfigEntry
 from .const import (
     ALARMPANEL_CODE_MIN_LENGTH,
+    BRAND,
     CONF_ALARMPANEL_ACTIONTYPE_CODE,
     CONF_ALARMPANEL_ACTIONTYPE_CODE_OPTIONS,
     CONF_ALARMPANEL_CODE,
@@ -78,6 +80,7 @@ def is_valid_alarmpanel_code(code: int) -> bool:
 
 
 async def validate_account(
+    hass: HomeAssistant,
     account_info: AccountInfoData,
     previous_data: Mapping[str, Any] | None = None,
     ephemeral: bool = True,
@@ -99,6 +102,7 @@ async def validate_account(
             "password": account_info.password,
             "serial_id": account_info.serial_id,
             "pincode": account_info.pin_code,
+            "session": async_get_clientsession(hass),
         }
 
         # With ephemeral mode, we create API key, test the connection and remove them
@@ -116,7 +120,7 @@ async def validate_account(
                 # If ephemeral mode is disabled, we get the alarm name
                 # else, we set the alarm name to None (as keys are removed)
                 if not ephemeral:
-                    alarm_name: str = await diagral.get_alarm_name()
+                    alarm_name = await diagral.get_alarm_name() or BRAND
                 else:
                     alarm_name = None
 
@@ -215,6 +219,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                     # in ephemeral mode as final keys (API key and secret key)
                     # will be request in last step
                     await validate_account(
+                        self.hass,
                         account_info=AccountInfoData(
                             username=user_input[CONF_USERNAME],
                             password=user_input[CONF_PASSWORD],
@@ -293,6 +298,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                     # not in ephemeral mode as final keys (API key and secret key)
                     # is requested in this step
                     info: ValidateConnectionData = await validate_account(
+                        self.hass,
                         account_info=AccountInfoData(
                             username=self.account_username,
                             password=self.account_password,
@@ -401,6 +407,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             if not errors:
                 try:
                     info: ValidateConnectionData | None = await validate_account(
+                        self.hass,
                         account_info=AccountInfoData(
                             username=user_input[CONF_USERNAME],
                             password=user_input[CONF_PASSWORD],
