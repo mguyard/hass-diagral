@@ -24,7 +24,7 @@ Custom [Home Assistant](https://www.home-assistant.io/) integration for Diagral 
 
 - All code, comments, docstrings and commit messages in **English**.
 - Every call to the Diagral cloud goes through [`pydiagral`](https://github.com/mguyard/pydiagral), pinned in `manifest.json`. **Never call the Diagral API directly.** `pydiagral` is maintained by the same author: when it is wrong or missing something, fix it there rather than working around it here.
-- Check the [pydiagral documentation](https://mguyard.github.io/pydiagral/) or Context7 before using any `pydiagral` class, method or model. Do not assume its API from memory.
+- Check the [pydiagral documentation](https://mguyard.github.io/pydiagral/beta/) or Context7 before using any `pydiagral` class, method or model. Do not assume its API from memory. `/beta/` documents the 2.0 beta that `dev` pins; the root URL leads to `/stable/`, which documents 1.6 until 2.0.0 is released.
 - Use [developers.home-assistant.io](https://developers.home-assistant.io) and Context7 for Home Assistant API guidance.
 
 ## Module map
