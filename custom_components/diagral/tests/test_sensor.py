@@ -86,6 +86,17 @@ class TestUpdateAnomalies:
             sensor._update_anomalies(anomalies, [], EMPTY_DEVICE_LIST)
         assert sensor._attr_native_value == 2
 
+    def test_anomalies_without_created_at_omit_it(self):
+        """An unparsable creation date, read as None, leaves the rest shown."""
+        sensor = make_sensor_mock()
+        anomaly = AnomalyDetail(anomaly_names=[AnomalyName(id=1, name="Fault")])
+        anomalies = Anomalies(created_at=None, sensors=[anomaly])
+
+        sensor._update_anomalies(anomalies, [], EMPTY_DEVICE_LIST)
+
+        assert sensor._attr_native_value == 1
+        assert list(sensor._attr_extra_state_attributes) == ["updated_at", "anomalies"]
+
     def test_anomalies_updated_at_is_set(self):
         """updated_at attribute must always be set when anomalies exist."""
         sensor = make_sensor_mock()

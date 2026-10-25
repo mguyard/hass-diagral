@@ -26,6 +26,8 @@ from custom_components.diagral.const import (
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
     DIAGRAL_REQUEST_TIMEOUT,
+    DIAGRAL_VENDOR,
+    INTERACTIVE_REQUEST_TIMEOUT,
     ISSUE_WEBHOOK_NO_URL,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
     ISSUE_WEBHOOK_REGISTRATION_FAILED,
@@ -339,6 +341,10 @@ class TestLogsHideSecrets:
 
         diagral.delete_apikey.assert_awaited_once_with(apikey="SECRETAPIKEY")
         assert api_cls.call_args.kwargs["session"] is hass.http_session
+        assert api_cls.call_args.kwargs["vendor"] == DIAGRAL_VENDOR
+        assert (
+            api_cls.call_args.kwargs["request_timeout"] == INTERACTIVE_REQUEST_TIMEOUT
+        )
         assert "SECRETAPIKEY" not in debug_log.text
         assert "SECRETPASSWORD" not in debug_log.text
 
@@ -421,6 +427,12 @@ class TestSetupEntry:
         api_cls = await self.build_client(hass)
 
         assert api_cls.call_args.kwargs["session"] is hass.http_session
+
+    async def test_client_logs_in_as_diagral(self):
+        """The client states the vendor instead of relying on pydiagral's default."""
+        api_cls = await self.build_client(MagicMock())
+
+        assert api_cls.call_args.kwargs["vendor"] == DIAGRAL_VENDOR
 
 
 def stored_webhook_id(hass: MagicMock) -> str | None:
@@ -677,3 +689,55 @@ class TestHourlyCheck:
 
         register.assert_not_awaited()
         entry.runtime_data.api.get_webhook.assert_not_awaited()
+
+
+class TestRepairCleanup:
+    """A deleted entry leaves no repair issue behind."""
+
+    @staticmethod
+    def removed_entry(api_key: str | None) -> MagicMock:
+        """Return an entry about to be removed, with or without an API key."""
+        entry = make_entry()
+        entry.data = {
+            "username": "fake@example.com",
+            "password": "fake-password",
+            "serial_id": "FAKECENTRAL01",
+            "api_key": api_key,
+        }
+        return entry
+
+    async def test_removing_an_entry_deletes_its_repairs(self, issues):
+        """Its webhook repairs go with it."""
+        await async_remove_entry(MagicMock(), self.removed_entry(api_key=None))
+
+        assert deleted_issues(issues) == WEBHOOK_ISSUES
+
+    async def test_repairs_are_deleted_even_if_diagral_fails(self, issues):
+        """A Diagral outage while deleting the API key does not keep them."""
+        api_cls = MagicMock()
+        api_cls.return_value.__aenter__ = AsyncMock(
+            side_effect=DiagralAPIError("Diagral request timed out")
+        )
+        api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+        with patch("custom_components.diagral.DiagralAPI", api_cls):
+            await async_remove_entry(MagicMock(), self.removed_entry("SECRETAPIKEY"))
+
+        assert deleted_issues(issues) == WEBHOOK_ISSUES
+
+    async def test_setup_deletes_the_repairs_of_removed_entries(self, issues):
+        """Repairs left by entries removed before this fix are cleaned up."""
+        hass = MagicMock()
+        hass.config_entries.async_entries.return_value = [MagicMock(entry_id="entry1")]
+        issues.async_get.return_value.issues = {
+            ("diagral", f"{ISSUE_WEBHOOK_OWNED_ELSEWHERE}_entry1"): MagicMock(),
+            ("diagral", f"{ISSUE_WEBHOOK_OWNED_ELSEWHERE}_gone"): MagicMock(),
+            ("diagral", f"{ISSUE_WEBHOOK_NO_URL}_gone"): MagicMock(),
+            ("other", f"{ISSUE_WEBHOOK_NO_URL}_gone"): MagicMock(),
+        }
+
+        await TestSetupEntry.build_client(hass)
+
+        assert deleted_issues(issues) == {
+            f"{ISSUE_WEBHOOK_OWNED_ELSEWHERE}_gone",
+            f"{ISSUE_WEBHOOK_NO_URL}_gone",
+        }

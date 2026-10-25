@@ -220,7 +220,7 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             # Create a list of anomalies
             self._attr_extra_state_attributes = {}
             # Add created_at with the date and time of the anomaly creation in local timezone
-            if hasattr(anomalies, "created_at"):
+            if getattr(anomalies, "created_at", None):
                 created_at_utc = anomalies.created_at
                 created_at_local = dt_util.as_local(created_at_utc)
                 self._attr_extra_state_attributes["created_at"] = (
@@ -290,17 +290,11 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                 self._attr_extra_state_attributes["anomalies"] = anomalies_dict
 
             # Sort extra state attributes by key with created_at and updated_at first
+            attributes = self._attr_extra_state_attributes
+            first = [k for k in ("created_at", "updated_at") if k in attributes]
             self._attr_extra_state_attributes = {
-                k: self._attr_extra_state_attributes[k]
-                for k in (
-                    "created_at",
-                    "updated_at",
-                    *sorted(
-                        k
-                        for k in self._attr_extra_state_attributes
-                        if k not in ["created_at", "updated_at"]
-                    ),
-                )
+                k: attributes[k]
+                for k in (*first, *sorted(attributes.keys() - set(first)))
             }
         else:
             self._attr_native_value = 0

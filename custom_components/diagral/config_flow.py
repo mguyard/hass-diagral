@@ -14,6 +14,7 @@ from pydiagral.exceptions import (
     AuthenticationError,
     ClientError,
     ConfigurationError,
+    PinCodeError,
     SessionError,
     ValidationError,
 )
@@ -33,6 +34,7 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
     SelectSelector,
     SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -51,7 +53,12 @@ from .const import (
     CONF_SERIAL_ID,
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
+    DIAGRAL_VENDOR,
     DOMAIN,
+    INTERACTIVE_REQUEST_TIMEOUT,
+    LIST_SERIALS_ATTEMPTS,
+    SERIAL_GUIDE_URL,
+    SERIAL_IMAGE_URL,
 )
 from .models import AccountInfoData, DiagralOptionsData, ValidateConnectionData
 
@@ -103,6 +110,7 @@ async def validate_account(
             "serial_id": account_info.serial_id,
             "pincode": account_info.pin_code,
             "session": async_get_clientsession(hass),
+            "vendor": DIAGRAL_VENDOR,
         }
 
         # With ephemeral mode, we create API key, test the connection and remove them
@@ -128,6 +136,9 @@ async def validate_account(
                     title=f"{alarm_name} ({account_info.serial_id})",
                     keys=connection.keys,
                 )
+        except PinCodeError as error:
+            _LOGGER.error("Error during validation: %s", str(error))
+            raise InvalidPin from error
         except AuthenticationError as error:
             _LOGGER.error("Error during validation: %s", str(error))
             raise InvalidAuth from error
@@ -148,6 +159,37 @@ async def validate_account(
         return None
 
 
+async def list_serials(hass: HomeAssistant, username: str, password: str) -> list[str]:
+    """Return the serials of the account's centrals; asking needs no serial."""
+    for attempt in range(1, LIST_SERIALS_ATTEMPTS + 1):
+        try:
+            async with DiagralAPI(
+                username=username,
+                password=password,
+                request_timeout=INTERACTIVE_REQUEST_TIMEOUT,
+                session=async_get_clientsession(hass),
+                vendor=DIAGRAL_VENDOR,
+            ) as diagral:
+                systems = await diagral.get_systems()
+        except AuthenticationError as error:
+            raise InvalidAuth from error
+        except DiagralAPIError as error:
+            if attempt < LIST_SERIALS_ATTEMPTS:
+                _LOGGER.debug(
+                    "Listing the Diagral centrals failed (%s), trying again",
+                    type(error).__name__,
+                )
+                continue
+            _LOGGER.warning(
+                "Could not list the Diagral centrals of the account (%s)",
+                type(error).__name__,
+            )
+            raise CannotConnect from error
+        _LOGGER.debug("The Diagral account has %d centrals", len(systems))
+        return [system.serial_id for system in systems]
+    raise CannotConnect
+
+
 class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Diagral."""
 
@@ -158,6 +200,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         _LOGGER.debug("Initializing DiagralConfigFlow")
         self.serialid: str | None = None
+        self.serials: list[str] = []
         self.title: str | None = None
         self.account_username: str | None = None
         self.account_password: str | None = None
@@ -174,87 +217,159 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle the initial step."""
+        """Ask for the account first: it lists the centrals to choose from."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            self.serialid = user_input[CONF_SERIAL_ID]
-            return await self.async_step_account()
+            _LOGGER.debug("Validating account credentials")
+            if not is_valid_email(user_input[CONF_USERNAME]):
+                errors[CONF_USERNAME] = "invalid_email"
 
-        # Build form
-        serialid_schema = vol.Schema(
+            if not errors:
+                self.account_username = user_input[CONF_USERNAME]
+                self.account_password = user_input[CONF_PASSWORD]
+                try:
+                    self.serials = await list_serials(
+                        self.hass, self.account_username, self.account_password
+                    )
+                except InvalidAuth:
+                    errors["base"] = "invalid_auth"
+                except CannotConnect:
+                    return await self.async_step_serial()
+                except Exception:
+                    _LOGGER.exception("Unexpected exception")
+                    errors["base"] = "unknown"
+                else:
+                    if not self.serials:
+                        return await self.async_step_serial()
+                    return await self.async_step_central()
+
+        # The PIN belongs to a central: it is asked with the central
+        account_schema = vol.Schema(
             {
-                vol.Required(CONF_SERIAL_ID): str,
+                vol.Required(CONF_USERNAME): str,
+                vol.Required(CONF_PASSWORD): SECRET_SELECTOR,
             }
         )
 
         return self.async_show_form(
             step_id="user",
-            data_schema=serialid_schema,
-            errors=errors or {},
-            description_placeholders={
-                "setup_guide_url": "https://docs.page/mguyard/hass-diagral/integration/setup#how-to-find-your-system-serial-id",
-                "serial_id_image_url": "https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png",
-            },
-            last_step=False,
-        )
-
-    async def async_step_account(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle the account step."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            _LOGGER.debug("Validating account credentials")
-            # Check if the user has entered a valid email and pin code
-            if not is_valid_email(user_input[CONF_USERNAME]):
-                errors[CONF_USERNAME] = "invalid_email"
-            if not is_valid_pin(user_input[CONF_PIN_CODE]):
-                errors[CONF_PIN_CODE] = "invalid_pin"
-
-            if not errors:
-                try:
-                    # Validate the account credentials
-                    # in ephemeral mode as final keys (API key and secret key)
-                    # will be request in last step
-                    await validate_account(
-                        self.hass,
-                        account_info=AccountInfoData(
-                            username=user_input[CONF_USERNAME],
-                            password=user_input[CONF_PASSWORD],
-                            pin_code=user_input[CONF_PIN_CODE],
-                            serial_id=self.serialid,
-                        ),
-                        ephemeral=True,
-                    )
-                    self.account_username = user_input[CONF_USERNAME]
-                    self.account_password = user_input[CONF_PASSWORD]
-                    self.account_pincode = user_input[CONF_PIN_CODE]
-                    return await self.async_step_options()
-                except CannotConnect:
-                    errors["base"] = "cannot_connect"
-                except InvalidAuth:
-                    errors["base"] = "invalid_auth"
-                except Exception:
-                    _LOGGER.exception("Unexpected exception")
-                    errors["base"] = "unknown"
-
-        # Build form
-        account_schema = vol.Schema(
-            {
-                vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): SECRET_SELECTOR,
-                vol.Required(CONF_PIN_CODE): SECRET_SELECTOR,
-            }
-        )
-
-        return self.async_show_form(
-            step_id="account",
             data_schema=account_schema,
             errors=errors or {},
             last_step=False,
         )
+
+    async def async_step_central(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Offer the account's centrals that are not in Home Assistant yet."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            errors = await self._async_check_central(
+                user_input[CONF_SERIAL_ID], user_input[CONF_PIN_CODE]
+            )
+            if not errors:
+                return await self.async_step_options()
+
+        # An entry title is already "Name (Serial)"
+        configured = {
+            entry.unique_id.upper(): entry.title
+            for entry in self._async_current_entries()
+            if entry.unique_id
+        }
+        available = [s for s in self.serials if s.upper() not in configured]
+        if not available:
+            return self.async_abort(reason="already_configured")
+
+        return self.async_show_form(
+            step_id="central",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SERIAL_ID): SelectSelector(
+                        SelectSelectorConfig(
+                            options=available, mode=SelectSelectorMode.LIST
+                        )
+                    ),
+                    vol.Required(CONF_PIN_CODE): SECRET_SELECTOR,
+                }
+            ),
+            errors=errors or {},
+            description_placeholders={
+                "configured": ", ".join(
+                    configured[s.upper()]
+                    for s in self.serials
+                    if s.upper() in configured
+                )
+                or "-",
+                "setup_guide_url": SERIAL_GUIDE_URL,
+                "serial_id_image_url": SERIAL_IMAGE_URL,
+            },
+            last_step=False,
+        )
+
+    async def async_step_serial(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for the serial when the account's centrals cannot be listed."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            errors = await self._async_check_central(
+                user_input[CONF_SERIAL_ID], user_input[CONF_PIN_CODE]
+            )
+            if not errors:
+                return await self.async_step_options()
+
+        return self.async_show_form(
+            step_id="serial",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SERIAL_ID): str,
+                    vol.Required(CONF_PIN_CODE): SECRET_SELECTOR,
+                }
+            ),
+            errors=errors or {},
+            description_placeholders={
+                "setup_guide_url": SERIAL_GUIDE_URL,
+                "serial_id_image_url": SERIAL_IMAGE_URL,
+            },
+            last_step=False,
+        )
+
+    async def _async_check_central(
+        self, serial_id: str, pin_code: str
+    ) -> dict[str, str]:
+        """Claim the central, then check the account drives it; return form errors."""
+        if not is_valid_pin(pin_code):
+            return {CONF_PIN_CODE: "invalid_pin"}
+        # A duplicate must stop here, before the options step creates an API key
+        await self.async_set_unique_id(serial_id)
+        self._abort_if_unique_id_configured()
+        try:
+            # Ephemeral: the final API key and secret key come with the last step
+            await validate_account(
+                self.hass,
+                account_info=AccountInfoData(
+                    username=self.account_username,
+                    password=self.account_password,
+                    pin_code=pin_code,
+                    serial_id=serial_id,
+                ),
+                ephemeral=True,
+            )
+        except CannotConnect:
+            return {"base": "cannot_connect"}
+        except InvalidPin:
+            return {CONF_PIN_CODE: "pin_refused"}
+        except InvalidAuth:
+            return {"base": "invalid_auth"}
+        except Exception:
+            _LOGGER.exception("Unexpected exception")
+            return {"base": "unknown"}
+        self.serialid = serial_id
+        self.account_pincode = pin_code
+        return {}
 
     async def async_step_options(
         self, user_input: dict[str, Any] | None = None
@@ -419,6 +534,8 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                     )
                 except CannotConnect:
                     errors["base"] = "cannot_connect"
+                except InvalidPin:
+                    errors[CONF_PIN_CODE] = "pin_refused"
                 except InvalidAuth:
                     errors["base"] = "invalid_auth"
                 except Exception:
@@ -577,3 +694,7 @@ class CannotConnect(HomeAssistantError):
 
 class InvalidAuth(HomeAssistantError):
     """Error to indicate there is invalid auth."""
+
+
+class InvalidPin(InvalidAuth):
+    """Error to indicate the account was accepted but the central refused the PIN."""

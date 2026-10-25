@@ -112,7 +112,7 @@ The redirect only acts while `config/.diagral_fake_cloud` exists; the file holds
    POST /api/config/config_entries/flow/<flow_id>     {"alarmpanel_options": {"alarmpanel_actiontype_code": "never"}}
    ```
 
-   The fake accepts only these credentials (overridable with `FAKE_USERNAME`, `FAKE_PASSWORD`, `FAKE_PIN_CODE`), which also lets the config flow's error paths be tested. The entry is persisted, so later sessions re-enable it instead of creating another (websocket `config_entries/disable` with `"disabled_by": null`).
+   The fake accepts only these credentials (overridable with `FAKE_USERNAME`, `FAKE_PASSWORD`, `FAKE_PIN_CODE`; `FAKE_SERIAL` is the central `GET /v1/users/systems` lists), which also lets the config flow's error paths be tested. The entry is persisted, so later sessions re-enable it instead of creating another (websocket `config_entries/disable` with `"disabled_by": null`).
 4. Drive scenarios through the control endpoints (§4.3) and read the result on Home Assistant (§3).
 5. Disable the fake entry while the fake cloud is still up — websocket `config_entries/disable` with `"disabled_by": "user"`. It unloads cleanly and deletes its subscription. Left enabled, it would send its fake credentials to the real Diagral cloud at the next start and retry forever.
 6. `fake_cloud.sh down`, then ask the human to restart Home Assistant. Do not leave the redirect in place at the end of a session.
@@ -131,6 +131,7 @@ All on `http://localhost:8099`, JSON bodies. `serial` may be omitted when only o
 | `POST /_control/reset` | — | Forget every system and token |
 | `POST /_control/status` | `{"status": "GROUP", "activated_groups": [1, 2]}` | What the next poll returns (`OFF`, `GROUP`, `TEMPO_GROUP`, `PRESENCE`) |
 | `POST /_control/anomalies` | `{"anomalies": {"sensors": [{"serial": "…", "index": 1, "group": 1, "label": "…", "anomaly_names": [{"id": 1, "name": "Low battery"}]}]}}` or `{"clear": true}` | What `get_anomalies` returns |
+| `POST /_control/rudes` | `{"rudes": [{"name": "Gate", "canal": "1", "mode": "PULSE"}]}` or `{"clear": true}` | What `get_automatism_rudes` returns (none by default) |
 | `POST /_control/webhook` | `{"webhook_url": "https://other.example.net/api/webhook/x"}` or `{"clear": true}` | Sets the subscription as another installation would — to test ownership — or removes it |
 | `POST /_control/fail` | `{"path": "/status", "status": 503, "count": 2}`, `{"delay": 40}` or `{"clear": true}` | Fails (HTTP `status`) and/or delays (`delay` seconds) the next `count` API requests whose path contains `path` (default `/v1/`) — to test retries and availability |
 | `POST /_control/delay` | `{"seconds": 20, "groups_listed": false}` | Exit delay, as on a real central (about 4 min in production): `start` and `activate_group` report `TEMPO_GROUP` (groups listed or not) for `seconds`, then `GROUP`, and a `STATUS` notification is pushed to Home Assistant. `0` turns it off |

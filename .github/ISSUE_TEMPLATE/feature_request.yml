@@ -45,6 +45,20 @@ body:
     validations:
       required: true
 
+  - type: textarea
+    attributes:
+      label: Diagnostics information
+      placeholder: "drag-and-drop the diagnostics data file here (do not copy-and-paste the content)"
+      description: >-
+        It helps when the feature depends on your equipment: it tells which devices, automatisms or cameras your installation has.
+        Download it from the device page of your Diagral central, with "Download diagnostics".
+        [What it contains](https://docs.page/mguyard/hass-diagral/issues#diagnostic-file): the state of the integration and the shape of what Diagral sends, without your credentials, serial or names.
+        Please check it before sharing.
+
+        If the integration could not be set up, there is no device to download it from: write N/A.
+    validations:
+      required: true
+
   - type: markdown
     attributes:
       value: |

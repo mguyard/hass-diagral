@@ -31,6 +31,8 @@ HA_URL = os.environ.get("HA_URL", "http://host.docker.internal:8123").rstrip("/"
 USERNAME = os.environ.get("FAKE_USERNAME", "fake@example.com")
 PASSWORD = os.environ.get("FAKE_PASSWORD", "fake-password")
 PIN_CODE = os.environ.get("FAKE_PIN_CODE", "1234")
+# The central the fake account owns, listed by `GET /v1/users/systems`
+SERIAL = os.environ.get("FAKE_SERIAL", "FAKECENTRAL01")
 MAX_BODY_LOG = 4000
 
 _LOGGER = logging.getLogger("fake_cloud")
@@ -160,6 +162,7 @@ class System:
         self.activated_groups: list[int] = []
         self.api_keys: dict[str, str] = {}
         self.anomalies: dict[str, Any] | None = None
+        self.rudes: list[dict[str, Any]] = []
         self.webhook: dict[str, Any] | None = None
         # Exit delay of a real central: arming reports TEMPO_GROUP first.
         self.exit_delay = 0.0
@@ -284,6 +287,19 @@ async def create_api_key(request: web.Request) -> web.Response:
     )
 
 
+async def list_systems(request: web.Request) -> web.Response:
+    if denied := _require_bearer(request):
+        return denied
+    cloud = request.app[CLOUD]
+    cloud.system(SERIAL)
+    return web.json_response(
+        [
+            {"serial_id": system.serial, "api_keys": list(system.api_keys)}
+            for system in cloud.systems.values()
+        ]
+    )
+
+
 async def list_api_keys(request: web.Request) -> web.Response:
     if denied := _require_bearer(request):
         return denied
@@ -307,6 +323,32 @@ async def get_configuration(request: web.Request) -> web.Response:
     if denied := _require_apikey(request, system):
         return denied
     return web.json_response(system.configuration)
+
+
+async def health(request: web.Request) -> web.Response:
+    return web.json_response({"status": "we're alive"})
+
+
+async def get_system_details(request: web.Request) -> web.Response:
+    system = request.app[CLOUD].system(request.match_info["serial"])
+    if denied := _require_apikey(request, system, pin=True):
+        return denied
+    # The real cloud sends the Is* flags as "True" / "False" strings
+    return web.json_response(
+        {
+            "DeviceType": "PLUG_IP~DIAGRAL",
+            "FirmwareVersion": "V1.6.0_V13_V1.1.20",
+            "IpAddress": "192.0.2.10",
+            "IpodaVersion": "3.0",
+            "Mode": "900",
+            "FirstVocalContact": "0",
+            "IsAlarmFilePresent": "False",
+            "IsMJPEGArchiveVideoSupported": "False",
+            "IsMassStoragePresent": "False",
+            "IsRemoteStartupShutdownAllowed": "False",
+            "IsVideoPasswordProtected": "False",
+        }
+    )
 
 
 async def get_status(request: web.Request) -> web.Response:
@@ -370,6 +412,13 @@ async def get_anomalies(request: web.Request) -> web.Response:
         # pydiagral turns exactly this 404 into "no anomalies".
         return _error(404, "No anomalies found")
     return web.json_response(system.anomalies)
+
+
+async def get_rudes(request: web.Request) -> web.Response:
+    system = request.app[CLOUD].system(request.match_info["serial"])
+    if denied := _require_apikey(request, system):
+        return denied
+    return web.json_response({"rudes": system.rudes})
 
 
 # --- Webhook subscription --------------------------------------------------
@@ -474,6 +523,15 @@ async def control_anomalies(request: web.Request) -> web.Response:
     return web.json_response({"anomalies": system.anomalies})
 
 
+async def control_rudes(request: web.Request) -> web.Response:
+    data = await request.json()
+    system = _target(request, data)
+    if isinstance(system, web.Response):
+        return system
+    system.rudes = [] if data.get("clear") else list(data.get("rudes", []))
+    return web.json_response({"rudes": system.rudes})
+
+
 async def control_webhook(request: web.Request) -> web.Response:
     """Set the subscription to any URL, as another installation would, or clear it."""
     data = await request.json()
@@ -573,12 +631,15 @@ def build_app() -> web.Application:
     serial = r"{serial:[^/]+}"
     app.add_routes(
         [
+            web.get("/", health),
             web.post("/v1/users/authenticate/login", login),
             web.post("/v1/users/api_key", create_api_key),
+            web.get("/v1/users/systems", list_systems),
             web.get(f"/v1/users/systems/{serial}/api_keys", list_api_keys),
             web.delete(
                 f"/v1/users/systems/{serial}/api_keys/{{apikey}}", delete_api_key
             ),
+            web.get(f"/v1/systems/{serial}", get_system_details),
             web.get(f"/v1/systems/{serial}/configurations", get_configuration),
             web.get(f"/v1/systems/{serial}/status", get_status),
             web.post(
@@ -586,11 +647,13 @@ def build_app() -> web.Application:
                 system_action,
             ),
             web.get(f"/v1/systems/{serial}/anomalies", get_anomalies),
+            web.get(f"/v1/systems/{serial}/rudes", get_rudes),
             web.route("*", f"/v1/webhooks/{serial}/subscription", webhook_subscription),
             web.get("/_control/state", control_state),
             web.post("/_control/reset", control_reset),
             web.post("/_control/status", control_status),
             web.post("/_control/anomalies", control_anomalies),
+            web.post("/_control/rudes", control_rudes),
             web.post("/_control/notify", control_notify),
             web.post("/_control/webhook", control_webhook),
             web.post("/_control/fail", control_fail),

@@ -36,6 +36,10 @@ class TestDomainAndBrand:
         """BRAND must be 'Diagral'."""
         assert const.BRAND == "Diagral"
 
+    def test_vendor(self, const):
+        """DIAGRAL_VENDOR must be 'DIAGRAL', the only vendor supported."""
+        assert const.DIAGRAL_VENDOR == "DIAGRAL"
+
 
 class TestConfigVersion:
     """Tests for config version constants."""

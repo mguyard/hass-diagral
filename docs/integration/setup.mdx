@@ -28,8 +28,8 @@ Users install and use this integration at their own risk and with full understan
 You'll need just a few details to configure the Diagral integration:
 - Your Diagral username (email address)
 - Your account password
-- Your system serial ID (from the DIAG56AAX/DIAG59AAX box)
-- The PIN code associated with your username/password
+- The PIN code of your central — each central has its own
+- Your system serial ID (from the DIAG56AAX/DIAG59AAX box), only if the centrals of your account cannot be listed during setup
 
 ### Finding Your System Serial ID
 
@@ -53,12 +53,16 @@ Start the setup process by clicking the button below:
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=diagral)
 
 The setup process consists of 3 steps:
-- Enter your `Serial ID`
 - Provide your `Diagral credentials`
+- Choose your `central` among those of your account and enter its `PIN code` — centrals already in Home Assistant are not listed
 - Configure `Options`
-<Image src="/images/configflow-step1.png" alt="Step 1 - Serial ID" />
-<Image src="/images/configflow-step2.png" alt="Step 2 - Diagral Credentials" />
+<Image src="/images/configflow-step1.png" alt="Step 1 - Diagral Credentials" />
+<Image src="/images/configflow-step2.png" alt="Step 2 - Diagral Central and PIN Code" />
 <Image src="/images/configflow-step3.png" alt="Step 3 - Diagral Options" />
+
+<Info>
+If the centrals of your account cannot be listed, the second step asks for your `Serial ID` instead — see [Finding Your System Serial ID](#finding-your-system-serial-id).
+</Info>
 
 Fill in all fields and click `Submit`.
 A success popup will appear where you can select an area for your Diagral alarm.

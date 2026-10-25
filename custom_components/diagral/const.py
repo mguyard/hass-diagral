@@ -40,6 +40,20 @@ READ_RETRY_BUDGET = DEFAULT_SCAN_INTERVAL // 2
 HTTP_SERVER_ERROR = 500
 # pydiagral's per-request ceiling: a caller can shorten a deadline, never extend it.
 DIAGRAL_REQUEST_TIMEOUT = max(READ_ATTEMPT_TIMEOUTS)
+# Stated rather than left to pydiagral's default: only DIAGRAL is supported.
+DIAGRAL_VENDOR = "DIAGRAL"
+# A user is waiting on these calls: Diagral stalls now and then, so fail fast.
+INTERACTIVE_REQUEST_TIMEOUT = 10
+LIST_SERIALS_ATTEMPTS = 2
+
+SERIAL_GUIDE_URL = "https://docs.page/mguyard/hass-diagral/integration/setup#finding-your-system-serial-id"
+SERIAL_IMAGE_URL = "https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png"
+
+# The ping only tells whether the cloud answers: it must not hold the refresh.
+PING_TIMEOUT = 10
+
+# A hung cloud must not hold the diagnostics download for a full request timeout.
+DIAGNOSTICS_CLOUD_TIMEOUT = 10
 
 HA_CLOUD_DOMAIN = ".nabu.casa"
 
@@ -61,6 +75,11 @@ INPUT_GROUPS = "group_ids"
 ISSUE_WEBHOOK_OWNED_ELSEWHERE = "webhook_owned_elsewhere"
 ISSUE_WEBHOOK_REGISTRATION_FAILED = "webhook_registration_failed"
 ISSUE_WEBHOOK_NO_URL = "webhook_no_url"
+WEBHOOK_ISSUES = (
+    ISSUE_WEBHOOK_OWNED_ELSEWHERE,
+    ISSUE_WEBHOOK_REGISTRATION_FAILED,
+    ISSUE_WEBHOOK_NO_URL,
+)
 
 # State of an entry's webhook, reported by its diagnostic entities
 WEBHOOK_CONNECTED = "connected"

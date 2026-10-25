@@ -20,6 +20,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     HTTP_SERVER_ERROR,
+    PING_TIMEOUT,
     READ_ATTEMPT_TIMEOUTS,
     READ_RETRY_BUDGET,
     READ_RETRY_PAUSES,
@@ -52,6 +53,7 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
         self.last_error: str | None = None
         self.webhook_status: str | None = None
         self.last_webhook: datetime | None = None
+        self.cloud_reachable: bool | None = None
 
     @callback
     def async_set_webhook_status(self, status: str) -> None:
@@ -68,6 +70,7 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Diagral API, retrying transient failures."""
         _LOGGER.debug("Updating data with API instance: %s", id(self.api))
+        self.cloud_reachable = await self._async_ping()
         # A failed first refresh fails the setup, which Home Assistant retries.
         timeouts = READ_ATTEMPT_TIMEOUTS if self.data else READ_ATTEMPT_TIMEOUTS[:1]
         try:
@@ -89,6 +92,18 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
         self.data = updated_data
         await self._update_device_info()
         return updated_data
+
+    async def _async_ping(self) -> bool:
+        """Tell whether the cloud answers at all, whatever the credentials."""
+        try:
+            async with asyncio.timeout(PING_TIMEOUT):
+                await self.api.ping()
+        except (DiagralAPIError, TimeoutError) as err:
+            _LOGGER.debug(
+                "Diagral cloud did not answer the ping (%s)", type(err).__name__
+            )
+            return False
+        return True
 
     async def _async_read_with_retries(
         self, timeouts: tuple[float, ...]

@@ -10,6 +10,14 @@ description: Debugging the integration
 On the device info page for the device entity, you will see a "Download Diagnostics" button.
 Make sure you upload this to your GitHub issue.
 
+The file also tells whether the Diagral cloud answered when you downloaded it, without using your credentials: a cloud outage is told apart from a credentials problem. It lists the system's hardware details too — device type, firmware, mode — but never its IP address, and the number of API keys created for your central, never the keys themselves.
+
+It also describes what Diagral sends, without any value you typed nor any identifier:
+
+- `health.unexpected_data`: the fields Diagral sent that `pydiagral` did not expect since Home Assistant started — missing, malformed, or unknown to the library.
+- `api_shape`: the structure of the last answers of the Diagral cloud. Texts are replaced by their length; only states, device types, versions and product references stay readable.
+- `automatisms`: the number of automatisms, with the canal and mode of each, never their names.
+
 <Image src="/images/diagnostics.png" alt="Diagnostic" />
 
 <Warning>
@@ -48,13 +56,17 @@ logger:
 
 ### Warnings about Diagral data
 
-The `pydiagral` library checks every answer of the Diagral cloud. When a field it expects is missing, it keeps working without it and writes a warning, once per field:
+The `pydiagral` library checks every answer of the Diagral cloud. When a field it expects is missing or malformed, it keeps working without it and writes a warning, once per field:
 
 ```logs
 WARNING (MainThread) [pydiagral.models] Diagral sent Webhook data whose webhook_url field is missing. Please report it at https://github.com/mguyard/pydiagral/issues, with your pydiagral version, so the model can be fixed
 ```
 
 Please report it as the message asks: Diagral changed its data, and the library needs to follow.
+
+It also warns once when your installation uses a feature built from the Diagral documentation only, such as cameras or automatisms, which could not be checked on a real installation.
+
+In both cases, attach the [diagnostics file](#diagnostic-file) to the issue rather than copying log lines: it lists every such field since Home Assistant started, including keys the library does not know, which it does not write in the logs.
 
 A webhook notification Diagral sends without its date, system ID or alarm code cannot be used. It is ignored, and the reason is written in the logs:
 

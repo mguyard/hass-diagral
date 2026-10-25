@@ -12,43 +12,51 @@
             "invalid_alarmpanel_code": "Invalid Alarm Panel Code. Alarm Panel Code must contain only digits (4 or more).",
             "missing_alarmpanel_code": "Alarm Panel Code is required when you set the action type to something other than `Never`.",
             "invalid_pin": "Invalid Master (PIN) code. Master (PIN) code must contain only digits.",
+            "pin_refused": "Diagral refused the Master (PIN) code for this central. Check it and enter it again.",
             "unknown": "Unexpected error"
         },
         "step": {
             "user": {
+                "title": "Diagral Account",
+                "description": "Please provide your Diagral credentials. The centrals of this account are listed in the next step. **Clicking Next takes a few seconds: the centrals of this account are fetched from Diagral**.\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
                 "data": {
-                    "serial_id": "Serial ID of DIAG56AAX/DIAG59AAX module"
-                },
-                "description": "To set up your Diagral alarm system, you need a DIAG56AAX/DIAG59AAX module which connects your alarm to the internet for remote control.\n\rTo find your Serial ID, check the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})",
-                "title": "Diagral"
+                    "username": "Username (email address)",
+                    "password": "Password"
+                }
             },
-            "account": {
-              "title": "Diagral Account",
-              "description": "Please provide your Diagral credentials\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
-              "data": {
-                "username": "Username (email address)",
-                "password": "Password",
-                "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
-              }
-            }
-            ,
+            "central": {
+                "title": "Diagral central",
+                "description": "Choose the Diagral central to add to Home Assistant.\n\rTo check its serial ID, look at the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})\n\r**Already in Home Assistant, so not listed**: {configured}",
+                "data": {
+                    "serial_id": "Central (serial ID)",
+                    "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
+                }
+            },
+            "serial": {
+                "data": {
+                    "serial_id": "Serial ID of DIAG56AAX/DIAG59AAX module",
+                    "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
+                },
+                "description": "The centrals of your account could not be listed: enter the serial ID of your central.\n\rTo set up your Diagral alarm system, you need a DIAG56AAX/DIAG59AAX module which connects your alarm to the internet for remote control.\n\rTo find your Serial ID, check the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})",
+                "title": "Diagral central"
+            },
             "reconfigure": {
-              "title": "Diagral Account",
-              "description": "Please update your Diagral credentials\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
-              "data": {
-                "username": "Username (email address)",
-                "password": "Password",
-                "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
-              },
-              "data_description": {
-                "password": "Leave empty to keep the current value.",
-                "pin_code": "Leave empty to keep the current value."
-              }
+                "title": "Diagral Account",
+                "description": "Please update your Diagral credentials\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
+                "data": {
+                    "username": "Username (email address)",
+                    "password": "Password",
+                    "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
+                },
+                "data_description": {
+                    "password": "Leave empty to keep the current value.",
+                    "pin_code": "Leave empty to keep the current value."
+                }
             },
             "options": {
-              "title": "Options",
-              "description": "_More details about these options are available [here]({options_url})_",
-              "sections": {
+                "title": "Options",
+                "description": "_More details about these options are available [here]({options_url})_",
+                "sections": {
                     "alarmpanel_options": {
                         "name": "Alarm Panel Options",
                         "description": "These options apply to your Alarm Control Panel UI",
@@ -77,6 +85,9 @@
         "binary_sensor": {
             "cloud_connection": {
                 "name": "Diagral cloud"
+            },
+            "cloud_reachable": {
+                "name": "Diagral cloud reachable"
             }
         },
         "alarm_control_panel": {
@@ -171,6 +182,20 @@
             "title": "Diagral webhook used by another installation: {entry_title}",
             "fix_flow": {
                 "step": {
+                    "init": {
+                        "title": "Diagral webhook used by another installation",
+                        "description": "The Diagral cloud sends the events of **{entry_title}** to **{other_host}**, not to this Home Assistant. Intrusion alerts only arrive this way.",
+                        "menu_options": {
+                            "confirm": "Take the webhook over",
+                            "ignore": "Ignore this warning",
+                            "unignore": "Stop ignoring this warning"
+                        },
+                        "menu_option_descriptions": {
+                            "confirm": "Events come to this Home Assistant. {other_host} stops receiving them.",
+                            "ignore": "{other_host} keeps the events. The warning stays hidden until this Home Assistant owns the webhook.",
+                            "unignore": "The warning shows in the repairs again. {other_host} keeps the events."
+                        }
+                    },
                     "confirm": {
                         "title": "Take over the Diagral webhook",
                         "description": "The Diagral cloud sends the events of **{entry_title}** to another installation (**{other_host}**), so Home Assistant does not receive them. Intrusion alerts only arrive this way: the alarm panel cannot show *triggered* while this lasts. Polling still updates the arming state every 5 minutes.\n\nThe integration no longer overwrites a subscription it did not create. If **{other_host}** is not in use any more, or you want this installation to receive the events, confirm below: the subscription will point here, and **{other_host}** will stop receiving events.\n\nYou can also do this at any time with the `diagral.register_webhook` action."
@@ -178,7 +203,9 @@
                 },
                 "abort": {
                     "entry_not_loaded": "The Diagral integration is not loaded. Reload it, then try again.",
-                    "take_over_failed": "The Diagral cloud refused the change. Check the logs, then try again."
+                    "take_over_failed": "The Diagral cloud refused the change. Check the logs, then try again.",
+                    "ignored": "The warning is ignored. It stays hidden while {other_host} keeps the webhook; show ignored repairs to see it again.",
+                    "unignored": "The warning shows in the repairs again."
                 }
             }
         },

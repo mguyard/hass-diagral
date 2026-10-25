@@ -8,6 +8,7 @@ from custom_components.diagral.repairs import (
     TakeOverWebhookFlow,
     async_create_fix_flow,
 )
+import pytest
 
 from homeassistant.config_entries import ConfigEntryState
 
@@ -123,3 +124,85 @@ async def test_retry_aborts_when_it_fails_again():
 
     assert result["type"] == "abort"
     assert result["reason"] == "retry_failed"
+
+
+def registry_with(issue: MagicMock):
+    """Patch the issue registry so it returns the given issue."""
+    return patch(
+        "custom_components.diagral.repairs.ir.async_get",
+        return_value=MagicMock(async_get_issue=MagicMock(return_value=issue)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("dismissed_version", "second_option"),
+    [(None, "ignore"), ("2026.11.0", "unignore")],
+    ids=["shown", "ignored"],
+)
+async def test_take_over_flow_offers_to_ignore_or_unignore(
+    dismissed_version, second_option
+):
+    """The second choice ignores a shown issue, or shows an ignored one again."""
+    flow = make_flow(make_loaded_entry())
+    issue = MagicMock(dismissed_version=dismissed_version, translation_placeholders={})
+
+    with registry_with(issue):
+        result = await flow.async_step_init({"issue_id": flow.issue_id})
+
+    assert result["type"] == "menu"
+    assert result["menu_options"] == ["confirm", second_option]
+
+
+async def test_unignoring_shows_the_issue_again_without_taking_over():
+    """Showing an ignored issue again leaves the subscription where it is."""
+    flow = make_flow(make_loaded_entry())
+    issue = MagicMock(translation_placeholders={"other_host": "prod.example.net"})
+    with (
+        patch("custom_components.diagral.repairs.ir.async_ignore_issue") as ignore,
+        registry_with(issue),
+        patch("custom_components.diagral.repairs.register_webhook") as register,
+    ):
+        result = await flow.async_step_unignore()
+
+    ignore.assert_called_once_with(
+        flow.hass, "diagral", "webhook_owned_elsewhere_entry1", False
+    )
+    register.assert_not_called()
+    assert result["type"] == "abort"
+    assert result["reason"] == "unignored"
+    assert result["description_placeholders"] == {"other_host": "prod.example.net"}
+
+
+async def test_ignoring_hides_the_issue_without_taking_over():
+    """Ignoring keeps the other installation's subscription and hides the issue."""
+    flow = make_flow(make_loaded_entry())
+    issue = MagicMock(translation_placeholders={"other_host": "prod.example.net"})
+    with (
+        patch("custom_components.diagral.repairs.ir.async_ignore_issue") as ignore,
+        patch(
+            "custom_components.diagral.repairs.ir.async_get",
+            return_value=MagicMock(async_get_issue=MagicMock(return_value=issue)),
+        ),
+        patch("custom_components.diagral.repairs.register_webhook") as register,
+    ):
+        result = await flow.async_step_ignore()
+
+    ignore.assert_called_once_with(
+        flow.hass, "diagral", "webhook_owned_elsewhere_entry1", True
+    )
+    register.assert_not_called()
+    # An abort leaves the issue in place, ignored; finishing would delete it
+    assert result["type"] == "abort"
+    assert result["reason"] == "ignored"
+    # The message names the installation that keeps the events
+    assert result["description_placeholders"] == {"other_host": "prod.example.net"}
+
+
+async def test_retry_flow_still_asks_for_confirmation_only():
+    """A failed registration has nothing to ignore: retrying stays one step."""
+    flow = make_retry_flow(make_loaded_entry())
+
+    result = await flow.async_step_init({"issue_id": flow.issue_id})
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "confirm"
