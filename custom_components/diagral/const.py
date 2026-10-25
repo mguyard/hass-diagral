@@ -61,3 +61,23 @@ INPUT_GROUPS = "group_ids"
 ISSUE_WEBHOOK_OWNED_ELSEWHERE = "webhook_owned_elsewhere"
 ISSUE_WEBHOOK_REGISTRATION_FAILED = "webhook_registration_failed"
 ISSUE_WEBHOOK_NO_URL = "webhook_no_url"
+
+# State of an entry's webhook, reported by its diagnostic entities
+WEBHOOK_CONNECTED = "connected"
+WEBHOOK_OWNED_ELSEWHERE = "owned_elsewhere"
+WEBHOOK_REGISTRATION_FAILED = "registration_failed"
+WEBHOOK_NO_URL = "no_url"
+WEBHOOK_UNREGISTERED = "unregistered"
+WEBHOOK_STATUSES = (
+    WEBHOOK_CONNECTED,
+    WEBHOOK_OWNED_ELSEWHERE,
+    WEBHOOK_REGISTRATION_FAILED,
+    WEBHOOK_NO_URL,
+    WEBHOOK_UNREGISTERED,
+)
+WEBHOOK_STATUS_OF_ISSUE = {
+    ISSUE_WEBHOOK_REGISTRATION_FAILED: WEBHOOK_REGISTRATION_FAILED,
+    ISSUE_WEBHOOK_NO_URL: WEBHOOK_NO_URL,
+}
+# A subscription can be taken over or deleted between restarts: check it hourly
+WEBHOOK_CHECK_INTERVAL = 3600

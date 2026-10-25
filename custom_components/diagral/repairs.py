@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 
 from . import WebhookUnavailable, register_webhook
-from .const import ISSUE_WEBHOOK_REGISTRATION_FAILED
+from .const import ISSUE_WEBHOOK_REGISTRATION_FAILED, WEBHOOK_CONNECTED
 
 
 class TakeOverWebhookFlow(ConfirmRepairFlow):
@@ -48,6 +48,7 @@ class TakeOverWebhookFlow(ConfirmRepairFlow):
         if webhook_id is None:
             return self.async_abort(reason=self.failed_reason)
         entry.runtime_data.webhook_id = webhook_id
+        entry.runtime_data.coordinator.async_set_webhook_status(WEBHOOK_CONNECTED)
         return self.async_create_entry(data={})
 
 

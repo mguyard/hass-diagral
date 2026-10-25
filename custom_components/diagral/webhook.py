@@ -60,6 +60,7 @@ async def handle_webhook(
 
         # Retrieve the alarm_config from the coordinator
         coordinator: DiagralDataUpdateCoordinator = entry.runtime_data.coordinator
+        coordinator.async_webhook_received()
         devices_infos: DeviceList = coordinator.data.get("devices_infos", {})
         groups = coordinator.data.get("groups", {})
 

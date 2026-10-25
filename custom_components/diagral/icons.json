@@ -12,5 +12,15 @@
     "unregister_webhook": {
       "service": "mdi:link-variant-off"
     }
+  },
+  "entity": {
+    "sensor": {
+      "webhook_status": {
+        "default": "mdi:webhook"
+      },
+      "last_webhook": {
+        "default": "mdi:webhook"
+      }
+    }
   }
 }

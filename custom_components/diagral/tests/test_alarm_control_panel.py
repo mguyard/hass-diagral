@@ -544,3 +544,31 @@ class TestWebhookSubscriptions:
             "signal-diagral-entry1-webhook-STATUS",
             "signal-diagral-entry1-webhook-ALERT",
         }
+
+
+class TestWebhookActionStatus:
+    """The webhook actions record the webhook state for the diagnostics."""
+
+    async def test_register_records_connected(self):
+        """A successful registration marks the webhook connected."""
+        panel = make_webhook_panel()
+        with patch.object(
+            panel_module, "register_webhook", AsyncMock(return_value="NEWID")
+        ):
+            await panel.action_register_webhook()
+        entry = panel.hass.config_entries.async_get_entry.return_value
+        entry.runtime_data.coordinator.async_set_webhook_status.assert_called_with(
+            "connected"
+        )
+
+    async def test_unregister_records_unregistered(self):
+        """A deliberate unregistration is recorded, so it is not undone."""
+        panel = make_webhook_panel()
+        with patch.object(
+            panel_module, "unregister_webhook", AsyncMock(return_value=True)
+        ):
+            await panel.action_unregister_webhook()
+        entry = panel.hass.config_entries.async_get_entry.return_value
+        entry.runtime_data.coordinator.async_set_webhook_status.assert_called_with(
+            "unregistered"
+        )

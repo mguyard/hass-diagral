@@ -75,6 +75,8 @@ Listening for `DIAGRAL_EVENT` is done over the websocket API (`subscribe_events`
 
 Read `home-assistant.log` and filter on `custom_components.diagral` and `pydiagral.api`. These lines contain the serial, the alarm name, user names and webhook URLs: never paste them unredacted into an issue, a PR or a commit.
 
+Searching the session for leaked secrets is not enough. Also list every `WARNING` and `ERROR` that names the integration, including those Home Assistant writes under its own loggers: `homeassistant.util.loop` reports `Detected blocking call … by custom integration 'diagral'` for file or network I/O on the event loop, which no unit test can catch. Home Assistant renames the log to `home-assistant.log.1` at each start, so read both files to cover a session spanning a restart.
+
 ---
 
 ## 4. Level 2 — Fake Diagral Cloud

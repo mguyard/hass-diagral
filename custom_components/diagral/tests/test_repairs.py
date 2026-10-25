@@ -110,6 +110,9 @@ async def test_retry_registers_without_taking_over():
     assert result["type"] == "create_entry"
     assert register.call_args.kwargs.get("take_over", False) is False
     assert entry.runtime_data.webhook_id == "NEWID"
+    entry.runtime_data.coordinator.async_set_webhook_status.assert_called_with(
+        "connected"
+    )
 
 
 async def test_retry_aborts_when_it_fails_again():

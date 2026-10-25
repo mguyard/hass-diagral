@@ -16,6 +16,9 @@ The Diagral integration operates in Hub Mode, meaning that all configurations wi
 | Central                   | Alarm Control Panel with 3 modes: Away, Home and Disarmed                                  |
 | Anomalies                 | Sensor displaying the number of anomalies in state and details in attributes               |
 | Active Groups             | Sensor displaying the number of active groups in state and details per group in attributes |
+| Webhook                   | Diagnostic sensor showing whether Diagral events can reach Home Assistant                  |
+| Last webhook              | Diagnostic sensor with the time of the last Diagral event received (disabled by default)   |
+| Diagral cloud             | Diagnostic binary sensor, connected while the Diagral cloud answers the polling            |
 
 <Info>
 All entities are refreshed every `5 minutes` (fixed) or upon receiving a [Webhook](/integration/webhook) from the Diagral Cloud.
@@ -138,3 +141,23 @@ updated_at: "2025-02-26T00:24:28.212737+01:00"
 </Card>
 
 Since the attribute format is identical to that of `Anomalies`, the same Jinja2 template type can be utilized.
+
+## Webhook - Details
+
+Intrusion alerts only reach Home Assistant through the [webhook](/integration/webhook). This diagnostic sensor tells whether they can, even while Diagral cannot be polled:
+
+- `connected`: events are received.
+- `owned_elsewhere`: the subscription points to another installation; a repair explains how to take it over.
+- `registration_failed`: Diagral or Home Assistant Cloud did not answer; it is retried every hour.
+- `no_url`: Home Assistant has no external `https://` address nor Home Assistant Cloud.
+- `unregistered`: you unregistered the webhook with the `diagral.unregister_webhook` action.
+
+Use it in an automation to be warned when the state is not `connected`.
+
+## Last webhook - Details
+
+The time of the last Diagral event received, whatever its type. Disabled by default: enable it in the entity settings. A Diagral system that is rarely armed or disarmed sends few events, so a long silence is not an error by itself.
+
+## Diagral cloud - Details
+
+Connected while the last refresh from the Diagral cloud succeeded. When Diagral does not answer, after the retries described above, the other entities become unavailable while this one switches to disconnected. Use it in an automation to be warned of a Diagral outage.

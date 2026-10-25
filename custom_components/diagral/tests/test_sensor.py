@@ -5,16 +5,31 @@ real API calls. dt_util is patched to avoid time-dependent output.
 """
 
 from datetime import UTC, datetime
+import json
+import pathlib
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from custom_components.diagral.sensor import DiagralSensor
+from custom_components.diagral.const import WEBHOOK_STATUSES
+from custom_components.diagral.sensor import (
+    HEALTH_SENSORS,
+    DiagralHealthSensor,
+    DiagralSensor,
+)
 from pydiagral.models import Anomalies, AnomalyDetail, AnomalyName, DeviceList
+import pytest
+
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import EntityCategory
 
 # An empty DeviceList with explicit empty lists to avoid iteration errors
 # (vars(MagicMock()) would contain non-iterable sentinel objects)
 EMPTY_DEVICE_LIST = DeviceList(
     cameras=[], commands=[], sensors=[], sirens=[], transmitters=[]
 )
+
+
+TRANSLATIONS = pathlib.Path(__file__).parent.parent / "translations"
 
 
 def make_sensor_mock() -> DiagralSensor:
@@ -171,3 +186,59 @@ class TestUpdateActiveGroups:
             sensor._update_active_groups(system_status, groups, alarm_config)
 
         assert sensor._attr_native_value == 0
+
+
+def make_health_sensor(key: str, coordinator: MagicMock):
+    """Return the diagnostic sensor of the given key, bound to a coordinator."""
+    description = next(d for d in HEALTH_SENSORS if d.key == key)
+    entry = MagicMock(entry_id="entry1")
+    coordinator.data = {
+        "alarm_config": SimpleNamespace(
+            alarm=SimpleNamespace(central=SimpleNamespace(serial="FAKECENTRAL01"))
+        )
+    }
+    return DiagralHealthSensor(coordinator, description, entry)
+
+
+class TestHealthSensors:
+    """The webhook diagnostic sensors."""
+
+    def test_webhook_status_survives_a_polling_outage(self):
+        """The webhook state stays readable while Diagral cannot be polled."""
+        coordinator = MagicMock(webhook_status="owned_elsewhere")
+        coordinator.last_update_success = False
+        sensor = make_health_sensor("webhook_status", coordinator)
+
+        assert sensor.native_value == "owned_elsewhere"
+        assert sensor.available is True
+        assert sensor.unique_id == "entry1_diagral_FAKECENTRAL01_webhook_status"
+
+    def test_webhook_status_is_an_enabled_enum(self):
+        """Every webhook state is an option, shown by default."""
+        description = next(d for d in HEALTH_SENSORS if d.key == "webhook_status")
+
+        assert description.device_class == SensorDeviceClass.ENUM
+        assert description.options == list(WEBHOOK_STATUSES)
+        assert description.entity_category == EntityCategory.DIAGNOSTIC
+        assert description.entity_registry_enabled_default is True
+
+    def test_last_webhook_is_a_hidden_timestamp(self):
+        """The last notification time is a timestamp, hidden until enabled."""
+        received = datetime(2026, 10, 25, 0, 30, tzinfo=UTC)
+        sensor = make_health_sensor("last_webhook", MagicMock(last_webhook=received))
+        description = sensor.entity_description
+
+        assert sensor.native_value == received
+        assert description.device_class == SensorDeviceClass.TIMESTAMP
+        assert description.entity_category == EntityCategory.DIAGNOSTIC
+        assert description.entity_registry_enabled_default is False
+
+    @pytest.mark.parametrize("language", ["en", "fr"])
+    def test_every_state_is_translated(self, language):
+        """Both languages name the sensors and every webhook state."""
+        translations = json.loads(
+            (TRANSLATIONS / f"{language}.json").read_text(encoding="utf-8")
+        )["entity"]["sensor"]
+
+        assert set(translations["webhook_status"]["state"]) == set(WEBHOOK_STATUSES)
+        assert translations["last_webhook"]["name"]

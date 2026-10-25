@@ -1,7 +1,7 @@
 """DataUpdateCoordinator for Diagral integration."""
 
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 from typing import Any
 
@@ -9,10 +9,11 @@ from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import ClientError, DiagralAPIError, ServerError
 from pydiagral.models import AlarmConfiguration, Anomalies, DeviceInfos, SystemStatus
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+import homeassistant.util.dt as dt_util
 
 from .const import (
     BRAND,
@@ -47,6 +48,22 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
         self.api = api
+        self.last_success: datetime | None = None
+        self.last_error: str | None = None
+        self.webhook_status: str | None = None
+        self.last_webhook: datetime | None = None
+
+    @callback
+    def async_set_webhook_status(self, status: str) -> None:
+        """Record the state of the webhook and refresh the entities."""
+        self.webhook_status = status
+        self.async_update_listeners()
+
+    @callback
+    def async_webhook_received(self) -> None:
+        """Record that a notification arrived and refresh the entities."""
+        self.last_webhook = dt_util.utcnow()
+        self.async_update_listeners()
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Diagral API, retrying transient failures."""
@@ -57,9 +74,14 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
             async with asyncio.timeout(READ_RETRY_BUDGET):
                 updated_data = await self._async_read_with_retries(timeouts)
         except TimeoutError as err:
+            self.last_error = type(err).__name__
             raise UpdateFailed("Timeout communicating with API") from err
         except DiagralAPIError as err:
+            self.last_error = type(err).__name__
             raise UpdateFailed(f"Error communicating with API: {err}") from err
+
+        self.last_success = dt_util.utcnow()
+        self.last_error = None
 
         if updated_data is None:
             _LOGGER.debug("Received invalid data from API, keeping old data")
