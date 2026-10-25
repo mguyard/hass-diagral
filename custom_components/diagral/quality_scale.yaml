@@ -47,7 +47,7 @@ rules:
   reauthentication-flow: todo
   test-coverage:
     status: todo
-    comment: 83.6% measured on 2026-10-25; sensor.py at 68%
+    comment: 85.8% measured on 2026-10-25; sensor.py at 73%, coordinator.py at 80%
 
   # Gold
   devices: done
@@ -68,13 +68,9 @@ rules:
   dynamic-devices:
     status: exempt
     comment: a config entry has a single, static device, the central
-  entity-category:
-    status: todo
-    comment: no entity sets a category yet
+  entity-category: done
   entity-device-class: done
-  entity-disabled-by-default:
-    status: exempt
-    comment: no noisy or rarely used entity
+  entity-disabled-by-default: done
   entity-translations: done
   exception-translations:
     status: todo
