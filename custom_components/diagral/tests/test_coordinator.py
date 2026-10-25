@@ -1,6 +1,7 @@
 """Tests for coordinator.py — progressive retries of Diagral reads."""
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from custom_components.diagral import coordinator as coordinator_module
@@ -169,3 +170,26 @@ class TestDeadlines:
         ):
             await coordinator._async_update_data()
         assert coordinator.api.get_system_status.await_count == 1
+
+
+class TestOutageLogging:
+    """An outage is logged once by Home Assistant, not on every poll."""
+
+    async def test_retries_stay_out_of_the_log(self, sleep, caplog):
+        """Retrying a failed read writes nothing at INFO or above."""
+        caplog.set_level(logging.INFO, logger="custom_components.diagral")
+        coordinator = make_coordinator()
+        coordinator.api.get_system_status.side_effect = ServerError("HTTP 503")
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+
+        assert not caplog.records
+
+    async def test_invalid_payload_stays_out_of_the_log(self, sleep, caplog):
+        """Keeping the old data on an invalid payload writes nothing either."""
+        caplog.set_level(logging.INFO, logger="custom_components.diagral")
+        coordinator = make_coordinator()
+        coordinator.api.get_system_status.return_value = None
+        await coordinator._async_update_data()
+
+        assert not caplog.records

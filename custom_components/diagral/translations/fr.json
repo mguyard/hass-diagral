@@ -38,6 +38,10 @@
                 "username": "Identifiant (adresse e-mail)",
                 "password": "Mot de passe",
                 "pin_code": "Master (PIN) Code Diagral (chiffres uniquement, ex : 1234)"
+              },
+              "data_description": {
+                "password": "Laisser vide pour conserver la valeur actuelle.",
+                "pin_code": "Laisser vide pour conserver la valeur actuelle."
               }
             },
             "options": {

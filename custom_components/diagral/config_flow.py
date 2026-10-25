@@ -32,6 +32,9 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
     SelectSelector,
     SelectSelectorConfig,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from . import DiagralConfigEntry
@@ -51,6 +54,8 @@ from .const import (
 from .models import AccountInfoData, DiagralOptionsData, ValidateConnectionData
 
 _LOGGER = logging.getLogger(__name__)
+
+SECRET_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
 
 def is_valid_email(email: str) -> bool:
@@ -234,8 +239,8 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
         account_schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str,
-                vol.Required(CONF_PIN_CODE, default=None): str,
+                vol.Required(CONF_PASSWORD): SECRET_SELECTOR,
+                vol.Required(CONF_PIN_CODE): SECRET_SELECTOR,
             }
         )
 
@@ -379,6 +384,13 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
         self.serialid = config_entry.data[CONF_SERIAL_ID]
 
         if user_input is not None:
+            user_input = {
+                CONF_USERNAME: user_input[CONF_USERNAME],
+                CONF_PASSWORD: user_input.get(CONF_PASSWORD)
+                or config_entry.data[CONF_PASSWORD],
+                CONF_PIN_CODE: user_input.get(CONF_PIN_CODE)
+                or config_entry.data[CONF_PIN_CODE],
+            }
             _LOGGER.debug("Validating account credentials")
             # Check if the user has entered a valid email and pin code
             if not is_valid_email(user_input[CONF_USERNAME]):
@@ -422,12 +434,9 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Required(
                     CONF_USERNAME, default=config_entry.data[CONF_USERNAME]
                 ): str,
-                vol.Required(
-                    CONF_PASSWORD, default=config_entry.data[CONF_PASSWORD]
-                ): str,
-                vol.Required(
-                    CONF_PIN_CODE, default=config_entry.data[CONF_PIN_CODE]
-                ): str,
+                # Never sent back to the browser; left empty, they are kept
+                vol.Optional(CONF_PASSWORD): SECRET_SELECTOR,
+                vol.Optional(CONF_PIN_CODE): SECRET_SELECTOR,
             }
         )
 
