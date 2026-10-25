@@ -563,6 +563,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> 
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
             hass.data[DOMAIN].pop(entry.entry_id)
+        # Only when disabled: a reload would lose a repair the user ignored
+        if entry.disabled_by:
+            _delete_issues(hass, entry.entry_id)
         return unload_ok
     return False
 

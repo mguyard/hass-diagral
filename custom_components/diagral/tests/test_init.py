@@ -17,6 +17,7 @@ from custom_components.diagral import (
     async_migrate_entry,
     async_remove_entry,
     async_setup_entry,
+    async_unload_entry,
     register_webhook,
     unregister_webhook,
 )
@@ -40,6 +41,7 @@ from custom_components.diagral.const import (
 from pydiagral.exceptions import DiagralAPIError
 import pytest
 
+from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.network import NoURLAvailableError
@@ -723,6 +725,28 @@ class TestRepairCleanup:
             await async_remove_entry(MagicMock(), self.removed_entry("SECRETAPIKEY"))
 
         assert deleted_issues(issues) == WEBHOOK_ISSUES
+
+    @staticmethod
+    async def unload(disabled_by: ConfigEntryDisabler | None) -> None:
+        """Unload an entry, disabled or only reloaded."""
+        hass = MagicMock()
+        hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
+        entry = make_entry()
+        entry.disabled_by = disabled_by
+        with patch("custom_components.diagral.unregister_webhook", AsyncMock()):
+            await async_unload_entry(hass, entry)
+
+    async def test_disabling_an_entry_deletes_its_repairs(self, issues):
+        """A disabled entry does nothing: its webhook repairs no longer apply."""
+        await self.unload(ConfigEntryDisabler.USER)
+
+        assert deleted_issues(issues) == WEBHOOK_ISSUES
+
+    async def test_reloading_an_entry_keeps_its_repairs(self, issues):
+        """A reload recreates nothing: an ignored repair stays ignored."""
+        await self.unload(None)
+
+        assert deleted_issues(issues) == set()
 
     async def test_setup_deletes_the_repairs_of_removed_entries(self, issues):
         """Repairs left by entries removed before this fix are cleaned up."""

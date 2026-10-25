@@ -66,6 +66,8 @@ To make this Home Assistant receive the events, open the repair, choose to take 
 
 If the other installation should keep the events — a test instance next to your main one, for example — open the repair and choose to ignore it instead. It stays hidden, even when the hourly check raises it again, until this Home Assistant owns the webhook. To see it again, show the ignored repairs, open it and choose to stop ignoring it.
 
+Disabling the integration removes its webhook repairs: a disabled integration receives nothing anyway. If the problem remains when you enable it again, the repair comes back, no longer ignored. Reloading the integration keeps them as they are, ignored or not.
+
 The subscription is also checked every hour, not only at startup. If another installation takes it over later, the repair appears without waiting for a restart; if it disappeared, it is registered again. A webhook that could not be registered is retried at the same pace, so it recovers by itself once Diagral answers. A webhook you unregistered with [diagral.unregister_webhook](/integration/actions#unregister-webhook) is left alone.
 
 <Info>
