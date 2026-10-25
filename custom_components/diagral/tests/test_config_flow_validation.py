@@ -436,3 +436,31 @@ class TestFlowErrorMessages:
             result = await getattr(flow, f"async_step_{step}")(user_input)
 
         assert result["errors"] == {"base": key}
+
+
+class TestReconfigureSecrets:
+    """The reconfigure form never shows the stored password or PIN."""
+
+    async def test_form_does_not_prefill_secrets(self):
+        """Password and PIN are blank, only the username is pre-filled."""
+        flow, _ = make_step("reconfigure")
+        result = await flow.async_step_reconfigure()
+
+        defaults = {
+            str(key): key.default()
+            for key in result["data_schema"].schema
+            if callable(getattr(key, "default", None))
+        }
+        assert defaults == {CONF_USERNAME: ACCOUNT.username}
+
+    async def test_blank_secrets_keep_stored_values(self):
+        """Leaving password and PIN empty keeps them, so only the email changes."""
+        flow, _ = make_step("reconfigure")
+        validate = AsyncMock(return_value=None)
+        with patch("custom_components.diagral.config_flow.validate_account", validate):
+            await flow.async_step_reconfigure({CONF_USERNAME: "new@example.com"})
+
+        account = validate.call_args.kwargs["account_info"]
+        assert account.username == "new@example.com"
+        assert account.password == ACCOUNT.password
+        assert account.pin_code == ACCOUNT.pin_code

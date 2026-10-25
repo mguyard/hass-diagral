@@ -62,7 +62,7 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Error communicating with API: {err}") from err
 
         if updated_data is None:
-            _LOGGER.warning("Received invalid data from API, keeping old data")
+            _LOGGER.debug("Received invalid data from API, keeping old data")
             return self.data
         self.data = updated_data
         await self._update_device_info()
@@ -80,7 +80,8 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
                 if attempt == len(timeouts) - 1 or not is_transient_error(err):
                     raise
                 pause = READ_RETRY_PAUSES[attempt]
-                _LOGGER.info(
+                # Home Assistant logs the outage once; retries stay in debug
+                _LOGGER.debug(
                     "Diagral read failed (%s), retrying in %s s",
                     type(err).__name__,
                     pause,

@@ -39,6 +39,10 @@
                 "username": "Username (email address)",
                 "password": "Password",
                 "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
+              },
+              "data_description": {
+                "password": "Leave empty to keep the current value.",
+                "pin_code": "Leave empty to keep the current value."
               }
             },
             "options": {
