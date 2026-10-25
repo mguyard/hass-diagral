@@ -64,6 +64,8 @@ In the second case, a repair appears in **Settings > System > Repairs** and a wa
 
 To make this Home Assistant receive the events, open the repair and confirm, or call the [diagral.register_webhook](/integration/actions#register-webhook) action. The other installation then stops receiving them.
 
+The subscription is also checked every hour, not only at startup. If another installation takes it over later, the repair appears without waiting for a restart; if it disappeared, it is registered again. A webhook that could not be registered is retried at the same pace, so it recovers by itself once Diagral answers. A webhook you unregistered with [diagral.unregister_webhook](/integration/actions#unregister-webhook) is left alone.
+
 <Info>
 Disabling, reloading or removing the integration only deletes the subscription if it belongs to this Home Assistant. A subscription owned by another installation is never deleted.
 </Info>

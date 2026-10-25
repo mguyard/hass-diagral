@@ -278,3 +278,22 @@ class TestPublishedEvent:
             "signal-diagral-webhook-STATUS",
             "signal-diagral-loaded-webhook-STATUS",
         }
+
+
+class TestReceptionTime:
+    """Only a notification accepted for the entry counts as received."""
+
+    @pytest.mark.parametrize(
+        ("transmitter_id", "counted"),
+        [("FAKECENTRAL01", True), ("OTHERCENTRAL99", False)],
+        ids=["own-central", "other-central"],
+    )
+    async def test_reception_is_recorded(self, transmitter_id, counted):
+        """The last-webhook time follows accepted notifications only."""
+        hass, loaded = make_hass_with_entries()
+        payload = {**PRODUCTION_STATUS, "transmitter_id": transmitter_id}
+
+        with patch("custom_components.diagral.webhook.async_dispatcher_send"):
+            await handle_webhook(hass, WEBHOOK_ID, make_request(payload))
+
+        assert loaded.runtime_data.coordinator.async_webhook_received.called is counted

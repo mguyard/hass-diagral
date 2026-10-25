@@ -193,3 +193,31 @@ class TestOutageLogging:
         await coordinator._async_update_data()
 
         assert not caplog.records
+
+
+class TestHealth:
+    """The coordinator keeps what the diagnostic entities report."""
+
+    async def test_success_and_failure_are_recorded(self, sleep):
+        """A read records its time on success, the error kind on failure."""
+        coordinator = make_coordinator()
+        await coordinator._async_update_data()
+        assert coordinator.last_success is not None
+        assert coordinator.last_error is None
+
+        coordinator.api.get_system_status.side_effect = ServerError("HTTP 503")
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+        assert coordinator.last_error == "ServerError"
+
+    def test_webhook_status_and_reception_notify_entities(self):
+        """Webhook state changes reach the entities at once."""
+        coordinator = make_coordinator()
+        coordinator.async_update_listeners = MagicMock()
+
+        coordinator.async_set_webhook_status("connected")
+        coordinator.async_webhook_received()
+
+        assert coordinator.webhook_status == "connected"
+        assert coordinator.last_webhook is not None
+        assert coordinator.async_update_listeners.call_count == 2

@@ -49,6 +49,9 @@ from .const import (
     STATUS_OFF,
     STATUS_PRESENCE,
     STATUS_TEMPO_GROUP,
+    WEBHOOK_CONNECTED,
+    WEBHOOK_STATUS_OF_ISSUE,
+    WEBHOOK_UNREGISTERED,
 )
 from .coordinator import DiagralDataUpdateCoordinator, is_transient_error
 from .entity import DiagralEntity
@@ -351,11 +354,15 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
                 self.hass, entry, entry.runtime_data.api, "HA Action", take_over=True
             )
         except WebhookUnavailable as err:
+            entry.runtime_data.coordinator.async_set_webhook_status(
+                WEBHOOK_STATUS_OF_ISSUE[err.reason]
+            )
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key=err.reason
             ) from err
         # Force the webhook_id in the entry runtime data to be sure it is saved
         entry.runtime_data.webhook_id = webhook_id
+        entry.runtime_data.coordinator.async_set_webhook_status(WEBHOOK_CONNECTED)
 
     async def action_unregister_webhook(self) -> None:
         """Unregister the webhook for Diagral."""
@@ -373,6 +380,8 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
                 translation_domain=DOMAIN,
                 translation_key="webhook_unregistration_failed",
             )
+        # The hourly check leaves a webhook the user unregistered alone
+        entry.runtime_data.coordinator.async_set_webhook_status(WEBHOOK_UNREGISTERED)
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""

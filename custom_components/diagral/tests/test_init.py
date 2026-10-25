@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.diagral import (
     WebhookUnavailable,
+    async_check_webhook,
     async_migrate_entry,
     async_remove_entry,
     async_setup_entry,
@@ -28,6 +29,11 @@ from custom_components.diagral.const import (
     ISSUE_WEBHOOK_NO_URL,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
     ISSUE_WEBHOOK_REGISTRATION_FAILED,
+    WEBHOOK_CONNECTED,
+    WEBHOOK_NO_URL,
+    WEBHOOK_OWNED_ELSEWHERE,
+    WEBHOOK_REGISTRATION_FAILED,
+    WEBHOOK_UNREGISTERED,
 )
 from pydiagral.exceptions import DiagralAPIError
 import pytest
@@ -538,3 +544,106 @@ class TestSetupReportsWebhookFailure:
         assert kwargs["translation_key"] == reason
         assert kwargs["is_fixable"] is fixable
         assert entry.runtime_data.webhook_id is None
+        coord.return_value.async_set_webhook_status.assert_called_with(
+            reason.removeprefix("webhook_")
+        )
+
+
+def make_checked_entry(status: str, subscription: str | None) -> MagicMock:
+    """Return a loaded entry whose webhook is in the given state."""
+    entry = make_entry(OWN_NEW_URL)
+    entry.runtime_data.coordinator.webhook_status = status
+    entry.runtime_data.api = make_api(subscription)
+    entry.runtime_data.webhook_id = WEBHOOK_ID if status == WEBHOOK_CONNECTED else None
+    return entry
+
+
+async def run_check(entry: MagicMock, register: AsyncMock | None = None) -> AsyncMock:
+    """Run the hourly check, with register_webhook replaced."""
+    register = register or AsyncMock(return_value=WEBHOOK_ID)
+    with patch("custom_components.diagral.register_webhook", register):
+        await async_check_webhook(MagicMock(), entry)
+    return register
+
+
+class TestHourlyCheck:
+    """The subscription is checked every hour, between restarts."""
+
+    async def test_own_subscription_is_only_read(self, cloud, issues):
+        """A subscription still ours costs one read and nothing else."""
+        entry = make_checked_entry(WEBHOOK_CONNECTED, OWN_NEW_URL)
+        register = await run_check(entry)
+
+        register.assert_not_awaited()
+        entry.runtime_data.api.update_webhook.assert_not_awaited()
+        entry.runtime_data.coordinator.async_set_webhook_status.assert_not_called()
+        issues.async_create_issue.assert_not_called()
+
+    async def test_taken_over_subscription_raises_the_repair(self, cloud, issues):
+        """A subscription another installation took since setup is reported."""
+        entry = make_checked_entry(WEBHOOK_CONNECTED, OTHER_URL)
+        register = await run_check(entry)
+
+        register.assert_not_awaited()
+        entry.runtime_data.api.update_webhook.assert_not_awaited()
+        assert (
+            issues.async_create_issue.call_args.kwargs["translation_key"]
+            == ISSUE_WEBHOOK_OWNED_ELSEWHERE
+        )
+        entry.runtime_data.coordinator.async_set_webhook_status.assert_called_with(
+            WEBHOOK_OWNED_ELSEWHERE
+        )
+
+    async def test_removed_subscription_is_registered_again(self, cloud, issues):
+        """A subscription deleted since setup is created again."""
+        entry = make_checked_entry(WEBHOOK_CONNECTED, None)
+        register = await run_check(entry)
+
+        assert register.call_args.kwargs.get("take_over", False) is False
+        entry.runtime_data.coordinator.async_set_webhook_status.assert_called_with(
+            WEBHOOK_CONNECTED
+        )
+
+    async def test_unreachable_cloud_changes_nothing(self, cloud, issues):
+        """A Diagral outage never drops a working webhook."""
+        entry = make_checked_entry(WEBHOOK_CONNECTED, OWN_NEW_URL)
+        entry.runtime_data.api.get_webhook = AsyncMock(
+            side_effect=DiagralAPIError("HTTP 503", status_code=503)
+        )
+        register = await run_check(entry)
+
+        register.assert_not_awaited()
+        entry.runtime_data.coordinator.async_set_webhook_status.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "status",
+        [WEBHOOK_REGISTRATION_FAILED, WEBHOOK_NO_URL, WEBHOOK_OWNED_ELSEWHERE],
+    )
+    async def test_failed_webhook_recovers_by_itself(self, cloud, issues, status):
+        """A webhook that could not register is retried, never taken over."""
+        entry = make_checked_entry(status, None)
+        register = await run_check(entry)
+
+        assert register.call_args.kwargs.get("take_over", False) is False
+        assert entry.runtime_data.webhook_id == WEBHOOK_ID
+        entry.runtime_data.coordinator.async_set_webhook_status.assert_called_with(
+            WEBHOOK_CONNECTED
+        )
+
+    async def test_retry_failing_again_keeps_its_reason(self, cloud, issues):
+        """A retry that fails again records why, without a new repair."""
+        entry = make_checked_entry(WEBHOOK_REGISTRATION_FAILED, None)
+        register = AsyncMock(side_effect=WebhookUnavailable(ISSUE_WEBHOOK_NO_URL))
+        await run_check(entry, register)
+
+        entry.runtime_data.coordinator.async_set_webhook_status.assert_called_with(
+            WEBHOOK_NO_URL
+        )
+
+    async def test_unregistered_by_the_user_stays_so(self, cloud, issues):
+        """A webhook the user unregistered on purpose is not brought back."""
+        entry = make_checked_entry(WEBHOOK_UNREGISTERED, None)
+        register = await run_check(entry)
+
+        register.assert_not_awaited()
+        entry.runtime_data.api.get_webhook.assert_not_awaited()

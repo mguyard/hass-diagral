@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime, timedelta
+from functools import partial
 import hashlib
 import logging
 from urllib.parse import urlparse
@@ -22,6 +24,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_WEBHOOK_ID, P
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from .const import (
@@ -38,6 +41,11 @@ from .const import (
     ISSUE_WEBHOOK_NO_URL,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
     ISSUE_WEBHOOK_REGISTRATION_FAILED,
+    WEBHOOK_CHECK_INTERVAL,
+    WEBHOOK_CONNECTED,
+    WEBHOOK_OWNED_ELSEWHERE,
+    WEBHOOK_STATUS_OF_ISSUE,
+    WEBHOOK_UNREGISTERED,
 )
 from .coordinator import DiagralDataUpdateCoordinator
 from .models import DiagralConfigData, DiagralData
@@ -75,7 +83,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
         await coordinator.async_config_entry_first_refresh()
 
         try:
-            webhook_id = await register_webhook(hass, entry, api, "setup_entry")
+            webhook_id = await _async_connect_webhook(
+                hass, entry, api, coordinator, "setup_entry"
+            )
         except WebhookUnavailable as err:
             # Polling still works; the repair says why events cannot arrive
             report_webhook_unavailable(hass, entry, err.reason)
@@ -83,6 +93,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
 
         entry.runtime_data = DiagralData(
             config=config, coordinator=coordinator, api=api, webhook_id=webhook_id
+        )
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass,
+                partial(_async_scheduled_check, hass, entry),
+                timedelta(seconds=WEBHOOK_CHECK_INTERVAL),
+            )
         )
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -195,6 +212,26 @@ def report_webhook_unavailable(
     )
 
 
+def _report_owned_elsewhere(
+    hass: HomeAssistant, entry: DiagralConfigEntry, subscription_url: str
+) -> None:
+    """Raise the repair for a subscription owned by another installation."""
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        _issue_id(ISSUE_WEBHOOK_OWNED_ELSEWHERE, entry),
+        is_fixable=True,
+        # Intrusion alerts only arrive by webhook, never by polling
+        severity=ir.IssueSeverity.ERROR,
+        translation_key=ISSUE_WEBHOOK_OWNED_ELSEWHERE,
+        translation_placeholders={
+            "entry_title": entry.title,
+            "other_host": urlparse(subscription_url).hostname or "?",
+        },
+        data={"entry_id": entry.entry_id},
+    )
+
+
 async def _async_webhook_url(hass: HomeAssistant, webhook_id: str) -> str:
     """Return the URL Diagral should call: a cloudhook behind Nabu Casa."""
     from homeassistant.components.cloud import (  # noqa: PLC0415
@@ -287,20 +324,7 @@ async def _async_subscribe(
             entry.title,
             _redact_url(actual_webhook.webhook_url),
         )
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            _issue_id(ISSUE_WEBHOOK_OWNED_ELSEWHERE, entry),
-            is_fixable=True,
-            # Intrusion alerts only arrive by webhook, never by polling
-            severity=ir.IssueSeverity.ERROR,
-            translation_key=ISSUE_WEBHOOK_OWNED_ELSEWHERE,
-            translation_placeholders={
-                "entry_title": entry.title,
-                "other_host": urlparse(actual_webhook.webhook_url).hostname or "?",
-            },
-            data={"entry_id": entry.entry_id},
-        )
+        _report_owned_elsewhere(hass, entry, actual_webhook.webhook_url)
         return False
     if actual_webhook.webhook_url == webhook_url:
         _LOGGER.debug("Webhook subscription of %s is already current", entry.title)
@@ -376,6 +400,71 @@ async def register_webhook(
         ir.async_delete_issue(hass, DOMAIN, _issue_id(issue, entry))
     _LOGGER.info("Webhook successfully registered for %s", entry.title)
     return webhook_id
+
+
+async def _async_connect_webhook(
+    hass: HomeAssistant,
+    entry: DiagralConfigEntry,
+    api: DiagralAPI,
+    coordinator: DiagralDataUpdateCoordinator,
+    source: str,
+) -> str | None:
+    """Register the webhook and record its state for the diagnostics."""
+    try:
+        webhook_id = await register_webhook(hass, entry, api, source)
+    except WebhookUnavailable as err:
+        coordinator.async_set_webhook_status(WEBHOOK_STATUS_OF_ISSUE[err.reason])
+        raise
+    coordinator.async_set_webhook_status(
+        WEBHOOK_CONNECTED if webhook_id else WEBHOOK_OWNED_ELSEWHERE
+    )
+    return webhook_id
+
+
+async def async_check_webhook(hass: HomeAssistant, entry: DiagralConfigEntry) -> None:
+    """Notice a subscription taken over or deleted since the last check.
+
+    A working webhook is only read: register_webhook drops the local handler
+    when Diagral fails, which a passing outage must never do. Any other state
+    is retried, so the webhook recovers by itself.
+    """
+    runtime = entry.runtime_data
+    coordinator = runtime.coordinator
+    if coordinator.webhook_status == WEBHOOK_UNREGISTERED:
+        return
+    if coordinator.webhook_status == WEBHOOK_CONNECTED:
+        try:
+            subscription: Webhook | None = await runtime.api.get_webhook()
+        except DiagralAPIError as err:
+            if "No subscription found for" not in str(err):
+                _LOGGER.debug("Webhook check skipped: %s", type(err).__name__)
+                return
+            subscription = None
+        stored = entry.data.get(CONF_WEBHOOK_URL_HASH)
+        if subscription is not None and stored == _url_hash(subscription.webhook_url):
+            return
+        if subscription is not None:
+            _LOGGER.warning(
+                "The Diagral webhook subscription of %s was taken by another "
+                "installation (%s): open Settings > Repairs to take it back",
+                entry.title,
+                _redact_url(subscription.webhook_url),
+            )
+            _report_owned_elsewhere(hass, entry, subscription.webhook_url)
+            coordinator.async_set_webhook_status(WEBHOOK_OWNED_ELSEWHERE)
+            return
+    try:
+        runtime.webhook_id = await _async_connect_webhook(
+            hass, entry, runtime.api, coordinator, "hourly_check"
+        )
+    except WebhookUnavailable:
+        _LOGGER.debug("Webhook still unavailable for %s", entry.title)
+
+
+async def _async_scheduled_check(
+    hass: HomeAssistant, entry: DiagralConfigEntry, _now: datetime
+) -> None:
+    await async_check_webhook(hass, entry)
 
 
 async def unregister_webhook(
