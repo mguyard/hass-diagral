@@ -13,11 +13,13 @@ on:
       - dev
     paths:
       - 'custom_components/diagral/**'
+      - '.github/workflows/lint.yaml'
   pull_request:
     branches:
       - dev
     paths:
       - 'custom_components/diagral/**'
+      - '.github/workflows/lint.yaml'
   workflow_dispatch:
 
 concurrency:
@@ -40,7 +42,7 @@ jobs:
       # Pinned: a new ruff release must not be able to turn a green PR red
       # on its own. Bump deliberately, together with the fixes it requires.
       - name: Install ruff
-        run: pip install ruff==0.16.1
+        run: pip install ruff==0.17.1
 
       - name: Ruff check
         run: ruff check --output-format=github custom_components/diagral
