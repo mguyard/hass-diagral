@@ -21,6 +21,7 @@ from custom_components.diagral.const import (
     CONF_ALARMPANEL_ACTIONTYPE_CODE,
     CONF_ALARMPANEL_CODE,
     CONF_PIN_CODE,
+    DIAGRAL_VENDOR,
 )
 from custom_components.diagral.models import AccountInfoData
 from pydiagral.exceptions import (
@@ -301,6 +302,16 @@ class TestValidateAccount:
             api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
             await validate_account(hass, ACCOUNT)
         assert api_cls.call_args.kwargs["session"] is hass.http_session
+
+    async def test_client_logs_in_as_diagral(self):
+        """The client states the vendor instead of relying on pydiagral's default."""
+        diagral = MagicMock()
+        diagral.try_connection = AsyncMock(return_value=MagicMock(keys="KEYS"))
+        with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
+            api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+            api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            await validate_account(MagicMock(), ACCOUNT)
+        assert api_cls.call_args.kwargs["vendor"] == DIAGRAL_VENDOR
 
     @pytest.mark.parametrize(
         ("alarm_name", "expected_title"),

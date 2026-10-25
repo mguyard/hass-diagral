@@ -40,6 +40,8 @@ READ_RETRY_BUDGET = DEFAULT_SCAN_INTERVAL // 2
 HTTP_SERVER_ERROR = 500
 # pydiagral's per-request ceiling: a caller can shorten a deadline, never extend it.
 DIAGRAL_REQUEST_TIMEOUT = max(READ_ATTEMPT_TIMEOUTS)
+# Stated rather than left to pydiagral's default: only DIAGRAL is supported.
+DIAGRAL_VENDOR = "DIAGRAL"
 
 HA_CLOUD_DOMAIN = ".nabu.casa"
 

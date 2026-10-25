@@ -37,6 +37,7 @@ from .const import (
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
     DIAGRAL_REQUEST_TIMEOUT,
+    DIAGRAL_VENDOR,
     DOMAIN,
     HA_CLOUD_DOMAIN,
     ISSUE_WEBHOOK_NO_URL,
@@ -79,6 +80,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
             pincode=config_dict[CONF_PIN_CODE],
             request_timeout=DIAGRAL_REQUEST_TIMEOUT,
             session=async_get_clientsession(hass),
+            vendor=DIAGRAL_VENDOR,
         )
         coordinator = DiagralDataUpdateCoordinator(hass, api)
         await coordinator.async_config_entry_first_refresh()
@@ -560,6 +562,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> 
                 password=entry.data[CONF_PASSWORD],
                 serial_id=entry.data[CONF_SERIAL_ID],
                 session=async_get_clientsession(hass),
+                vendor=DIAGRAL_VENDOR,
             ) as diagral:
                 await diagral.login()
                 try:

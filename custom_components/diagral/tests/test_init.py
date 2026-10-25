@@ -26,6 +26,7 @@ from custom_components.diagral.const import (
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
     DIAGRAL_REQUEST_TIMEOUT,
+    DIAGRAL_VENDOR,
     ISSUE_WEBHOOK_NO_URL,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
     ISSUE_WEBHOOK_REGISTRATION_FAILED,
@@ -339,6 +340,7 @@ class TestLogsHideSecrets:
 
         diagral.delete_apikey.assert_awaited_once_with(apikey="SECRETAPIKEY")
         assert api_cls.call_args.kwargs["session"] is hass.http_session
+        assert api_cls.call_args.kwargs["vendor"] == DIAGRAL_VENDOR
         assert "SECRETAPIKEY" not in debug_log.text
         assert "SECRETPASSWORD" not in debug_log.text
 
@@ -421,6 +423,12 @@ class TestSetupEntry:
         api_cls = await self.build_client(hass)
 
         assert api_cls.call_args.kwargs["session"] is hass.http_session
+
+    async def test_client_logs_in_as_diagral(self):
+        """The client states the vendor instead of relying on pydiagral's default."""
+        api_cls = await self.build_client(MagicMock())
+
+        assert api_cls.call_args.kwargs["vendor"] == DIAGRAL_VENDOR
 
 
 def stored_webhook_id(hass: MagicMock) -> str | None:

@@ -51,6 +51,7 @@ from .const import (
     CONF_SERIAL_ID,
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
+    DIAGRAL_VENDOR,
     DOMAIN,
 )
 from .models import AccountInfoData, DiagralOptionsData, ValidateConnectionData
@@ -103,6 +104,7 @@ async def validate_account(
             "serial_id": account_info.serial_id,
             "pincode": account_info.pin_code,
             "session": async_get_clientsession(hass),
+            "vendor": DIAGRAL_VENDOR,
         }
 
         # With ephemeral mode, we create API key, test the connection and remove them
