@@ -100,3 +100,12 @@ WEBHOOK_STATUS_OF_ISSUE = {
 }
 # A subscription can be taken over or deleted between restarts: check it hourly
 WEBHOOK_CHECK_INTERVAL = 3600
+
+# Notifications kept in memory for the diagnostics, with what was done with them
+RECENT_WEBHOOKS_MAX = 20
+WEBHOOK_PROCESSED = "processed"
+WEBHOOK_IGNORED = "ignored"
+WEBHOOK_FAILED = "failed"
+WEBHOOK_INVALID_JSON = "invalid_json"
+WEBHOOK_INVALID_PAYLOAD = "invalid_payload"
+WEBHOOK_OTHER_CENTRAL = "other_central"

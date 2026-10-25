@@ -1,6 +1,7 @@
 """Tests for diagnostics.py: nothing identifying leaves the file."""
 
 import asyncio
+from collections import deque
 from datetime import UTC, datetime
 from importlib.metadata import version
 import json
@@ -34,6 +35,20 @@ SECRETS = {
 }
 
 
+RECENT_WEBHOOK = {
+    "at": "2026-10-25T18:40:03+01:00",
+    "sent_at": "2026-10-25T17:40:02+00:00",
+    "type": "ALERT",
+    "alarm_code": "1130",
+    "group_index": "03",
+    "device": {"type": "SENSOR", "index": "2"},
+    "user": False,
+    "keys": ["alarm_code", "date_time", "detail", "group_index", "transmitter_id"],
+    "outcome": "processed",
+    "reason": None,
+}
+
+
 def make_entry() -> MagicMock:
     """Return a config entry whose dump carries every identifying value."""
     entry = MagicMock()
@@ -57,6 +72,7 @@ def make_entry() -> MagicMock:
         "options": {},
     }
     entry.runtime_data.webhook_id = SECRETS["webhook_id"]
+    entry.runtime_data.recent_webhooks = deque([dict(RECENT_WEBHOOK)])
     entry.runtime_data.api.ping = AsyncMock(
         return_value=SimpleNamespace(status="we're alive")
     )
@@ -478,6 +494,17 @@ async def test_unloaded_entry_when_the_cloud_does_not_answer():
         "status": None,
         "error": "ServerError",
     }
+
+
+async def test_diagnostics_list_the_recent_webhooks():
+    """The last notifications are listed with what was done with them."""
+    entry = make_entry()
+
+    result = await run_diagnostics(entry=entry)
+
+    assert result["recent_webhooks"] == [RECENT_WEBHOOK]
+    result["recent_webhooks"][0]["outcome"] = "changed"
+    assert entry.runtime_data.recent_webhooks[0]["outcome"] == "processed"
 
 
 async def test_package_version_is_read_off_the_event_loop():

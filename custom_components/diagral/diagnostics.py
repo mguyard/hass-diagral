@@ -108,6 +108,10 @@ async def async_get_config_entry_diagnostics(
         "system": system,
         "automatisms": automatisms,
         "api_shape": api.response_shapes(),
+        # Copied, so a notification arriving meanwhile cannot alter the file
+        "recent_webhooks": [
+            dict(record) for record in entry.runtime_data.recent_webhooks
+        ],
     }
 
 

@@ -17,6 +17,7 @@ It also describes what Diagral sends, without any value you typed nor any identi
 - `health.unexpected_data`: the fields Diagral sent that `pydiagral` did not expect since Home Assistant started — missing, malformed, or unknown to the library.
 - `api_shape`: the structure of the last answers of the Diagral cloud. Texts are replaced by their length; only states, device types, versions and product references stay readable.
 - `automatisms`: the number of automatisms, with the canal and mode of each, never their names.
+- `recent_webhooks`: the last 20 notifications Diagral sent since Home Assistant started, with their type, alarm code, group and device number, and what the integration did with each: `processed`, `ignored` with the reason (`invalid_json`, `invalid_payload`, `other_central`), or `failed` with the error. It tells whether a missing event was sent at all. User names and device labels are left out.
 
 <Image src="/images/diagnostics.png" alt="Diagnostic" />
 

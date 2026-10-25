@@ -4,10 +4,14 @@ enrich_data_alert_anomaly() is tested as a pure function; handle_webhook()
 with a mocked Home Assistant, request and coordinator.
 """
 
+from collections import deque
 from datetime import UTC, datetime
+import json
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from custom_components.diagral.const import RECENT_WEBHOOKS_MAX
+from custom_components.diagral.models import DiagralData
 from custom_components.diagral.webhook import enrich_data_alert_anomaly, handle_webhook
 from pydiagral.models import (
     DeviceInfos,
@@ -114,6 +118,7 @@ def make_hass_with_entries() -> tuple[MagicMock, MagicMock]:
     loaded.runtime_data.config.serial_id = "FAKECENTRAL01"
     loaded.runtime_data.coordinator.data = {"devices_infos": None, "groups": []}
     loaded.runtime_data.coordinator.async_request_refresh = AsyncMock()
+    loaded.runtime_data.recent_webhooks = deque(maxlen=RECENT_WEBHOOKS_MAX)
 
     hass = MagicMock()
     hass.config_entries.async_entries.return_value = [disabled, loaded]
@@ -334,3 +339,145 @@ class TestReceptionTime:
             await handle_webhook(hass, WEBHOOK_ID, make_request(payload))
 
         assert loaded.runtime_data.coordinator.async_webhook_received.called is counted
+
+
+STATUS_PAYLOAD = {
+    "transmitter_id": "FAKECENTRAL01",
+    "alarm_code": "3401",
+    "alarm_description": "Total system arming",
+    "group_index": "01",
+    "detail": {},
+    "user": {"username": "Fake User", "user_type": "owner"},
+    "date_time": "2026-01-01T12:00:00Z",
+}
+
+
+async def receive(payload: dict | None, hass_entry=None) -> list[dict]:
+    """Send one notification and return what the entry recorded."""
+    hass, loaded = hass_entry or make_hass_with_entries()
+    if payload is None:
+        request = MagicMock()
+        request.json = AsyncMock(side_effect=ValueError("Expecting value"))
+    else:
+        request = make_request(payload)
+    with patch("custom_components.diagral.webhook.async_dispatcher_send"):
+        await handle_webhook(hass, WEBHOOK_ID, request)
+    return list(loaded.runtime_data.recent_webhooks)
+
+
+class TestRecentWebhooks:
+    """Each notification is recorded with what the integration did with it."""
+
+    async def test_processed_notification_is_described(self):
+        """A handled notification keeps its technical fields only."""
+        (record,) = await receive(STATUS_PAYLOAD)
+
+        assert record["at"]
+        assert record | {"at": None} == {
+            "at": None,
+            "sent_at": "2026-01-01T12:00:00+00:00",
+            "type": "STATUS",
+            "alarm_code": "3401",
+            "group_index": "01",
+            "device": None,
+            "user": True,
+            "keys": sorted(STATUS_PAYLOAD),
+            "outcome": "processed",
+            "reason": None,
+        }
+
+    async def test_device_is_described_by_type_and_index(self):
+        """An alert names the device kind and number, never its label."""
+        payload = STATUS_PAYLOAD | {
+            "alarm_code": "1130",
+            "detail": {"device_type": "SENSOR", "device_index": "2"},
+        }
+
+        (record,) = await receive(payload)
+
+        assert record["device"] == {"type": "SENSOR", "index": "2"}
+
+    @pytest.mark.parametrize(
+        ("payload", "reason"),
+        [
+            (None, "invalid_json"),
+            (
+                {"transmitter_id": "FAKECENTRAL01", "alarm_code": "3401"},
+                "invalid_payload",
+            ),
+            (STATUS_PAYLOAD | {"transmitter_id": "OTHERCENTRAL99"}, "other_central"),
+        ],
+        ids=["invalid-json", "invalid-payload", "other-central"],
+    )
+    async def test_ignored_notification_gives_its_reason(self, payload, reason):
+        """A lost event is told apart from an event Diagral never sent."""
+        (record,) = await receive(payload)
+
+        assert (record["outcome"], record["reason"]) == ("ignored", reason)
+
+    async def test_unexpected_error_is_recorded_and_raised(self, caplog):
+        """A failure past parsing is not mistaken for invalid JSON any more."""
+        payload = STATUS_PAYLOAD | {
+            "alarm_code": "1130",
+            "detail": {"device_type": "SENSOR", "device_index": "not-a-number"},
+        }
+        hass_entry = make_hass_with_entries()
+
+        with pytest.raises(ValueError):
+            await receive(payload, hass_entry)
+
+        (record,) = hass_entry[1].runtime_data.recent_webhooks
+        assert (record["outcome"], record["reason"]) == ("failed", "ValueError")
+        assert "invalid JSON" not in caplog.text
+
+    async def test_only_the_last_notifications_are_kept(self):
+        """The list is bounded: memory only, the oldest go first."""
+        hass_entry = make_hass_with_entries()
+        for code in range(RECENT_WEBHOOKS_MAX + 5):
+            records = await receive(
+                STATUS_PAYLOAD | {"alarm_code": str(code)}, hass_entry
+            )
+
+        assert len(records) == RECENT_WEBHOOKS_MAX
+        assert records[0]["alarm_code"] == "5"
+
+    async def test_records_hold_no_identifying_value(self):
+        """No serial, user name, label or webhook id; identifier-like keys masked."""
+        payload = STATUS_PAYLOAD | {
+            "detail": {
+                "device_type": "SENSOR",
+                "device_index": "1",
+                "device_label": "Front door",
+            },
+            "user_12345": "x",
+        }
+
+        records = await receive(payload)
+
+        dump = json.dumps(records)
+        for value in (
+            "FAKECENTRAL01",
+            "Fake User",
+            "Front door",
+            WEBHOOK_ID,
+            "user_12345",
+        ):
+            assert value not in dump, value
+        assert "<key>" in records[0]["keys"]
+
+    async def test_unknown_webhook_records_nothing(self):
+        """A webhook of no loaded entry has nowhere to be recorded."""
+        hass, loaded = make_hass_with_entries()
+
+        await handle_webhook(hass, "unknown-webhook", make_request(STATUS_PAYLOAD))
+
+        assert not loaded.runtime_data.recent_webhooks
+
+    def test_runtime_data_keeps_a_bounded_list(self):
+        """Each entry starts with an empty list of the configured size."""
+        data = DiagralData(
+            config=MagicMock(), coordinator=MagicMock(), api=MagicMock(), webhook_id="x"
+        )
+
+        assert data.recent_webhooks.maxlen == RECENT_WEBHOOKS_MAX
+        assert not data.recent_webhooks

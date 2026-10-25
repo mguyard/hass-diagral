@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
+from typing import Any
 
 from pydiagral import DiagralAPI
 from pydiagral.models import ApiKeyWithSecret
@@ -10,7 +12,13 @@ from pydiagral.models import ApiKeyWithSecret
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
-from .const import CONF_API_KEY, CONF_PIN_CODE, CONF_SECRET_KEY, CONF_SERIAL_ID
+from .const import (
+    CONF_API_KEY,
+    CONF_PIN_CODE,
+    CONF_SECRET_KEY,
+    CONF_SERIAL_ID,
+    RECENT_WEBHOOKS_MAX,
+)
 from .coordinator import DiagralDataUpdateCoordinator
 
 
@@ -22,6 +30,10 @@ class DiagralData:
     coordinator: DiagralDataUpdateCoordinator
     api: DiagralAPI
     webhook_id: str
+    # Memory only, so a restart forgets the users' activity
+    recent_webhooks: deque[dict[str, Any]] = field(
+        default_factory=lambda: deque(maxlen=RECENT_WEBHOOKS_MAX)
+    )
 
 
 @dataclass
