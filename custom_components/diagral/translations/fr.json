@@ -16,33 +16,40 @@
         },
         "step": {
             "user": {
+                "title": "Compte Diagral",
+                "description": "Veuillez fournir vos identifiants Diagral. Les centrales de ce compte sont listées à l'étape suivante.\n\r_Remarque : Assurez-vous que ce compte est associé à votre système d'alarme Diagral et qu'il dispose des autorisations suffisantes pour interagir avec l'alarme._",
+                "data": {
+                    "username": "Identifiant (adresse e-mail)",
+                    "password": "Mot de passe",
+                    "pin_code": "Master (PIN) Code Diagral (chiffres uniquement, ex : 1234)"
+                }
+            },
+            "central": {
+                "title": "Centrale Diagral",
+                "description": "Choisissez la centrale Diagral à ajouter à Home Assistant.\n\rDéjà dans Home Assistant, donc non listées : {configured}",
+                "data": {
+                    "serial_id": "Centrale (numéro de série)"
+                }
+            },
+            "serial": {
                 "title": "Diagral",
-                "description": "Pour configurer votre système d'alarme Diagral, vous avez besoin d'un module DIAG56AAX/DIAG59AAX qui connecte votre alarme à Internet pour le contrôle à distance.\n\rPour trouver votre ID de série, vérifiez l'étiquette sur votre module ou consultez notre guide de configuration : [{setup_guide_url}]({setup_guide_url})\n\r![Emplacement SerialID]({serial_id_image_url})",
+                "description": "Les centrales de votre compte n'ont pas pu être listées : saisissez le numéro de série de votre centrale.\n\rPour configurer votre système d'alarme Diagral, vous avez besoin d'un module DIAG56AAX/DIAG59AAX qui connecte votre alarme à Internet pour le contrôle à distance.\n\rPour trouver votre ID de série, vérifiez l'étiquette sur votre module ou consultez notre guide de configuration : [{setup_guide_url}]({setup_guide_url})\n\r![Emplacement SerialID]({serial_id_image_url})",
                 "data": {
                     "serial_id": "Numéro de série du module DIAG56AAX/DIAG59AAX"
                 }
             },
-            "account": {
-              "title": "Compte Diagral",
-              "description": "Veuillez fournir vos identifiants Diagral\n\r_Remarque : Assurez-vous que ce compte est associé à votre système d'alarme Diagral et qu'il dispose des autorisations suffisantes pour interagir avec l'alarme._",
-              "data": {
-                "username": "Identifiant (adresse e-mail)",
-                "password": "Mot de passe",
-                "pin_code": "Master (PIN) Code Diagral (chiffres uniquement, ex : 1234)"
-              }
-            },
             "reconfigure": {
-              "title": "Compte Diagral",
-              "description": "Veuillez mettre à jour vos identifiants Diagral\n\r_Remarque : Assurez-vous que ce compte est associé à votre système d'alarme Diagral et qu'il dispose des autorisations suffisantes pour interagir avec l'alarme._",
-              "data": {
-                "username": "Identifiant (adresse e-mail)",
-                "password": "Mot de passe",
-                "pin_code": "Master (PIN) Code Diagral (chiffres uniquement, ex : 1234)"
-              },
-              "data_description": {
-                "password": "Laisser vide pour conserver la valeur actuelle.",
-                "pin_code": "Laisser vide pour conserver la valeur actuelle."
-              }
+                "title": "Compte Diagral",
+                "description": "Veuillez mettre à jour vos identifiants Diagral\n\r_Remarque : Assurez-vous que ce compte est associé à votre système d'alarme Diagral et qu'il dispose des autorisations suffisantes pour interagir avec l'alarme._",
+                "data": {
+                    "username": "Identifiant (adresse e-mail)",
+                    "password": "Mot de passe",
+                    "pin_code": "Master (PIN) Code Diagral (chiffres uniquement, ex : 1234)"
+                },
+                "data_description": {
+                    "password": "Laisser vide pour conserver la valeur actuelle.",
+                    "pin_code": "Laisser vide pour conserver la valeur actuelle."
+                }
             },
             "options": {
                 "title": "Options",

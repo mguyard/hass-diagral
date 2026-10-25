@@ -5,6 +5,7 @@ which have no side effects and require only Home Assistant to be importable.
 """
 
 import logging
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.diagral.config_flow import (
@@ -15,12 +16,14 @@ from custom_components.diagral.config_flow import (
     is_valid_alarmpanel_code,
     is_valid_email,
     is_valid_pin,
+    list_serials,
     validate_account,
 )
 from custom_components.diagral.const import (
     CONF_ALARMPANEL_ACTIONTYPE_CODE,
     CONF_ALARMPANEL_CODE,
     CONF_PIN_CODE,
+    CONF_SERIAL_ID,
     DIAGRAL_VENDOR,
 )
 from custom_components.diagral.models import AccountInfoData
@@ -33,6 +36,7 @@ from pydiagral.exceptions import (
 import pytest
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.data_entry_flow import AbortFlow
 
 
 @pytest.fixture(autouse=True)
@@ -339,20 +343,24 @@ class TestConfigFlowLogs:
         flow = DiagralConfigFlow()
         flow.hass = MagicMock()
         flow.serialid = "FAKECENTRAL01"
+        flow.serials = ["FAKECENTRAL01"]
+        flow.async_set_unique_id = AsyncMock()
+        flow._abort_if_unique_id_configured = MagicMock()
+        flow._async_current_ids = MagicMock(return_value=set())
         return flow
 
-    async def test_account_step_hides_credentials(self, caplog):
+    async def test_user_step_hides_credentials(self, caplog):
         """Submitting the account step logs neither password nor PIN."""
         caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
         flow = self.make_flow()
         with (
             patch(
-                "custom_components.diagral.config_flow.validate_account",
-                AsyncMock(),
+                "custom_components.diagral.config_flow.list_serials",
+                AsyncMock(return_value=["FAKECENTRAL01"]),
             ),
-            patch.object(flow, "async_step_options", AsyncMock()),
+            patch.object(flow, "async_step_central", AsyncMock()),
         ):
-            await flow.async_step_account(
+            await flow.async_step_user(
                 {
                     CONF_USERNAME: "user@example.com",
                     CONF_PASSWORD: "SECRETPASSWORD",
@@ -451,6 +459,8 @@ def make_step(step: str) -> tuple[DiagralConfigFlow, dict]:
     }
     if step == "options":
         return flow, {"alarmpanel_options": {CONF_ALARMPANEL_ACTIONTYPE_CODE: "never"}}
+    if step in ("central", "serial"):
+        return flow, {CONF_SERIAL_ID: ACCOUNT.serial_id}
     if step == "reconfigure":
         flow.context = {"entry_id": "entry"}
         flow.hass.config_entries.async_get_entry.return_value.data = {
@@ -465,7 +475,7 @@ def make_step(step: str) -> tuple[DiagralConfigFlow, dict]:
 class TestFlowErrorMessages:
     """Each step shows a translated error, never the exception text."""
 
-    @pytest.mark.parametrize("step", ["account", "options", "reconfigure"])
+    @pytest.mark.parametrize("step", ["central", "serial", "options", "reconfigure"])
     @pytest.mark.parametrize(
         ("raised", "key"),
         [
@@ -486,6 +496,179 @@ class TestFlowErrorMessages:
             result = await getattr(flow, f"async_step_{step}")(user_input)
 
         assert result["errors"] == {"base": key}
+
+
+def account_input() -> dict:
+    """Return a valid submission of the account step."""
+    return {
+        CONF_USERNAME: ACCOUNT.username,
+        CONF_PASSWORD: ACCOUNT.password,
+        CONF_PIN_CODE: ACCOUNT.pin_code,
+    }
+
+
+def central_choices(result: dict) -> list[str]:
+    """Return the serials the central step offers."""
+    return result["data_schema"].schema[CONF_SERIAL_ID].config["options"]
+
+
+class TestListSerials:
+    """list_serials() asks the account for its centrals, without a serial."""
+
+    @staticmethod
+    def make_api(**get_systems) -> MagicMock:
+        """Return a DiagralAPI class whose client answers get_systems()."""
+        diagral = MagicMock()
+        diagral.get_systems = AsyncMock(**get_systems)
+        api_cls = MagicMock()
+        api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+        api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+        return api_cls
+
+    async def test_lists_the_serials_without_a_serial(self, caplog):
+        """The client has no serial; the serials are returned, never logged."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        hass = MagicMock()
+        api_cls = self.make_api(
+            return_value=[
+                SimpleNamespace(serial_id="FAKECENTRAL01", api_keys=["SECRETKEY"]),
+                SimpleNamespace(serial_id="FAKECENTRAL02", api_keys=[]),
+            ]
+        )
+        with patch("custom_components.diagral.config_flow.DiagralAPI", api_cls):
+            serials = await list_serials(hass, ACCOUNT.username, ACCOUNT.password)
+
+        assert serials == ["FAKECENTRAL01", "FAKECENTRAL02"]
+        kwargs = api_cls.call_args.kwargs
+        assert "serial_id" not in kwargs
+        assert kwargs["vendor"] == DIAGRAL_VENDOR
+        assert kwargs["session"] is hass.http_session
+        assert "FAKECENTRAL0" not in caplog.text
+        assert "SECRETKEY" not in caplog.text
+
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            (AuthenticationError("Authentication rejected by Diagral"), InvalidAuth),
+            (ServerError("Diagral service error (HTTP 503)"), CannotConnect),
+            (ClientError("Diagral request timed out"), CannotConnect),
+        ],
+        ids=["refused-login", "server-error", "network-error"],
+    )
+    async def test_error_is_classified(self, error, expected):
+        """A refused login stays an authentication error, anything else a failure."""
+        api_cls = self.make_api(side_effect=error)
+        with (
+            patch("custom_components.diagral.config_flow.DiagralAPI", api_cls),
+            pytest.raises(expected),
+        ):
+            await list_serials(MagicMock(), ACCOUNT.username, ACCOUNT.password)
+
+
+class TestAccountStep:
+    """The account step lists the centrals, or falls back to typing the serial."""
+
+    async def test_lists_only_the_centrals_not_in_home_assistant(self):
+        """Centrals already set up are left out of the list and named above it."""
+        flow = TestConfigFlowLogs.make_flow()
+        flow._async_current_ids = MagicMock(return_value={"FAKECENTRAL01"})
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(return_value=["FAKECENTRAL01", "FAKECENTRAL02"]),
+        ):
+            result = await flow.async_step_user(account_input())
+
+        assert result["step_id"] == "central"
+        assert central_choices(result) == ["FAKECENTRAL02"]
+        assert result["description_placeholders"] == {"configured": "FAKECENTRAL01"}
+
+    async def test_single_central_is_still_shown(self):
+        """A single available central is listed, so the user sees what is added."""
+        flow = TestConfigFlowLogs.make_flow()
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(return_value=["FAKECENTRAL01"]),
+        ):
+            result = await flow.async_step_user(account_input())
+
+        assert result["step_id"] == "central"
+        assert central_choices(result) == ["FAKECENTRAL01"]
+        assert result["description_placeholders"] == {"configured": "-"}
+
+    async def test_every_central_already_set_up_aborts(self):
+        """Nothing left to add: the flow stops, without asking for anything."""
+        flow = TestConfigFlowLogs.make_flow()
+        flow._async_current_ids = MagicMock(return_value={"FAKECENTRAL01"})
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(return_value=["FAKECENTRAL01"]),
+        ):
+            result = await flow.async_step_user(account_input())
+
+        assert result["type"] == "abort"
+        assert result["reason"] == "already_configured"
+
+    @pytest.mark.parametrize(
+        "listing",
+        [AsyncMock(side_effect=CannotConnect), AsyncMock(return_value=[])],
+        ids=["listing-failed", "no-central-listed"],
+    )
+    async def test_falls_back_to_typing_the_serial(self, listing):
+        """When the account's centrals cannot be listed, the serial is typed."""
+        flow = TestConfigFlowLogs.make_flow()
+        with patch("custom_components.diagral.config_flow.list_serials", listing):
+            result = await flow.async_step_user(account_input())
+
+        assert result["step_id"] == "serial"
+
+    async def test_refused_login_stays_on_the_account_step(self):
+        """Wrong credentials are reported on the form, not hidden by a fallback."""
+        flow = TestConfigFlowLogs.make_flow()
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(side_effect=InvalidAuth),
+        ):
+            result = await flow.async_step_user(account_input())
+
+        assert result["step_id"] == "user"
+        assert result["errors"] == {"base": "invalid_auth"}
+
+
+class TestCentralChoice:
+    """Choosing a central claims it before any API key is created."""
+
+    @pytest.mark.parametrize("step", ["central", "serial"])
+    async def test_chosen_central_is_claimed_then_checked(self, step):
+        """The unique id is set first, then the account is checked on that central."""
+        flow, user_input = make_step(step)
+        validate = AsyncMock(return_value=None)
+        with (
+            patch("custom_components.diagral.config_flow.validate_account", validate),
+            patch.object(flow, "async_step_options", AsyncMock()) as options,
+        ):
+            await getattr(flow, f"async_step_{step}")(user_input)
+
+        flow.async_set_unique_id.assert_awaited_once_with(ACCOUNT.serial_id)
+        assert validate.call_args.kwargs["account_info"].serial_id == ACCOUNT.serial_id
+        assert validate.call_args.kwargs["ephemeral"] is True
+        assert flow.serialid == ACCOUNT.serial_id
+        options.assert_awaited_once()
+
+    @pytest.mark.parametrize("step", ["central", "serial"])
+    async def test_central_already_set_up_aborts_before_any_key(self, step):
+        """A duplicate stops before the account is checked: no key is created."""
+        flow, user_input = make_step(step)
+        flow._abort_if_unique_id_configured = MagicMock(
+            side_effect=AbortFlow("already_configured")
+        )
+        validate = AsyncMock()
+        with (
+            patch("custom_components.diagral.config_flow.validate_account", validate),
+            pytest.raises(AbortFlow),
+        ):
+            await getattr(flow, f"async_step_{step}")(user_input)
+
+        validate.assert_not_awaited()
 
 
 class TestReconfigureSecrets:
