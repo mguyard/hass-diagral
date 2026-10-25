@@ -10,6 +10,7 @@ from typing import Any
 
 from pydiagral import DiagralAPIError
 from pydiagral.api import DiagralAPI
+from pydiagral.constants import AUTOMATISM_CANALS
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
@@ -89,6 +90,7 @@ async def async_get_config_entry_diagnostics(
         },
         "alarm": _alarm_summary(coordinator.data or {}),
         "system": await _system_details(entry.runtime_data.api),
+        "automatisms": await _automatisms(entry.runtime_data.api),
     }
 
 
@@ -131,6 +133,27 @@ async def _system_details(api: DiagralAPI) -> dict[str, Any]:
     if error:
         return {"error": error}
     return {name: getattr(details, name) for name in SYSTEM_DETAILS_FIELDS}
+
+
+async def _automatisms(api: DiagralAPI) -> dict[str, Any]:
+    """List the automatisms without their names, which name the home."""
+    rudes, error = await _query(api.get_automatism_rudes())
+    if error:
+        return {"count": None, "items": None, "error": error}
+    return {
+        "count": len(rudes.rudes),
+        "items": [
+            {"canal": _known_canal(rude.canal), "mode": rude.mode}
+            for rude in rudes.rudes
+        ],
+        "error": None,
+    }
+
+
+def _known_canal(canal: str) -> str:
+    """Return a canal of the specification, or "other": a free value could leak."""
+    canal = canal.upper()
+    return canal if canal in AUTOMATISM_CANALS else "other"
 
 
 def _iso(moment: datetime | None) -> str | None:

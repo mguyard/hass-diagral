@@ -131,6 +131,7 @@ All on `http://localhost:8099`, JSON bodies. `serial` may be omitted when only o
 | `POST /_control/reset` | — | Forget every system and token |
 | `POST /_control/status` | `{"status": "GROUP", "activated_groups": [1, 2]}` | What the next poll returns (`OFF`, `GROUP`, `TEMPO_GROUP`, `PRESENCE`) |
 | `POST /_control/anomalies` | `{"anomalies": {"sensors": [{"serial": "…", "index": 1, "group": 1, "label": "…", "anomaly_names": [{"id": 1, "name": "Low battery"}]}]}}` or `{"clear": true}` | What `get_anomalies` returns |
+| `POST /_control/rudes` | `{"rudes": [{"name": "Gate", "canal": "1", "mode": "PULSE"}]}` or `{"clear": true}` | What `get_automatism_rudes` returns (none by default) |
 | `POST /_control/webhook` | `{"webhook_url": "https://other.example.net/api/webhook/x"}` or `{"clear": true}` | Sets the subscription as another installation would — to test ownership — or removes it |
 | `POST /_control/fail` | `{"path": "/status", "status": 503, "count": 2}`, `{"delay": 40}` or `{"clear": true}` | Fails (HTTP `status`) and/or delays (`delay` seconds) the next `count` API requests whose path contains `path` (default `/v1/`) — to test retries and availability |
 | `POST /_control/delay` | `{"seconds": 20, "groups_listed": false}` | Exit delay, as on a real central (about 4 min in production): `start` and `activate_group` report `TEMPO_GROUP` (groups listed or not) for `seconds`, then `GROUP`, and a `STATUS` notification is pushed to Home Assistant. `0` turns it off |

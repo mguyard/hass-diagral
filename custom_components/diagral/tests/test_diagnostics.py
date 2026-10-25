@@ -27,6 +27,8 @@ SECRETS = {
     "vocal_contact": "0612345678",
     "listed_key": "SECRETLISTEDKEY",
     "other_serial": "OTHERCENTRAL99",
+    "automatism": "Front gate",
+    "canal": "SECRETCANAL",
 }
 
 
@@ -78,6 +80,16 @@ def make_entry() -> MagicMock:
             is_mass_storage_present=True,
             is_remote_startup_shutdown_allowed=False,
             is_video_password_protected=False,
+        )
+    )
+    entry.runtime_data.api.get_automatism_rudes = AsyncMock(
+        return_value=SimpleNamespace(
+            rudes=[
+                SimpleNamespace(
+                    name=SECRETS["automatism"], canal=SECRETS["canal"], mode="PULSE"
+                ),
+                SimpleNamespace(name="Garage", canal="relais_2", mode="TIMER"),
+            ]
         )
     )
     coordinator = entry.runtime_data.coordinator
@@ -262,6 +274,48 @@ async def test_api_key_count_when_the_login_is_refused():
 
     assert result["health"]["api_keys"] == {
         "count": None,
+        "error": "AuthenticationError",
+    }
+
+
+async def test_diagnostics_list_the_automatism_canals_and_modes():
+    """A canal the specification lists is shown, any other one hidden: names never."""
+    result = await run_diagnostics()
+
+    assert result["automatisms"] == {
+        "count": 2,
+        "items": [
+            {"canal": "other", "mode": "PULSE"},
+            {"canal": "RELAIS_2", "mode": "TIMER"},
+        ],
+        "error": None,
+    }
+
+
+async def test_installation_without_automatisms():
+    """No automatism is a count of zero, not an error."""
+    entry = make_entry()
+    entry.runtime_data.api.get_automatism_rudes = AsyncMock(
+        return_value=SimpleNamespace(rudes=[])
+    )
+
+    result = await run_diagnostics(entry=entry)
+
+    assert result["automatisms"] == {"count": 0, "items": [], "error": None}
+
+
+async def test_automatisms_when_the_call_is_refused():
+    """A refused call is reported by name, without a count."""
+    entry = make_entry()
+    entry.runtime_data.api.get_automatism_rudes = AsyncMock(
+        side_effect=AuthenticationError("Invalid API key")
+    )
+
+    result = await run_diagnostics(entry=entry)
+
+    assert result["automatisms"] == {
+        "count": None,
+        "items": None,
         "error": "AuthenticationError",
     }
 

@@ -162,6 +162,7 @@ class System:
         self.activated_groups: list[int] = []
         self.api_keys: dict[str, str] = {}
         self.anomalies: dict[str, Any] | None = None
+        self.rudes: list[dict[str, Any]] = []
         self.webhook: dict[str, Any] | None = None
         # Exit delay of a real central: arming reports TEMPO_GROUP first.
         self.exit_delay = 0.0
@@ -413,6 +414,13 @@ async def get_anomalies(request: web.Request) -> web.Response:
     return web.json_response(system.anomalies)
 
 
+async def get_rudes(request: web.Request) -> web.Response:
+    system = request.app[CLOUD].system(request.match_info["serial"])
+    if denied := _require_apikey(request, system):
+        return denied
+    return web.json_response({"rudes": system.rudes})
+
+
 # --- Webhook subscription --------------------------------------------------
 
 
@@ -513,6 +521,15 @@ async def control_anomalies(request: web.Request) -> web.Response:
             **data.get("anomalies", {}),
         }
     return web.json_response({"anomalies": system.anomalies})
+
+
+async def control_rudes(request: web.Request) -> web.Response:
+    data = await request.json()
+    system = _target(request, data)
+    if isinstance(system, web.Response):
+        return system
+    system.rudes = [] if data.get("clear") else list(data.get("rudes", []))
+    return web.json_response({"rudes": system.rudes})
 
 
 async def control_webhook(request: web.Request) -> web.Response:
@@ -630,11 +647,13 @@ def build_app() -> web.Application:
                 system_action,
             ),
             web.get(f"/v1/systems/{serial}/anomalies", get_anomalies),
+            web.get(f"/v1/systems/{serial}/rudes", get_rudes),
             web.route("*", f"/v1/webhooks/{serial}/subscription", webhook_subscription),
             web.get("/_control/state", control_state),
             web.post("/_control/reset", control_reset),
             web.post("/_control/status", control_status),
             web.post("/_control/anomalies", control_anomalies),
+            web.post("/_control/rudes", control_rudes),
             web.post("/_control/notify", control_notify),
             web.post("/_control/webhook", control_webhook),
             web.post("/_control/fail", control_fail),
