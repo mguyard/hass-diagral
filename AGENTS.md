@@ -80,7 +80,7 @@ ruff format --check custom_components/diagral
 python -m pytest custom_components/diagral/tests/ -v
 ```
 
-CI pins `ruff==0.16.1`; a newer release must not be able to turn a green PR red on its own. Line length is 88, and `E501` is deliberately ignored — formatting is the formatter's job, not the linter's. The two deferred `homeassistant.components.cloud` imports keep a targeted `# noqa: PLC0415` rather than a project-wide ignore.
+CI pins `ruff==0.17.1`, the version the Home Assistant core devcontainer ships; a newer release must not be able to turn a green PR red on its own. Line length is 88, and `E501` is deliberately ignored — formatting is the formatter's job, not the linter's. The two deferred `homeassistant.components.cloud` imports keep a targeted `# noqa: PLC0415` rather than a project-wide ignore.
 
 Every test needs Home Assistant **and** `pydiagral`, including `test_const.py`: pytest imports the package `__init__.py` before `conftest.py`. See the `testing-hass-diagral` skill for the environments.
 

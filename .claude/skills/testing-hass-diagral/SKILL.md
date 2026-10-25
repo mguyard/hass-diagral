@@ -142,10 +142,12 @@ If the module has no test file yet, create it.
 `lint.yaml` runs both commands on every push and PR touching `custom_components/diagral/**`. Run them before committing, with the version CI pins:
 
 ```bash
-pip install ruff==0.16.1
+pip install ruff==0.17.1
 ruff check custom_components/diagral
 ruff format --check custom_components/diagral
 ```
+
+In the devcontainer, run ruff from `config/custom_components/diagral`: from `config/`, it picks up Home Assistant core's `pyproject.toml`, whose `required-version` refuses any other ruff release.
 
 `ruff format` may rewrite `except (A, B):` into `except A, B:` — that is PEP 758, valid on Python 3.14. Accept it.
 
