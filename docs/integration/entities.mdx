@@ -19,6 +19,7 @@ The Diagral integration operates in Hub Mode, meaning that all configurations wi
 | Webhook                   | Diagnostic sensor showing whether Diagral events can reach Home Assistant                  |
 | Last webhook              | Diagnostic sensor with the time of the last Diagral event received (disabled by default)   |
 | Diagral cloud             | Diagnostic binary sensor, connected while the Diagral cloud answers the polling            |
+| Diagral cloud reachable   | Diagnostic binary sensor, connected while the Diagral cloud answers a ping, which needs no credentials: disconnected means a Diagral outage, while `Diagral cloud` alone disconnected points at the API key or PIN |
 
 <Info>
 All entities are refreshed every `5 minutes` (fixed) or upon receiving a [Webhook](/integration/webhook) from the Diagral Cloud.

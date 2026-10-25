@@ -2,10 +2,12 @@
 
 import asyncio
 import logging
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from custom_components.diagral import coordinator as coordinator_module
 from custom_components.diagral.const import (
+    PING_TIMEOUT,
     READ_ATTEMPT_TIMEOUTS,
     READ_RETRY_BUDGET,
     READ_RETRY_PAUSES,
@@ -38,6 +40,7 @@ def make_coordinator(data=OLD_DATA):
     coordinator = object.__new__(DiagralDataUpdateCoordinator)
     coordinator.data = data
     coordinator.api = MagicMock()
+    coordinator.api.ping = AsyncMock(return_value=SimpleNamespace(status="we're alive"))
     coordinator.api.get_configuration = AsyncMock(return_value=MagicMock(groups=[]))
     coordinator.api.get_devices_info = AsyncMock(return_value=MagicMock())
     coordinator.api.get_system_status = AsyncMock(return_value=MagicMock())
@@ -123,7 +126,7 @@ class TestDeadlines:
     """Tests for the per-attempt deadlines and the overall budget."""
 
     async def test_each_attempt_gets_a_longer_deadline(self, sleep):
-        """Attempts run under 30, 45 then 60 s, inside the overall budget."""
+        """After the ping, attempts run under 30, 45 then 60 s, inside the budget."""
         coordinator = make_coordinator()
         coordinator.api.get_system_status.side_effect = ServerError("HTTP 500")
         real_timeout = asyncio.timeout
@@ -135,6 +138,7 @@ class TestDeadlines:
         ):
             await coordinator._async_update_data()
         assert [args.args[0] for args in timeout.call_args_list] == [
+            PING_TIMEOUT,
             READ_RETRY_BUDGET,
             *READ_ATTEMPT_TIMEOUTS,
         ]
@@ -209,6 +213,43 @@ class TestHealth:
         with pytest.raises(UpdateFailed):
             await coordinator._async_update_data()
         assert coordinator.last_error == "ServerError"
+
+    async def test_answered_ping_marks_the_cloud_reachable(self, sleep):
+        """Each refresh pings the cloud, whatever the credentials."""
+        coordinator = make_coordinator()
+
+        await coordinator._async_update_data()
+
+        coordinator.api.ping.assert_awaited_once()
+        assert coordinator.cloud_reachable is True
+
+    @pytest.mark.parametrize(
+        "error",
+        [ServerError("HTTP 503"), ClientError("Network error")],
+        ids=["server-error", "network"],
+    )
+    async def test_failed_ping_does_not_stop_the_reads(self, sleep, error):
+        """An unanswered ping is recorded, and the data is still read."""
+        coordinator = make_coordinator()
+        coordinator.api.ping.side_effect = error
+
+        await coordinator._async_update_data()
+
+        assert coordinator.cloud_reachable is False
+        coordinator.api.get_system_status.assert_awaited()
+
+    async def test_hung_ping_is_cut_short(self, sleep):
+        """A ping that never answers gives up instead of holding the refresh."""
+        coordinator = make_coordinator()
+
+        async def hang() -> None:
+            await asyncio.Event().wait()
+
+        coordinator.api.ping.side_effect = hang
+        with patch.object(coordinator_module, "PING_TIMEOUT", 0.01):
+            await coordinator._async_update_data()
+
+        assert coordinator.cloud_reachable is False
 
     def test_webhook_status_and_reception_notify_entities(self):
         """Webhook state changes reach the entities at once."""

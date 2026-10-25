@@ -83,6 +83,9 @@
         "binary_sensor": {
             "cloud_connection": {
                 "name": "Cloud Diagral"
+            },
+            "cloud_reachable": {
+                "name": "Cloud Diagral joignable"
             }
         },
         "alarm_control_panel": {

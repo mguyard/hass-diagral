@@ -49,6 +49,9 @@ LIST_SERIALS_ATTEMPTS = 2
 SERIAL_GUIDE_URL = "https://docs.page/mguyard/hass-diagral/integration/setup#finding-your-system-serial-id"
 SERIAL_IMAGE_URL = "https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png"
 
+# The ping only tells whether the cloud answers: it must not hold the refresh.
+PING_TIMEOUT = 10
+
 # A hung cloud must not hold the diagnostics download for a full request timeout.
 DIAGNOSTICS_CLOUD_TIMEOUT = 10
 
