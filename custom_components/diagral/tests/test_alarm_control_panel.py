@@ -5,6 +5,7 @@ without making real API calls or instantiating the full entity.
 """
 
 import asyncio
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -284,6 +285,50 @@ class TestHandleEventAlert:
         panel._handle_event_alert({"data": {"alarm_code": "1301", "group_index": "01"}})
         assert panel._attr_alarm_state == AlarmControlPanelState.ARMED_AWAY
         panel.async_write_ha_state.assert_not_called()
+
+
+def webhook_event(event_type: str, alarm_code: str) -> dict:
+    """Return a dispatched webhook event carrying the serial and a user name."""
+    return {
+        "type": event_type,
+        "data": {
+            "transmitter_id": "FAKECENTRAL01",
+            "alarm_code": alarm_code,
+            "group_index": "01",
+            "user": SimpleNamespace(username="Fake User", user_type="owner"),
+        },
+    }
+
+
+class TestEventLogs:
+    """Debug logs name the event, never the serial or the user."""
+
+    @pytest.mark.parametrize(
+        ("handler", "event"),
+        [
+            ("_handle_event_status", webhook_event("STATUS", "3401")),
+            ("_handle_event_alert", webhook_event("ALERT", "1130")),
+        ],
+        ids=["status", "alert"],
+    )
+    def test_event_logs_no_identifier(self, caplog, handler, event):
+        """The received event is not dumped: it carries the serial and user names."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        panel = make_alerted_panel()
+
+        getattr(panel, handler)(event)
+
+        assert event["type"] in caplog.text
+        assert "FAKECENTRAL01" not in caplog.text
+        assert "Fake User" not in caplog.text
+
+    def test_status_still_records_the_user(self):
+        """The user still shows as changed_by, only the log loses the name."""
+        panel = make_alerted_panel()
+
+        panel._handle_event_status(webhook_event("STATUS", "3401"))
+
+        assert panel._changed_by == "Fake User"
 
 
 def status(value: str, groups: list[int] | None = None) -> SimpleNamespace:

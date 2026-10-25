@@ -6,6 +6,7 @@ real API calls. dt_util is patched to avoid time-dependent output.
 
 from datetime import UTC, datetime
 import json
+import logging
 import pathlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -135,6 +136,26 @@ class TestUpdateActiveGroups:
             sensor._update_active_groups(system_status, groups, alarm_config)
 
         assert sensor._attr_native_value == 2
+
+    def test_logs_no_alarm_configuration(self, caplog):
+        """The alarm configuration, with its serial and name, stays out of logs."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        sensor = make_sensor_mock()
+        system_status = SimpleNamespace(status="group", activated_groups=[1])
+        alarm_config = SimpleNamespace(
+            presence_group=[],
+            alarm=SimpleNamespace(
+                name="Fake home", central=SimpleNamespace(serial="FAKECENTRAL01")
+            ),
+        )
+
+        with patch("custom_components.diagral.sensor.dt_util"):
+            sensor._update_active_groups(
+                system_status, [self._make_group(1, "Group 1")], alarm_config
+            )
+
+        assert "FAKECENTRAL01" not in caplog.text
+        assert "Fake home" not in caplog.text
 
     def test_presence_mode_uses_presence_group(self):
         """PRESENCE mode must use alarm_config.presence_group for the count."""

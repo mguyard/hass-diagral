@@ -314,10 +314,9 @@ class DiagralSensor(DiagralEntity, SensorEntity):
     ) -> None:
         """Update the active groups sensor."""
         _LOGGER.debug(
-            "Update active_groups sensor. SystemStatus: %s / Groups: %s / AlarmConfig: %s",
+            "Update active_groups sensor. SystemStatus: %s / Groups: %s",
             system_status,
             groups,
-            alarm_config,
         )
 
         if system_status.status == "PRESENCE":

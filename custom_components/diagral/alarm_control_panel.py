@@ -410,18 +410,16 @@ class DiagralAlarmControlPanel(DiagralEntity, AlarmControlPanelEntity):
     @callback
     def _handle_event_status(self, event) -> None:
         """Handle incoming event for STATUS events."""
-        _LOGGER.debug("Alarm Control Panel Received event: %s", event)
+        _LOGGER.debug("Alarm Control Panel received a STATUS event")
         user_info: WebHookNotificationUser | None = event["data"].get("user", None)
         if user_info:
-            changed_by: str = user_info.username
-            _LOGGER.debug("Alarm State changed by %s", changed_by)
-            self._changed_by = changed_by
+            self._changed_by = user_info.username
             self.async_write_ha_state()
 
     @callback
     def _handle_event_alert(self, event) -> None:
         """Handle incoming event for ALERT events."""
-        _LOGGER.debug("%s received event: %s", self.name, event)
+        _LOGGER.debug("%s received an ALERT event", self.name)
         event_alarm_code = int(event["data"].get("alarm_code"))
         if event_alarm_code in ALARM_INTRUSION_CODES:
             # Set the group name and id

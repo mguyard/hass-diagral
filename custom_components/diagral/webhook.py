@@ -31,9 +31,14 @@ async def handle_webhook(
     """Handle incoming webhook from Diagral."""
     try:
         data_received = await request.json()
-        _LOGGER.debug("Received webhook data: %s", data_received)
         data = WebHookNotification.from_dict(data_received)
-        _LOGGER.debug("Received webhook data (parsed): %s", data)
+        # Never the payload: it carries the serial and user names into shared logs
+        _LOGGER.debug(
+            "Received Diagral webhook: %s %s (%s)",
+            data.alarm_type,
+            data.alarm_code,
+            data.alarm_description,
+        )
 
         # Only loaded entries have runtime_data; a disabled one would raise here
         entry_id = next(
@@ -127,7 +132,7 @@ def _panel_entity_id(hass: HomeAssistant, entry_id: str) -> str | None:
 def publish_event(hass: HomeAssistant, data: dict, entry_id: str) -> None:
     """Publish event to the event bus."""
     event_type = data.pop("alarm_type", None)
-    _LOGGER.debug("Publishing event %s : %s", event_type, data)
+    _LOGGER.debug("Publishing event %s", event_type)
     signal_data = {"type": event_type, "data": data}
     async_dispatcher_send(
         hass, WEBHOOK_SIGNAL.format(alarm_type=event_type), signal_data
