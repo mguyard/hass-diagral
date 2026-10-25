@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Awaitable
 from datetime import datetime
 from importlib.metadata import version
+import re
 from typing import Any
 
 from pydiagral import DiagralAPIError
@@ -13,12 +14,21 @@ from pydiagral.api import DiagralAPI
 from pydiagral.constants import AUTOMATISM_CANALS
 from pydiagral.models import unexpected_data
 
-from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.components.diagnostics import REDACTED, async_redact_data
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from . import DiagralConfigEntry
-from .const import DIAGNOSTICS_CLOUD_TIMEOUT, DOMAIN, WEBHOOK_CHECK_INTERVAL
+from .const import (
+    CONF_SERIAL_ID,
+    DIAGNOSTICS_CLOUD_TIMEOUT,
+    DIAGRAL_VENDOR,
+    DOMAIN,
+    WEBHOOK_CHECK_INTERVAL,
+)
 
 # Users attach this file to public issues: the serial (also the unique id) and
 # the alarm name in the title identify their installation.
@@ -57,13 +67,10 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: DiagralConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
+    repairs = _repairs(hass, entry)
+    if entry.state is not ConfigEntryState.LOADED:
+        return await _unloaded_diagnostics(hass, entry, repairs)
     coordinator = entry.runtime_data.coordinator
-    suffix = f"_{entry.entry_id}"
-    repairs = sorted(
-        issue.issue_id.removesuffix(suffix)
-        for issue in ir.async_get(hass).issues.values()
-        if issue.domain == DOMAIN and issue.issue_id.endswith(suffix)
-    )
     # Read before the registry and the shapes, so they cover these reads too.
     api = entry.runtime_data.api
     ping = await _ping(api)
@@ -94,11 +101,7 @@ async def async_get_config_entry_diagnostics(
                 "check_interval": WEBHOOK_CHECK_INTERVAL,
             },
             "repairs": repairs,
-            # The registry covers every entry of the process, not only this one.
-            "unexpected_data": [
-                {key: item[key] for key in UNEXPECTED_DATA_FIELDS if key in item}
-                for item in unexpected_data()
-            ],
+            "unexpected_data": _unexpected_data(),
             "api_keys": api_keys,
         },
         "alarm": _alarm_summary(coordinator.data or {}),
@@ -106,6 +109,68 @@ async def async_get_config_entry_diagnostics(
         "automatisms": automatisms,
         "api_shape": api.response_shapes(),
     }
+
+
+async def _unloaded_diagnostics(
+    hass: HomeAssistant, entry: DiagralConfigEntry, repairs: list[str]
+) -> dict[str, Any]:
+    """Diagnose an entry that did not load, when the file is needed most."""
+    # The ping needs no credential: it tells a Diagral outage from a setup problem.
+    api = DiagralAPI(
+        username=entry.data[CONF_USERNAME],
+        password=entry.data[CONF_PASSWORD],
+        request_timeout=DIAGNOSTICS_CLOUD_TIMEOUT,
+        session=async_get_clientsession(hass),
+        vendor=DIAGRAL_VENDOR,
+    )
+    return {
+        "info": async_redact_data(entry.as_dict(), TO_REDACT),
+        "health": {
+            "state": entry.state.value,
+            "reason": _redact_text(
+                entry.reason,
+                (
+                    entry.data.get(CONF_SERIAL_ID),
+                    entry.data.get(CONF_USERNAME),
+                    entry.title,
+                    # The title is "<alarm name> (<serial>)": the name can come alone
+                    entry.title.rsplit(" (", 1)[0],
+                ),
+            ),
+            "pydiagral": await hass.async_add_executor_job(version, "pydiagral"),
+            "cloud": {"ping": await _ping(api)},
+            "repairs": repairs,
+            "unexpected_data": _unexpected_data(),
+        },
+    }
+
+
+def _repairs(hass: HomeAssistant, entry: DiagralConfigEntry) -> list[str]:
+    """List the repair issues of this entry, without the entry id they end with."""
+    suffix = f"_{entry.entry_id}"
+    return sorted(
+        issue.issue_id.removesuffix(suffix)
+        for issue in ir.async_get(hass).issues.values()
+        if issue.domain == DOMAIN and issue.issue_id.endswith(suffix)
+    )
+
+
+def _unexpected_data() -> list[dict[str, str]]:
+    """Copy pydiagral's registry field by field; it covers every entry of the process."""
+    return [
+        {key: item[key] for key in UNEXPECTED_DATA_FIELDS if key in item}
+        for item in unexpected_data()
+    ]
+
+
+def _redact_text(text: str | None, values: tuple[str | None, ...]) -> str | None:
+    """Mask identifying values in a free text, such as a setup error message."""
+    if not text:
+        return text
+    # Longest first, so a value containing another one is masked whole
+    for value in sorted(filter(None, values), key=len, reverse=True):
+        text = re.sub(re.escape(value), REDACTED, text, flags=re.IGNORECASE)
+    return text
 
 
 async def _query(call: Awaitable[Any]) -> tuple[Any, str | None]:

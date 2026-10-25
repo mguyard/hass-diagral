@@ -11,6 +11,8 @@ from custom_components.diagral.diagnostics import async_get_config_entry_diagnos
 from pydiagral.exceptions import AuthenticationError, ClientError, ServerError
 import pytest
 
+from homeassistant.config_entries import ConfigEntryState
+
 SECRETS = {
     "serial": "FAKECENTRAL01",
     "title": "fake home",
@@ -36,6 +38,7 @@ def make_entry() -> MagicMock:
     """Return a config entry whose dump carries every identifying value."""
     entry = MagicMock()
     entry.entry_id = "entry1"
+    entry.state = ConfigEntryState.LOADED
     entry.as_dict.return_value = {
         "entry_id": "entry1",
         "domain": "diagral",
@@ -402,6 +405,79 @@ async def test_answer_shapes_include_the_reads_made_for_the_diagnostics():
     result = await run_diagnostics(entry=entry)
 
     assert result["api_shape"] == {}
+
+
+def make_unloaded_entry(state: ConfigEntryState) -> MagicMock:
+    """Return an entry that did not load: it has no runtime data."""
+    entry = make_entry()
+    del entry.runtime_data
+    entry.state = state
+    entry.reason = (
+        f"Error communicating with API: {SECRETS['serial']} {SECRETS['username']} "
+        f"{SECRETS['title']}"
+    )
+    entry.data = entry.as_dict.return_value["data"]
+    entry.title = entry.as_dict.return_value["title"]
+    return entry
+
+
+async def run_unloaded_diagnostics(entry: MagicMock, ping: AsyncMock) -> dict:
+    """Return the diagnostics of an entry that did not load."""
+    client = MagicMock(ping=ping)
+    with (
+        patch(
+            "custom_components.diagral.diagnostics.DiagralAPI", return_value=client
+        ) as api,
+        patch("custom_components.diagral.diagnostics.async_get_clientsession"),
+        patch(
+            "custom_components.diagral.diagnostics.unexpected_data",
+            return_value=[{"model": "Group", "field": "x", "problem": "is missing"}],
+        ),
+    ):
+        result = await run_diagnostics(entry=entry)
+    assert "serial_id" not in api.call_args.kwargs
+    return result
+
+
+@pytest.mark.parametrize(
+    "state",
+    [ConfigEntryState.SETUP_RETRY, ConfigEntryState.SETUP_ERROR],
+    ids=["setup-retry", "setup-error"],
+)
+async def test_unloaded_entry_gives_reduced_diagnostics(state):
+    """An entry that did not load still tells why and whether the cloud answers."""
+    entry = make_unloaded_entry(state)
+    ping = AsyncMock(return_value=SimpleNamespace(status="we're alive"))
+
+    result = await run_unloaded_diagnostics(entry, ping)
+
+    assert result["health"] == {
+        "state": state.value,
+        "reason": "Error communicating with API: **REDACTED** **REDACTED** "
+        "**REDACTED**",
+        "pydiagral": version("pydiagral"),
+        "cloud": {"ping": {"reachable": True, "status": "we're alive", "error": None}},
+        "repairs": ["webhook_owned_elsewhere"],
+        "unexpected_data": [{"model": "Group", "field": "x", "problem": "is missing"}],
+    }
+    assert result["info"]["entry_id"] == "entry1"
+    dump = json.dumps(result, default=str)
+    for name, value in SECRETS.items():
+        assert value not in dump, name
+
+
+async def test_unloaded_entry_when_the_cloud_does_not_answer():
+    """The ping tells a Diagral outage from a setup problem on this side."""
+    entry = make_unloaded_entry(ConfigEntryState.SETUP_RETRY)
+    ping = AsyncMock(side_effect=ServerError("Service unavailable"))
+
+    result = await run_unloaded_diagnostics(entry, ping)
+
+    assert result["health"]["cloud"]["ping"] == {
+        "reachable": False,
+        "status": None,
+        "error": "ServerError",
+    }
 
 
 async def test_package_version_is_read_off_the_event_loop():
