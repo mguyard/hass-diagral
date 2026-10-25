@@ -46,6 +46,7 @@ from .const import (
     ISSUE_WEBHOOK_REGISTRATION_FAILED,
     WEBHOOK_CHECK_INTERVAL,
     WEBHOOK_CONNECTED,
+    WEBHOOK_ISSUES,
     WEBHOOK_OWNED_ELSEWHERE,
     WEBHOOK_STATUS_OF_ISSUE,
     WEBHOOK_UNREGISTERED,
@@ -67,6 +68,8 @@ type DiagralConfigEntry = ConfigEntry[DiagralData]
 
 async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> bool:
     """Set up Diagral from a config entry."""
+    # Entries removed before their repairs were deleted with them left some behind
+    _delete_orphan_issues(hass)
     config = DiagralConfigData.from_config_entry(entry)
     # Convert DiagralConfigData to a standard dictionary
     config_dict = asdict(config)
@@ -187,6 +190,24 @@ def _remember_subscription(
 
 def _issue_id(issue: str, entry: DiagralConfigEntry) -> str:
     return f"{issue}_{entry.entry_id}"
+
+
+def _delete_issues(hass: HomeAssistant, entry_id: str) -> None:
+    """Delete the webhook repair issues of a config entry."""
+    for issue in WEBHOOK_ISSUES:
+        ir.async_delete_issue(hass, DOMAIN, f"{issue}_{entry_id}")
+
+
+def _delete_orphan_issues(hass: HomeAssistant) -> None:
+    """Delete the webhook repair issues whose config entry no longer exists."""
+    entry_ids = {entry.entry_id for entry in hass.config_entries.async_entries(DOMAIN)}
+    for domain, issue_id in list(ir.async_get(hass).issues):
+        if domain != DOMAIN:
+            continue
+        for issue in WEBHOOK_ISSUES:
+            prefix = f"{issue}_"
+            if issue_id.startswith(prefix) and issue_id[len(prefix) :] not in entry_ids:
+                ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 class WebhookUnavailable(Exception):
@@ -396,12 +417,7 @@ async def register_webhook(
         return None
 
     _remember_subscription(hass, entry, webhook_url, webhook_id)
-    for issue in (
-        ISSUE_WEBHOOK_OWNED_ELSEWHERE,
-        ISSUE_WEBHOOK_REGISTRATION_FAILED,
-        ISSUE_WEBHOOK_NO_URL,
-    ):
-        ir.async_delete_issue(hass, DOMAIN, _issue_id(issue, entry))
+    _delete_issues(hass, entry.entry_id)
     _LOGGER.info("Webhook successfully registered for %s", entry.title)
     return webhook_id
 
@@ -553,6 +569,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> 
 
 async def async_remove_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> None:
     """Handle removal of an entry."""
+    # First, so a Diagral outage below cannot leave them behind
+    _delete_issues(hass, entry.entry_id)
     # Retrieve the stored API key
     apikey = entry.data.get(CONF_API_KEY)
 
