@@ -40,6 +40,7 @@ from .const import (
     DIAGRAL_VENDOR,
     DOMAIN,
     HA_CLOUD_DOMAIN,
+    INTERACTIVE_REQUEST_TIMEOUT,
     ISSUE_WEBHOOK_NO_URL,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
     ISSUE_WEBHOOK_REGISTRATION_FAILED,
@@ -561,6 +562,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> 
                 username=entry.data[CONF_USERNAME],
                 password=entry.data[CONF_PASSWORD],
                 serial_id=entry.data[CONF_SERIAL_ID],
+                request_timeout=INTERACTIVE_REQUEST_TIMEOUT,
                 session=async_get_clientsession(hass),
                 vendor=DIAGRAL_VENDOR,
             ) as diagral:

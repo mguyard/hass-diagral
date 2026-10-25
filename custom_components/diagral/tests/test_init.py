@@ -27,6 +27,7 @@ from custom_components.diagral.const import (
     CONFIG_VERSION,
     DIAGRAL_REQUEST_TIMEOUT,
     DIAGRAL_VENDOR,
+    INTERACTIVE_REQUEST_TIMEOUT,
     ISSUE_WEBHOOK_NO_URL,
     ISSUE_WEBHOOK_OWNED_ELSEWHERE,
     ISSUE_WEBHOOK_REGISTRATION_FAILED,
@@ -341,6 +342,9 @@ class TestLogsHideSecrets:
         diagral.delete_apikey.assert_awaited_once_with(apikey="SECRETAPIKEY")
         assert api_cls.call_args.kwargs["session"] is hass.http_session
         assert api_cls.call_args.kwargs["vendor"] == DIAGRAL_VENDOR
+        assert (
+            api_cls.call_args.kwargs["request_timeout"] == INTERACTIVE_REQUEST_TIMEOUT
+        )
         assert "SECRETAPIKEY" not in debug_log.text
         assert "SECRETPASSWORD" not in debug_log.text
 
