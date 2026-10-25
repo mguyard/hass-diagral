@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import logging
+from typing import Any
 
 from pydiagral.models import (
     AlarmConfiguration,
@@ -15,13 +16,18 @@ from pydiagral.models import (
     SystemStatus,
 )
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+)
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 import homeassistant.util.dt as dt_util
 
 from . import DiagralConfigEntry
-from .const import DOMAIN
+from .const import DOMAIN, WEBHOOK_STATUSES
 from .coordinator import DiagralDataUpdateCoordinator
 from .entity import DiagralEntity
 
@@ -51,6 +57,33 @@ SENSORS: tuple[DiagralSensorEntityDescription, ...] = (
 )
 
 
+@dataclass(frozen=True, kw_only=True)
+class DiagralHealthSensorEntityDescription(SensorEntityDescription):
+    """Diagnostic sensor reading the coordinator's health, not the alarm."""
+
+    value_fn: Callable[[DiagralDataUpdateCoordinator], Any]
+
+
+HEALTH_SENSORS: tuple[DiagralHealthSensorEntityDescription, ...] = (
+    DiagralHealthSensorEntityDescription(
+        key="webhook_status",
+        translation_key="webhook_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(WEBHOOK_STATUSES),
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.webhook_status,
+    ),
+    DiagralHealthSensorEntityDescription(
+        key="last_webhook",
+        translation_key="last_webhook",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda coordinator: coordinator.last_webhook,
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: DiagralConfigEntry,
@@ -62,6 +95,40 @@ async def async_setup_entry(
     for sensor in SENSORS:
         if sensor.exists_fn(coordinator):
             async_add_entities([DiagralSensor(coordinator, sensor, entry)])
+    async_add_entities(
+        DiagralHealthSensor(coordinator, description, entry)
+        for description in HEALTH_SENSORS
+    )
+
+
+class DiagralHealthSensor(DiagralEntity, SensorEntity):
+    """Diagnostic sensor about the webhook, readable during a polling outage."""
+
+    entity_description: DiagralHealthSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: DiagralDataUpdateCoordinator,
+        description: DiagralHealthSensorEntityDescription,
+        config_entry: DiagralConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        serial = coordinator.data["alarm_config"].alarm.central.serial
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{DOMAIN}_{serial}_{description.key}"
+        )
+
+    @property
+    def available(self) -> bool:
+        """The webhook state does not depend on polling."""
+        return True
+
+    @property
+    def native_value(self) -> Any:
+        """Return the value read from the coordinator."""
+        return self.entity_description.value_fn(self.coordinator)
 
 
 class DiagralSensor(DiagralEntity, SensorEntity):

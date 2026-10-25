@@ -84,6 +84,19 @@
             },
             "active_groups": {
                 "name": "Groupes actifs"
+            },
+            "webhook_status": {
+                "name": "Webhook",
+                "state": {
+                    "connected": "Connecté",
+                    "owned_elsewhere": "Utilisé par une autre installation",
+                    "registration_failed": "Échec de l'enregistrement",
+                    "no_url": "Aucune adresse",
+                    "unregistered": "Désenregistré"
+                }
+            },
+            "last_webhook": {
+                "name": "Dernier webhook"
             }
         }
     },
