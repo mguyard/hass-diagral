@@ -68,7 +68,7 @@ The scope is the module name without its extension: `sensor`, `webhook`, `config
 
 ## 🔒 Ground rules
 
-- **Through pydiagral only.** Every call to the Diagral cloud goes through [pydiagral](https://github.com/mguyard/pydiagral). When it is wrong or missing something, fix it there rather than working around it here.
+- **Through pydiagral only.** Every call to the Diagral cloud goes through [pydiagral](https://github.com/mguyard/pydiagral). When it is wrong or missing something, fix it there rather than working around it here, and link that pydiagral pull request in yours.
 - **No real Diagral call in tests.** Tests mock pydiagral and never touch the Diagral cloud.
 - **No personal data.** No credential, serial number, alarm name, e-mail address or webhook URL in code, fixtures, logs, commits, issues or PRs. Fixtures are synthetic, and a diagnostics file or a log pasted in an issue must be redacted.
 - **Never rename an entity `key`.** It is part of the entity's unique id: renaming it orphans the users' entities.
