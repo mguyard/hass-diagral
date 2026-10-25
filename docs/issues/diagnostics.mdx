@@ -1,0 +1,194 @@
+---
+title: Reading the diagnostics
+description: Understand what goes wrong from the diagnostics file
+previous: /issues
+previousTitle: Report an issue
+---
+
+Something does not work as expected? The diagnostics file often tells why. Start from what you observe below: each case says where to look and what it means. The rest of the page details every part of the file.
+
+The file holds the state of the integration and what Diagral sends, never your credentials, your serial nor your names. [How to download it](/issues#diagnostic-file).
+
+## Start from your problem
+
+<AccordionGroup>
+<Accordion title="The intrusion alert did not reach Home Assistant" icon="bell">
+1. `health.webhook.status`: anything but `connected` explains it. `owned_elsewhere` means another installation receives the events: follow the repair in **Settings > System > Repairs**.
+2. `recent_webhooks`: no `ALERT` around that time means Diagral did not send it to this Home Assistant. An `ALERT` marked `ignored` or `failed` gives the reason.
+</Accordion>
+
+<Accordion title="The alarm state changes late, only every few minutes" icon="clock">
+The state is polled every 5 minutes; between two polls, only the webhook brings changes.
+1. `health.webhook.status` is not `connected`: the webhook does not reach this Home Assistant, follow the repair.
+2. It is `connected` but `recent_webhooks` stays empty after you armed or disarmed: Diagral sends nothing here. Check that the subscription still points to this Home Assistant with the [diagral.register_webhook](/integration/actions#register-webhook) action.
+</Accordion>
+
+<Accordion title="Every entity became unavailable" icon="plug">
+1. `health.cloud.connected` is `false`: the refreshes from Diagral fail. `last_error` names the error.
+2. `health.cloud.ping.reachable` is `false`: Diagral does not answer at all. It is an outage, nothing to fix on your side: the entities come back by themselves.
+3. It is `true` and `system` holds `"error": "AuthenticationError"`: Diagral answers but refuses your account. Check your credentials and PIN code with **Reconfigure**.
+</Accordion>
+
+<Accordion title="The integration does not start" icon="power-off">
+Home Assistant offers no diagnostics download until the integration has loaded: the logs are the place to look, see [Debug Logging](/issues#debug-logging). When reporting the issue, write N/A in the diagnostics field.
+</Accordion>
+
+<Accordion title="A warning about Diagral data appears in the logs" icon="triangle-exclamation">
+1. `health.unexpected_data` gives the kind of data, the field and the problem.
+2. `api_shape`, under the request concerned, shows how Diagral sent that field.
+3. Report it with the file: Diagral changed its data and the library needs to follow. The file holds nothing that identifies you.
+</Accordion>
+
+<Accordion title="An anomaly or a device shows unexpected values" icon="magnifying-glass">
+1. `alarm` counts the groups, devices and anomalies the integration read.
+2. `api_shape`, under `get_configuration` or `get_anomalies`, shows what Diagral sent for them: compare the counts and the fields.
+</Accordion>
+</AccordionGroup>
+
+## Reference
+
+### Overview
+
+Home Assistant adds its own sections (`home_assistant`, `custom_components`, `integration_manifest`). The integration's part is under `data`:
+
+| Section | What it tells |
+| --- | --- |
+| `info` | The configuration entry, with every credential and identifier replaced by `**REDACTED**` |
+| `health` | Whether the Diagral cloud answers, the webhook state, the repairs, the API keys and the data Diagral sent unexpectedly |
+| `alarm` | The alarm state and how many groups, devices and anomalies it has — counts only, no names |
+| `system` | The hardware: device type, firmware, mode and capabilities. Never the IP address |
+| `automatisms` | The automatisms, by canal and mode, never their names |
+| `api_shape` | The structure of the last answers of the Diagral cloud, without the values you typed |
+| `recent_webhooks` | The last notifications Diagral sent, and what the integration did with each |
+
+### health
+
+```json
+"health": {
+  "pydiagral": "2.0.0-beta.3",
+  "cloud": {
+    "connected": true,
+    "last_success": "2026-10-25T19:34:41+00:00",
+    "last_error": null,
+    "ping": {"reachable": true, "status": "we're alive", "error": null}
+  },
+  "webhook": {"status": "connected", "last_received": null, "check_interval": 3600},
+  "repairs": [],
+  "unexpected_data": [],
+  "api_keys": {"count": 1, "error": null}
+}
+```
+
+- `cloud.connected`: whether the last refresh from the Diagral cloud succeeded. `last_error` names the error of the last failure, such as `TimeoutError` or `ServerError`.
+- `cloud.ping`: whether the Diagral cloud answered when you downloaded the file. It needs no credentials, so it tells two problems apart:
+  - `reachable: false` — Diagral or your network does not answer: an outage, nothing to fix on your side.
+  - `reachable: true` while `connected` is `false` — the cloud answers but refuses or fails your requests. If `system` holds `"error": "AuthenticationError"`, your credentials or API key are at fault.
+- `webhook.status`: the same value as the [Webhook entity](/integration/entities#webhook---details). `last_received` is the time of the last notification, of any type.
+- `repairs`: the repairs open for this entry, such as `webhook_owned_elsewhere`.
+- `api_keys.count`: how many API keys exist for your central. Each setup creates one; a large number means keys left behind by earlier setups.
+- `unexpected_data`: see [below](/issues/diagnostics#unexpecteddata).
+
+Any part that needs the cloud gives `"error"` with the name of the error instead of failing the whole file, and gives up after 10 seconds.
+
+### unexpected_data
+
+The data Diagral sent that the `pydiagral` library did not expect, since Home Assistant started. The library keeps working without it; this list says what to fix in it.
+
+```json
+"unexpected_data": [
+  {"model": "Anomalies", "field": "created_at", "problem": "is missing"},
+  {"model": "Rude", "field": "mode", "problem": "is not a documented mode", "value": "IMPULSION"},
+  {"model": "Group", "field": "colour", "problem": "is not declared"}
+]
+```
+
+- `model`: the kind of data, as `pydiagral` names it.
+- `field`: the field concerned.
+- `problem`: what is wrong with it:
+
+| `problem` | Meaning |
+| --- | --- |
+| `is missing` | A field the library needs was not sent |
+| `is not an ISO date` | A date the library could not read |
+| `is not a boolean` | A true/false value the library could not read |
+| `is not a list` | A list was expected |
+| `has an entry that is not an object` | A list holds an entry the library could not read; that entry is skipped |
+| `is not a documented mode` | A value the Diagral documentation does not list |
+| `is not declared` | A field Diagral sent that the library does not know |
+
+- `value`: only for a field whose values the Diagral documentation lists, such as an automatism mode. No other value is ever copied.
+
+The list covers every Diagral central of your Home Assistant, not only this one.
+
+### api_shape
+
+The structure of the last answer of each Diagral cloud request since Home Assistant started, as Diagral sent it, before the library reads it. One entry per request: `get_configuration`, `get_system_details`, `get_system_status`, `get_anomalies`, `get_automatism_rudes`, `get_webhook`. A request that did not succeed yet is absent: `get_anomalies`, for instance, when there is no anomaly.
+
+```json
+"sensors": [
+  {
+    "type": 1,
+    "group": 1,
+    "index": 1,
+    "label": "<str:10>",
+    "serial": "<str:7>",
+    "refCode": "R1",
+    "inhibited": false
+  }
+]
+```
+
+The keys are Diagral's own, with their case. Each list keeps one element per entry: two sensors give two elements. The values read as follows:
+
+| You see | It means |
+| --- | --- |
+| `<str:10>` | A text of 10 characters, replaced by its length: names, labels, serials, addresses, dates |
+| A number, `true`, `false` or `null` | The value Diagral sent |
+| A readable text | A technical value: a version, the vendor, a mode, a status, a device type or reference (`refCode`), a documented automatism canal, `True` / `False` |
+| `<int>`, `<bool>` | A value under a key that may identify you (serial, phone, contact), hidden whatever its type |
+| `<int:8>` | A number of more than 6 digits, replaced by its count of digits |
+| `<key:1>`, `<key:2>` | A key that looks like an identifier, such as a serial used as a key, hidden. The number only tells several hidden keys apart |
+
+To investigate a problem, read `unexpected_data` first, which says what is wrong, then the matching request in `api_shape`, which shows how Diagral sent it.
+
+### recent_webhooks
+
+The last 20 notifications Diagral sent since Home Assistant started, oldest first. They are kept in memory only.
+
+```json
+"recent_webhooks": [
+  {
+    "at": "2026-10-25T18:40:03+01:00",
+    "sent_at": "2026-10-25T17:40:02+00:00",
+    "type": "ALERT",
+    "alarm_code": "1130",
+    "group_index": "01",
+    "device": {"type": "SENSOR", "index": "1"},
+    "user": false,
+    "keys": ["alarm_code", "date_time", "detail", "group_index", "transmitter_id"],
+    "outcome": "processed",
+    "reason": null
+  }
+]
+```
+
+- `at`: when Home Assistant received it. `sent_at`: the date Diagral put in it, when readable.
+- `type`, `alarm_code`, `group_index`: what happened, as in the [events](/integration/events).
+- `device`: the device type and number, never its name.
+- `user`: whether a user was named — never the name.
+- `keys`: the fields Diagral sent; one that looks like an identifier reads `<key>`.
+- `outcome` and `reason`: what the integration did with it:
+
+| `outcome` | `reason` | Meaning |
+| --- | --- | --- |
+| `processed` | `null` | The event was published |
+| `ignored` | `invalid_json` | The notification could not be read |
+| `ignored` | `invalid_payload` | It lacked its date, system or alarm code |
+| `ignored` | `other_central` | It came from another central than this one |
+| `failed` | an error name | An error interrupted its handling; the logs hold the details |
+
+An empty list means no notification arrived since Home Assistant started.
+
+### When the integration did not load
+
+Home Assistant only offers the download once the integration has loaded. Fetched through its API meanwhile, the file is shorter: `info`, and a `health` section with the entry `state`, the `reason` it did not load (identifiers hidden), the cloud `ping`, the `repairs` and the `unexpected_data`.

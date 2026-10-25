@@ -30,14 +30,15 @@ When the Diagral Cloud fails temporarily (server error, timeout, network error),
 ## Central - Details
 
 Central entity is an [Alarm Control Panel](https://www.home-assistant.io/integrations/alarm_control_panel/) entity type.
-This entity supports 3 modes (Away, Home and Disarmed) and 4 states (arming, armed_away, armed_home, disarmed, triggered)
+This entity supports 3 modes (Away, Home and Disarmed) and 5 states:
 
-States :
-- `arming`: When the alarm is configured to wait for a specific time before activating (allowing time to exit or enter and input the deactivation code on the keypad)
-- `armed_away`: The alarm is fully activated
-- `armed_home`: The alarm is activated in home mode
-- `disarmed`: The alarm is not activated
-- `triggered`: [An intrusion has been detected](/integration/entities#triggered-state)
+| State | Meaning |
+| --- | --- |
+| `arming` | The alarm waits for a set time before activating, to let you leave or enter and type the code on the keypad |
+| `armed_away` | The alarm is fully activated |
+| `armed_home` | The alarm is activated in home mode |
+| `disarmed` | The alarm is not activated |
+| `triggered` | [An intrusion has been detected](/integration/entities#triggered-state) |
 
 ### Triggered state
 
@@ -51,10 +52,13 @@ trigger:
   group_id: 3
 ```
 
-Alert type supported :
-- `1130` : INTRUSION
-- `1139` : INTRUSION-CONFIRMED
-- `1141` : PREALARM-CONFIRMED
+Alert codes that trigger it:
+
+| Code | Alert |
+| --- | --- |
+| `1130` | INTRUSION |
+| `1139` | INTRUSION-CONFIRMED |
+| `1141` | PREALARM-CONFIRMED |
 
 ## Anomalies - Details
 
@@ -85,30 +89,23 @@ anomalies: # [!code highlight]
 ```
 </Card>
 
-All anomalies are under `anomalies` key. The first level (e.g., sensor and central in this example) represents the type of element with anomalies. It can be of multiple types:
-- sensor
-- badges
-- sirens
-- cameras
-- commands
-- transceivers
-- transmitters
-- central
-
----
+All anomalies are under the `anomalies` key. The first level (`sensors` and `central` in this example) is the type of element with anomalies: `sensors`, `badges`, `sirens`, `cameras`, `commands`, `transceivers`, `transmitters` or `central`.
 
 Each anomaly can have several attributes:
-- `id`: The unique identifier of the anomaly (internally defined by Diagral)
-- `name`: The name of the anomaly (internally defined by Diagral)
-- `serial`: The serial number of the element that triggered the anomaly (optional)
-- `index`: The name of the element that triggered the anomaly, looked up among the elements of the same type, or its number when it is not found (optional)
-- `group`: The group associated with the element that triggered the anomaly. This can be the group name if defined, otherwise the Group ID (optional)
-- `label`: The name of the element that triggered the anomaly (optional)
+
+| Attribute | Description |
+| --- | --- |
+| `id` | The identifier of the anomaly, defined by Diagral |
+| `name` | The name of the anomaly, defined by Diagral |
+| `serial` | The serial number of the element that triggered the anomaly (optional) |
+| `index` | The name of the element, looked up among the elements of the same type, or its number when it is not found (optional) |
+| `group` | The group of the element: its name if defined, otherwise its ID (optional) |
+| `label` | The name of the element that triggered the anomaly (optional) |
 
 Using this attribute format, you can leverage Jinja2 templates to extract and utilize the information you need.
 Below is a quick and simple example for a [Home Assistant Template](https://my.home-assistant.io/redirect/developer_template/) (replace `sensor.home_anomalies` with your actual entity):
 
-```yaml
+```jinja title="Template"
 {% set anomalies = state_attr('sensor.home_anomalies', 'anomalies') %}
 {% for location in anomalies.keys() -%}
 {% if anomalies[location]|list -%}
@@ -147,11 +144,13 @@ Since the attribute format is identical to that of `Anomalies`, the same Jinja2 
 
 Intrusion alerts only reach Home Assistant through the [webhook](/integration/webhook). This diagnostic sensor tells whether they can, even while Diagral cannot be polled:
 
-- `connected`: events are received.
-- `owned_elsewhere`: the subscription points to another installation; a repair explains how to take it over.
-- `registration_failed`: Diagral or Home Assistant Cloud did not answer; it is retried every hour.
-- `no_url`: Home Assistant has no external `https://` address nor Home Assistant Cloud.
-- `unregistered`: you unregistered the webhook with the `diagral.unregister_webhook` action.
+| State | Meaning |
+| --- | --- |
+| `connected` | Events are received |
+| `owned_elsewhere` | The subscription points to another installation; a repair explains how to take it over |
+| `registration_failed` | Diagral or Home Assistant Cloud did not answer; it is retried every hour |
+| `no_url` | Home Assistant has no external `https://` address nor Home Assistant Cloud |
+| `unregistered` | You unregistered the webhook with the `diagral.unregister_webhook` action |
 
 Use it in an automation to be warned when the state is not `connected`.
 

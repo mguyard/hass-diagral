@@ -39,7 +39,7 @@ Full documentation for the integration can be found :
 
 ## Contribution
 
-Want to contribute to [Diagral integration](https://docs.page/mguyard/hass-diagral/misc/contributing)?
+Want to contribute to [Diagral integration](https://docs.page/mguyard/hass-diagral/integration/contributing)?
 
 If you feel this integration was valuable and want to support it in other ways, you can [sponsor me](https://github.com/sponsors/mguyard).
 

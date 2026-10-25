@@ -9,10 +9,13 @@ nextTitle: Events
 The Diagral cloud supports sending webhooks to your Home Assistant to receive real-time alerts, anomalies, or state changes.
 Notifications are transmitted per system, and **each system can have only one webhook subscription.**
 
-This means that in addition to the regular refresh interval, a refresh can also be triggered upon receiving a webhook of these type :
-* `STATUS` : Status change (Armed, Disarmed, etc...)
-* `ALERT` : Alert is triggered like Intrusion or Silent Panic Alarm 
-* `ANOMALY` : A new anomaly is triggered
+In addition to the regular refresh every `5 minutes`, Home Assistant reacts at once to each notification:
+
+| Type | Sent when |
+| --- | --- |
+| `STATUS` | The alarm state changes (armed, disarmed…) |
+| `ALERT` | An alert is triggered, such as an intrusion or a silent panic alarm |
+| `ANOMALY` | A new anomaly appears |
 
 ## Home Assistant URL
 
@@ -44,8 +47,10 @@ The webhook address stays the same across restarts: the subscription is only upd
 
 If the webhook cannot be registered when the integration starts, the integration still starts and the alarm state keeps being refreshed every `5 minutes`. Intrusion alerts (the `triggered` state) and `DIAGRAL_EVENT` events cannot arrive, though, so a repair appears in **Settings > System > Repairs**:
 
-- **Diagral or Home Assistant Cloud did not answer**, usually during a temporary outage: open the repair and confirm to try again, or reload the integration.
-- **No address for the webhook**: Home Assistant has neither an external URL starting with `https://` nor an active Home Assistant Cloud subscription. Set one of them up as described in [Home Assistant URL](#home-assistant-url), then reload the integration.
+| Repair | Cause | What to do |
+| --- | --- | --- |
+| **Diagral or Home Assistant Cloud did not answer** | Usually a temporary outage | Open the repair and confirm to try again, or reload the integration |
+| **No address for the webhook** | Home Assistant has neither an external URL starting with `https://` nor an active Home Assistant Cloud subscription | Set one of them up as described in [Home Assistant URL](/integration/webhook#home-assistant-url), then reload the integration |
 
 The error is also written in the Home Assistant logs.
 
@@ -62,11 +67,17 @@ Your Diagral system (serial ID) can send its events to a single URL only. When t
 
 In the second case, a repair appears in **Settings > System > Repairs** and a warning is written in the logs. Until it is solved, Home Assistant does not receive webhooks: the alarm state is still refreshed every `5 minutes`, but intrusion alerts (the `triggered` state) and `DIAGRAL_EVENT` events do not arrive.
 
+### Taking the webhook over
+
 To make this Home Assistant receive the events, open the repair, choose to take the webhook over and confirm, or call the [diagral.register_webhook](/integration/actions#register-webhook) action. The other installation then stops receiving them.
+
+### Leaving it to the other installation
 
 If the other installation should keep the events — a test instance next to your main one, for example — open the repair and choose to ignore it instead. It stays hidden, even when the hourly check raises it again, until this Home Assistant owns the webhook. To see it again, show the ignored repairs, open it and choose to stop ignoring it.
 
 Disabling the integration removes its webhook repairs: a disabled integration receives nothing anyway. If the problem remains when you enable it again, the repair comes back, no longer ignored. Reloading the integration keeps them as they are, ignored or not.
+
+### Hourly check
 
 The subscription is also checked every hour, not only at startup. If another installation takes it over later, the repair appears without waiting for a restart; if it disappeared, it is registered again. A webhook that could not be registered is retried at the same pace, so it recovers by itself once Diagral answers. A webhook you unregistered with [diagral.unregister_webhook](/integration/actions#unregister-webhook) is left alone.
 
