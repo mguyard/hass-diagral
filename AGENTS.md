@@ -144,6 +144,8 @@ The pre-commit test gate, the pull request description template and the prepare-
 
 The changelog credits contributors: an author other than the maintainer appears as `(by …)`, and each `Co-authored-by:` trailer as `(co-authored by …)` — a GitHub login when the address is a noreply one, the name otherwise, never an e-mail address, and never an assistant or a bot. When carrying over someone else's work, add `Co-authored-by: Name <id+login@users.noreply.github.com>` so they are credited. The toolchain is pinned in `.github/release/` and updated by Dependabot; dry-run an upgrade before merging it, since a release only runs on `beta` and `main`.
 
+References in commit messages render only when a closing keyword introduces them (`Closes #N`, `Fixes #N`); a plain mention is dropped from the notes. Keep issue and PR references (`#N`, `owner/repo#N`) out of a `BREAKING CHANGE:` paragraph: the commit parser ends the note at the first line that holds one and drops that line and the rest, silently. Put the reference in the body instead.
+
 ## Pull requests
 
 - Title follows the commit format; `semantic-prs.yml` enforces it.
