@@ -8,11 +8,12 @@ from datetime import UTC, datetime
 import json
 import pathlib
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.diagral.const import WEBHOOK_STATUSES
 from custom_components.diagral.sensor import (
     HEALTH_SENSORS,
+    SENSORS,
     DiagralHealthSensor,
     DiagralSensor,
 )
@@ -21,6 +22,7 @@ import pytest
 
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.const import EntityCategory
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 # An empty DeviceList with explicit empty lists to avoid iteration errors
 # (vars(MagicMock()) would contain non-iterable sentinel objects)
@@ -242,3 +244,41 @@ class TestHealthSensors:
 
         assert set(translations["webhook_status"]["state"]) == set(WEBHOOK_STATUSES)
         assert translations["last_webhook"]["name"]
+
+
+def make_live_sensor(key: str, data: dict) -> DiagralSensor:
+    """Return the sensor of the given key, reading the given coordinator data."""
+    sensor = make_sensor_mock()
+    sensor.entity_description = next(d for d in SENSORS if d.key == key)
+    sensor.coordinator = MagicMock(data=data)
+    sensor._attr_name = "Anomalies"
+    sensor.async_write_ha_state = MagicMock()
+    return sensor
+
+
+class TestInitialValue:
+    """The sensors show a value as soon as they are added."""
+
+    async def test_value_is_set_when_added(self):
+        """The first refresh ran before the entity existed: use its data."""
+        sensor = make_live_sensor(
+            "anomalies",
+            {
+                "alarm_config": MagicMock(),
+                "anomalies": None,
+                "groups": [],
+                "system_status": MagicMock(),
+                "devices_infos": EMPTY_DEVICE_LIST,
+            },
+        )
+        with patch.object(CoordinatorEntity, "async_added_to_hass", AsyncMock()):
+            await sensor.async_added_to_hass()
+
+        assert sensor._attr_native_value == 0
+
+    def test_state_is_written_without_alarm_config(self):
+        """Missing data still publishes the state, so availability follows."""
+        sensor = make_live_sensor("anomalies", {"alarm_config": None})
+        sensor._handle_coordinator_update()
+
+        sensor.async_write_ha_state.assert_called_once()
