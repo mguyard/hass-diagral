@@ -320,6 +320,43 @@ async def test_automatisms_when_the_call_is_refused():
     }
 
 
+async def test_diagnostics_list_what_the_models_did_not_expect():
+    """The registry is copied field by field: a key pydiagral adds later stays out."""
+    registry = [
+        {"model": "Rude", "field": "mode", "problem": "is not a documented mode"},
+        {"model": "Group", "field": "colour", "problem": "is not declared"},
+    ]
+    registry[0]["value"] = "IMPULSION"
+    registry[1]["raw"] = SECRETS["device"]
+
+    with patch(
+        "custom_components.diagral.diagnostics.unexpected_data",
+        return_value=registry,
+    ):
+        result = await run_diagnostics()
+
+    assert result["health"]["unexpected_data"] == [
+        {
+            "model": "Rude",
+            "field": "mode",
+            "problem": "is not a documented mode",
+            "value": "IMPULSION",
+        },
+        {"model": "Group", "field": "colour", "problem": "is not declared"},
+    ]
+    assert SECRETS["device"] not in json.dumps(result, default=str)
+
+
+async def test_diagnostics_without_unexpected_data():
+    """Data that fits the models gives an empty list."""
+    with patch(
+        "custom_components.diagral.diagnostics.unexpected_data", return_value=[]
+    ):
+        result = await run_diagnostics()
+
+    assert result["health"]["unexpected_data"] == []
+
+
 async def test_package_version_is_read_off_the_event_loop():
     """Reading package metadata touches the disk: it runs in the executor."""
     hass = make_hass()

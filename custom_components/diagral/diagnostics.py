@@ -11,6 +11,7 @@ from typing import Any
 from pydiagral import DiagralAPIError
 from pydiagral.api import DiagralAPI
 from pydiagral.constants import AUTOMATISM_CANALS
+from pydiagral.models import unexpected_data
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
@@ -48,6 +49,9 @@ SYSTEM_DETAILS_FIELDS = (
     "is_video_password_protected",
 )
 
+# Copied field by field, so a field pydiagral adds to its registry later stays out.
+UNEXPECTED_DATA_FIELDS = ("model", "field", "problem", "value")
+
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: DiagralConfigEntry
@@ -84,6 +88,11 @@ async def async_get_config_entry_diagnostics(
                 "check_interval": WEBHOOK_CHECK_INTERVAL,
             },
             "repairs": repairs,
+            # The registry covers every entry of the process, not only this one.
+            "unexpected_data": [
+                {key: item[key] for key in UNEXPECTED_DATA_FIELDS if key in item}
+                for item in unexpected_data()
+            ],
             "api_keys": await _api_key_count(
                 entry.runtime_data.api, entry.runtime_data.config.serial_id
             ),
