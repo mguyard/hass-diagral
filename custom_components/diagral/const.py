@@ -43,7 +43,7 @@ DIAGRAL_REQUEST_TIMEOUT = max(READ_ATTEMPT_TIMEOUTS)
 # Stated rather than left to pydiagral's default: only DIAGRAL is supported.
 DIAGRAL_VENDOR = "DIAGRAL"
 # A hung cloud must not hold the diagnostics download for a full request timeout.
-DIAGNOSTICS_PING_TIMEOUT = 10
+DIAGNOSTICS_CLOUD_TIMEOUT = 10
 
 HA_CLOUD_DOMAIN = ".nabu.casa"
 

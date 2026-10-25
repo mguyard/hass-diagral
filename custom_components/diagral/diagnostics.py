@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
 from datetime import datetime
 from importlib.metadata import version
 from typing import Any
@@ -15,7 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
 from . import DiagralConfigEntry
-from .const import DIAGNOSTICS_PING_TIMEOUT, DOMAIN, WEBHOOK_CHECK_INTERVAL
+from .const import DIAGNOSTICS_CLOUD_TIMEOUT, DOMAIN, WEBHOOK_CHECK_INTERVAL
 
 # Users attach this file to public issues: the serial (also the unique id) and
 # the alarm name in the title identify their installation.
@@ -31,6 +32,20 @@ TO_REDACT = {
     "webhook_id",
     "webhook_url_hash",
 }
+
+# An allowlist, so a field Diagral adds later stays out until reviewed. The IP
+# address and the first vocal contact are left out: they locate or reach the home.
+SYSTEM_DETAILS_FIELDS = (
+    "device_type",
+    "firmware_version",
+    "ipoda_version",
+    "mode",
+    "is_alarm_file_present",
+    "is_mjpeg_archive_video_supported",
+    "is_mass_storage_present",
+    "is_remote_startup_shutdown_allowed",
+    "is_video_password_protected",
+)
 
 
 async def async_get_config_entry_diagnostics(
@@ -70,17 +85,33 @@ async def async_get_config_entry_diagnostics(
             "repairs": repairs,
         },
         "alarm": _alarm_summary(coordinator.data or {}),
+        "system": await _system_details(entry.runtime_data.api),
     }
+
+
+async def _query(call: Awaitable[Any]) -> tuple[Any, str | None]:
+    """Run a cloud call for diagnostics: its result, or the name of its error."""
+    try:
+        async with asyncio.timeout(DIAGNOSTICS_CLOUD_TIMEOUT):
+            return await call, None
+    except (DiagralAPIError, TimeoutError) as err:
+        return None, type(err).__name__
 
 
 async def _ping(api: DiagralAPI) -> dict[str, Any]:
     """Tell whether the Diagral cloud answers, whatever the credentials."""
-    try:
-        async with asyncio.timeout(DIAGNOSTICS_PING_TIMEOUT):
-            ping = await api.ping()
-    except (DiagralAPIError, TimeoutError) as err:
-        return {"reachable": False, "status": None, "error": type(err).__name__}
+    ping, error = await _query(api.ping())
+    if error:
+        return {"reachable": False, "status": None, "error": error}
     return {"reachable": True, "status": ping.status, "error": None}
+
+
+async def _system_details(api: DiagralAPI) -> dict[str, Any]:
+    """Describe the hardware; a refused call here, after a ping, means credentials."""
+    details, error = await _query(api.get_system_details())
+    if error:
+        return {"error": error}
+    return {name: getattr(details, name) for name in SYSTEM_DETAILS_FIELDS}
 
 
 def _iso(moment: datetime | None) -> str | None:

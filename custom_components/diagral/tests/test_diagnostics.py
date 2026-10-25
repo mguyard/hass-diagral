@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.diagral.diagnostics import async_get_config_entry_diagnostics
-from pydiagral.exceptions import ClientError, ServerError
+from pydiagral.exceptions import AuthenticationError, ClientError, ServerError
 import pytest
 
 SECRETS = {
@@ -23,6 +23,8 @@ SECRETS = {
     "webhook_url_hash": "0f" * 32,
     "device": "Front door",
     "group": "Ground floor",
+    "ip_address": "192.168.1.20",
+    "vocal_contact": "0612345678",
 }
 
 
@@ -50,6 +52,21 @@ def make_entry() -> MagicMock:
     entry.runtime_data.webhook_id = SECRETS["webhook_id"]
     entry.runtime_data.api.ping = AsyncMock(
         return_value=SimpleNamespace(status="we're alive")
+    )
+    entry.runtime_data.api.get_system_details = AsyncMock(
+        return_value=SimpleNamespace(
+            device_type="PLUG_IP~DIAGRAL",
+            firmware_version="V1.6.0_V13_V1.1.20",
+            ip_address=SECRETS["ip_address"],
+            ipoda_version="3.0",
+            mode="900",
+            first_vocal_contact=SECRETS["vocal_contact"],
+            is_alarm_file_present=False,
+            is_mjpeg_archive_video_supported=False,
+            is_mass_storage_present=True,
+            is_remote_startup_shutdown_allowed=False,
+            is_video_password_protected=False,
+        )
     )
     coordinator = entry.runtime_data.coordinator
     coordinator.last_update_success = False
@@ -165,7 +182,7 @@ async def test_slow_ping_does_not_hold_the_download():
 
     entry.runtime_data.api.ping = AsyncMock(side_effect=hang)
 
-    with patch("custom_components.diagral.diagnostics.DIAGNOSTICS_PING_TIMEOUT", 0.01):
+    with patch("custom_components.diagral.diagnostics.DIAGNOSTICS_CLOUD_TIMEOUT", 0.01):
         result = await run_diagnostics(entry=entry)
 
     assert result["health"]["cloud"]["ping"] == {
@@ -173,6 +190,36 @@ async def test_slow_ping_does_not_hold_the_download():
         "status": None,
         "error": "TimeoutError",
     }
+
+
+async def test_diagnostics_describe_the_hardware():
+    """The system details are listed, except what locates or reaches the home."""
+    result = await run_diagnostics()
+
+    assert result["system"] == {
+        "device_type": "PLUG_IP~DIAGRAL",
+        "firmware_version": "V1.6.0_V13_V1.1.20",
+        "ipoda_version": "3.0",
+        "mode": "900",
+        "is_alarm_file_present": False,
+        "is_mjpeg_archive_video_supported": False,
+        "is_mass_storage_present": True,
+        "is_remote_startup_shutdown_allowed": False,
+        "is_video_password_protected": False,
+    }
+
+
+async def test_refused_credentials_are_told_apart_from_an_outage():
+    """The cloud answers the ping but refuses the signed call: credentials, not outage."""
+    entry = make_entry()
+    entry.runtime_data.api.get_system_details = AsyncMock(
+        side_effect=AuthenticationError("Invalid API key")
+    )
+
+    result = await run_diagnostics(entry=entry)
+
+    assert result["health"]["cloud"]["ping"]["reachable"] is True
+    assert result["system"] == {"error": "AuthenticationError"}
 
 
 async def test_package_version_is_read_off_the_event_loop():

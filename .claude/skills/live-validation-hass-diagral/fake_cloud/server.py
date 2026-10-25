@@ -313,6 +313,28 @@ async def health(request: web.Request) -> web.Response:
     return web.json_response({"status": "we're alive"})
 
 
+async def get_system_details(request: web.Request) -> web.Response:
+    system = request.app[CLOUD].system(request.match_info["serial"])
+    if denied := _require_apikey(request, system, pin=True):
+        return denied
+    # The real cloud sends the Is* flags as "True" / "False" strings
+    return web.json_response(
+        {
+            "DeviceType": "PLUG_IP~DIAGRAL",
+            "FirmwareVersion": "V1.6.0_V13_V1.1.20",
+            "IpAddress": "192.0.2.10",
+            "IpodaVersion": "3.0",
+            "Mode": "900",
+            "FirstVocalContact": "0",
+            "IsAlarmFilePresent": "False",
+            "IsMJPEGArchiveVideoSupported": "False",
+            "IsMassStoragePresent": "False",
+            "IsRemoteStartupShutdownAllowed": "False",
+            "IsVideoPasswordProtected": "False",
+        }
+    )
+
+
 async def get_status(request: web.Request) -> web.Response:
     system = request.app[CLOUD].system(request.match_info["serial"])
     if denied := _require_apikey(request, system, pin=True):
@@ -584,6 +606,7 @@ def build_app() -> web.Application:
             web.delete(
                 f"/v1/users/systems/{serial}/api_keys/{{apikey}}", delete_api_key
             ),
+            web.get(f"/v1/systems/{serial}", get_system_details),
             web.get(f"/v1/systems/{serial}/configurations", get_configuration),
             web.get(f"/v1/systems/{serial}/status", get_status),
             web.post(
