@@ -26,14 +26,14 @@
             },
             "central": {
                 "title": "Centrale Diagral",
-                "description": "Choisissez la centrale Diagral à ajouter à Home Assistant.\n\rPour vérifier son numéro de série, regardez l'étiquette de votre module ou consultez notre guide de configuration : [{setup_guide_url}]({setup_guide_url})\n\r![Emplacement SerialID]({serial_id_image_url})\n\rDéjà dans Home Assistant, donc non listées : {configured}",
+                "description": "Choisissez la centrale Diagral à ajouter à Home Assistant.\n\rPour vérifier son numéro de série, regardez l'étiquette de votre module ou consultez notre guide de configuration : [{setup_guide_url}]({setup_guide_url})\n\r![Emplacement SerialID]({serial_id_image_url})\n\r**Déjà dans Home Assistant, donc non listées** : {configured}",
                 "data": {
                     "serial_id": "Centrale (numéro de série)",
                     "pin_code": "Master (PIN) Code Diagral (chiffres uniquement, ex : 1234)"
                 }
             },
             "serial": {
-                "title": "Diagral",
+                "title": "Centrale Diagral",
                 "description": "Les centrales de votre compte n'ont pas pu être listées : saisissez le numéro de série de votre centrale.\n\rPour configurer votre système d'alarme Diagral, vous avez besoin d'un module DIAG56AAX/DIAG59AAX qui connecte votre alarme à Internet pour le contrôle à distance.\n\rPour trouver votre ID de série, vérifiez l'étiquette sur votre module ou consultez notre guide de configuration : [{setup_guide_url}]({setup_guide_url})\n\r![Emplacement SerialID]({serial_id_image_url})",
                 "data": {
                     "serial_id": "Numéro de série du module DIAG56AAX/DIAG59AAX",
