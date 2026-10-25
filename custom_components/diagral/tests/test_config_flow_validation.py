@@ -634,6 +634,20 @@ class TestAccountStep:
         assert result["errors"] == {"base": "invalid_auth"}
 
 
+class TestSerialStep:
+    """The manual serial step shows where to find the serial."""
+
+    async def test_guide_points_to_the_serial_section(self):
+        """The link opens the docs section on the serial, under its real anchor."""
+        flow = TestConfigFlowLogs.make_flow()
+
+        result = await flow.async_step_serial()
+
+        assert result["description_placeholders"]["setup_guide_url"].endswith(
+            "/integration/setup#finding-your-system-serial-id"
+        )
+
+
 class TestCentralChoice:
     """Choosing a central claims it before any API key is created."""
 

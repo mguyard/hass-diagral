@@ -54,6 +54,8 @@ from .const import (
     CONFIG_VERSION,
     DIAGRAL_VENDOR,
     DOMAIN,
+    SERIAL_GUIDE_URL,
+    SERIAL_IMAGE_URL,
 )
 from .models import AccountInfoData, DiagralOptionsData, ValidateConnectionData
 
@@ -300,8 +302,8 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({vol.Required(CONF_SERIAL_ID): str}),
             errors=errors or {},
             description_placeholders={
-                "setup_guide_url": "https://docs.page/mguyard/hass-diagral/integration/setup#how-to-find-your-system-serial-id",
-                "serial_id_image_url": "https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png",
+                "setup_guide_url": SERIAL_GUIDE_URL,
+                "serial_id_image_url": SERIAL_IMAGE_URL,
             },
             last_step=False,
         )
