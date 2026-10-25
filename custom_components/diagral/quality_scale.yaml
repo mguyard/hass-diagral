@@ -1,71 +1,102 @@
 rules:
   # Bronze
   action-setup:
-    status: exempt
-    comment: no actions
+    status: todo
+    comment: entity services are registered by the alarm panel platform, not in async_setup
   appropriate-polling: done
   brands: done
   common-modules: done
-  config-flow-test-coverage: done
-  config-flow: done
+  config-flow-test-coverage:
+    status: todo
+    comment: config_flow.py 82% covered; no flow test drives user, options and reconfigure end to end
+  config-flow:
+    status: todo
+    comment: no data_description; password and panel code are plain text fields
   dependency-transparency: done
   docs-actions: done
   docs-high-level-description: done
   docs-installation-instructions: done
-  docs-removal-instructions: done
-  entity-event-setup:
-    status: exempt
-    comment: entities do not explicitly subscribe to events
+  docs-removal-instructions:
+    status: todo
+    comment: no section on removing the integration
+  entity-event-setup: done
   entity-unique-id: done
   has-entity-name: done
   runtime-data: done
   test-before-configure: done
-  test-before-setup: done
+  test-before-setup:
+    status: todo
+    comment: a refused login ends as ConfigEntryNotReady and is retried forever, not ConfigEntryAuthFailed
   unique-config-entry: done
 
   # Silver
   action-exceptions: done
   config-entry-unloading: done
-  docs-configuration-parameters: todo
-  docs-installation-parameters: todo
-
+  docs-configuration-parameters:
+    status: todo
+    comment: the alarm panel code field is not described
+  docs-installation-parameters:
+    status: todo
+    comment: the alarm panel code field is not described
   entity-unavailable: done
   integration-owner: done
-  log-when-unavailable: done
+  log-when-unavailable:
+    status: todo
+    comment: read retries and invalid payloads are logged on every poll during an outage
   parallel-updates:
-    status: exempt
-    comment: not set at the moment, we use a coordinator
+    status: todo
+    comment: PARALLEL_UPDATES is not set on the platforms
   reauthentication-flow: todo
   test-coverage:
     status: todo
-    comment: all tests missing
+    comment: 83.6% measured on 2026-10-25; diagnostics.py untested, sensor.py at 68%
 
   # Gold
   devices: done
-  diagnostics: todo
-  discovery-update-info: todo
-  discovery: todo
-  docs-data-update: todo
+  diagnostics:
+    status: todo
+    comment: the serial and the alarm name are not redacted
+  discovery-update-info:
+    status: exempt
+    comment: cloud service, no network address is stored
+  discovery:
+    status: exempt
+    comment: cloud service, the central cannot be discovered on the local network
+  docs-data-update: done
   docs-examples: todo
   docs-known-limitations: todo
-  docs-supported-devices: todo
-  docs-supported-functions: todo
-  docs-troubleshooting: todo
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
   docs-use-cases: todo
-  dynamic-devices: todo
-  entity-category: done
+  dynamic-devices:
+    status: exempt
+    comment: a config entry has a single, static device, the central
+  entity-category:
+    status: todo
+    comment: no entity sets a category yet
   entity-device-class: done
-  entity-disabled-by-default: done
+  entity-disabled-by-default:
+    status: exempt
+    comment: no noisy or rarely used entity
   entity-translations: done
-  exception-translations: todo
-  icon-translations: todo
-  reconfiguration-flow: todo
+  exception-translations:
+    status: todo
+    comment: setup and update failures raise untranslated messages
+  icon-translations:
+    status: todo
+    comment: entity icons are set in code; icons.json only covers services
+  reconfiguration-flow: done
   repair-issues: done
   stale-devices:
-    status: todo
-    comment: automate the cleanup process
+    status: exempt
+    comment: a config entry has a single, static device, the central
 
   # Platinum
   async-dependency: done
-  inject-websession: todo
-  strict-typing: done
+  inject-websession:
+    status: todo
+    comment: pydiagral creates its own aiohttp session and accepts none
+  strict-typing:
+    status: todo
+    comment: no mypy configuration; pydiagral ships no py.typed
