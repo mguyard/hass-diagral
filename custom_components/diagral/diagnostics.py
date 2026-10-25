@@ -64,6 +64,12 @@ async def async_get_config_entry_diagnostics(
         for issue in ir.async_get(hass).issues.values()
         if issue.domain == DOMAIN and issue.issue_id.endswith(suffix)
     )
+    # Read before the registry and the shapes, so they cover these reads too.
+    api = entry.runtime_data.api
+    ping = await _ping(api)
+    api_keys = await _api_key_count(api, entry.runtime_data.config.serial_id)
+    system = await _system_details(api)
+    automatisms = await _automatisms(api)
 
     return {
         "info": async_redact_data(
@@ -80,7 +86,7 @@ async def async_get_config_entry_diagnostics(
                 "connected": coordinator.last_update_success,
                 "last_success": _iso(coordinator.last_success),
                 "last_error": coordinator.last_error,
-                "ping": await _ping(entry.runtime_data.api),
+                "ping": ping,
             },
             "webhook": {
                 "status": coordinator.webhook_status,
@@ -93,13 +99,12 @@ async def async_get_config_entry_diagnostics(
                 {key: item[key] for key in UNEXPECTED_DATA_FIELDS if key in item}
                 for item in unexpected_data()
             ],
-            "api_keys": await _api_key_count(
-                entry.runtime_data.api, entry.runtime_data.config.serial_id
-            ),
+            "api_keys": api_keys,
         },
         "alarm": _alarm_summary(coordinator.data or {}),
-        "system": await _system_details(entry.runtime_data.api),
-        "automatisms": await _automatisms(entry.runtime_data.api),
+        "system": system,
+        "automatisms": automatisms,
+        "api_shape": api.response_shapes(),
     }
 
 

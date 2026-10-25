@@ -92,6 +92,9 @@ def make_entry() -> MagicMock:
             ]
         )
     )
+    entry.runtime_data.api.response_shapes = MagicMock(
+        return_value={"get_system_status": {"status": "OFF", "groups": [1]}}
+    )
     coordinator = entry.runtime_data.coordinator
     coordinator.last_update_success = False
     coordinator.last_success = datetime(2026, 10, 25, 0, 30, tzinfo=UTC)
@@ -355,6 +358,50 @@ async def test_diagnostics_without_unexpected_data():
         result = await run_diagnostics()
 
     assert result["health"]["unexpected_data"] == []
+
+
+async def test_unexpected_data_include_the_reads_made_for_the_diagnostics():
+    """The registry is read last: an automatism mode met by the download is in."""
+    entry = make_entry()
+    api = entry.runtime_data.api
+
+    def registry() -> list:
+        api.get_system_details.assert_awaited_once()
+        api.get_automatism_rudes.assert_awaited_once()
+        return []
+
+    with patch(
+        "custom_components.diagral.diagnostics.unexpected_data", side_effect=registry
+    ):
+        result = await run_diagnostics(entry=entry)
+
+    assert result["health"]["unexpected_data"] == []
+
+
+async def test_diagnostics_describe_the_shape_of_the_answers():
+    """The shapes pydiagral recorded are listed as it gives them."""
+    result = await run_diagnostics()
+
+    assert result["api_shape"] == {
+        "get_system_status": {"status": "OFF", "groups": [1]}
+    }
+
+
+async def test_answer_shapes_include_the_reads_made_for_the_diagnostics():
+    """Shapes are taken last, so the reads the download itself makes are in."""
+    entry = make_entry()
+    api = entry.runtime_data.api
+
+    def shapes() -> dict:
+        api.get_system_details.assert_awaited_once()
+        api.get_automatism_rudes.assert_awaited_once()
+        return {}
+
+    api.response_shapes = MagicMock(side_effect=shapes)
+
+    result = await run_diagnostics(entry=entry)
+
+    assert result["api_shape"] == {}
 
 
 async def test_package_version_is_read_off_the_event_loop():
