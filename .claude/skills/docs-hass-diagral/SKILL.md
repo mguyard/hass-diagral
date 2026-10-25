@@ -58,13 +58,15 @@ summary: Frequently Asked Questions
 > **The list below is non-exhaustive.** docs.page supports many more components.
 > Before using a component or checking its props, **look it up via Context7 or a web search** on [use.docs.page](https://use.docs.page/) to get up-to-date documentation.
 
-### 3.1 Callout components (examples)
+### 3.1 Callout components
+
+docs.page has exactly four callouts. There is no `<Tip>`, `<Note>` nor `<Callout>`: an unknown component renders as an error box on the page.
 
 | Component | Use for |
 |-----------|---------|
 | `<Info>` | General informational notes |
 | `<Warning>` | Important caveats or breaking changes |
-| `<Tip>` | Optional best practices / helpful hints |
+| `<Error>` | A failure or blocker that prevents progress |
 | `<Success>` | Positive confirmation or completion state |
 
 ```mdx
@@ -247,6 +249,8 @@ chromium.launch({ args: ['--disable-features=LocalNetworkAccessChecks,PrivateNet
 ```
 
 Grepping the rendered text for `&lt;` is the check that catches the trap in §4.1.
+
+The preview cannot show the repository's images: it points `/images/...` to `raw.githubusercontent.com/local/hass-diagral/preview/...`, which does not exist. Every local image is broken there, on every page, while external images load. It is not a defect of the page, and the CLI has no option to change it (`--port` and `--no-browser` only). The published site takes the images of its own branch — `docs.page/mguyard/hass-diagral` from `main`, `~beta` from `beta`, `~dev` from `dev` — so check them on `~dev` once pushed. Images further down a page load lazily: an image not yet scrolled to reports no size without being broken.
 
 ---
 
