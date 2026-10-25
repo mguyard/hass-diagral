@@ -260,7 +260,12 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             if not errors:
                 return await self.async_step_options()
 
-        configured = {serial.upper() for serial in self._async_current_ids() if serial}
+        # An entry title is already "Name (Serial)"
+        configured = {
+            entry.unique_id.upper(): entry.title
+            for entry in self._async_current_entries()
+            if entry.unique_id
+        }
         available = [s for s in self.serials if s.upper() not in configured]
         if not available:
             return self.async_abort(reason="already_configured")
@@ -279,9 +284,13 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors or {},
             description_placeholders={
                 "configured": ", ".join(
-                    s for s in self.serials if s.upper() in configured
+                    configured[s.upper()]
+                    for s in self.serials
+                    if s.upper() in configured
                 )
                 or "-",
+                "setup_guide_url": SERIAL_GUIDE_URL,
+                "serial_id_image_url": SERIAL_IMAGE_URL,
             },
             last_step=False,
         )

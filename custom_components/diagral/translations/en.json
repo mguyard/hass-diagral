@@ -17,7 +17,7 @@
         "step": {
             "user": {
                 "title": "Diagral Account",
-                "description": "Please provide your Diagral credentials. The centrals of this account are listed in the next step.\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
+                "description": "Please provide your Diagral credentials. The centrals of this account are listed in the next step. **Clicking Next takes a few seconds: the centrals of this account are fetched from Diagral**.\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
                 "data": {
                     "username": "Username (email address)",
                     "password": "Password",
@@ -26,7 +26,7 @@
             },
             "central": {
                 "title": "Diagral central",
-                "description": "Choose the Diagral central to add to Home Assistant.\n\rAlready in Home Assistant, so not listed: {configured}",
+                "description": "Choose the Diagral central to add to Home Assistant.\n\rTo check its serial ID, look at the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})\n\rAlready in Home Assistant, so not listed: {configured}",
                 "data": {
                     "serial_id": "Central (serial ID)"
                 }

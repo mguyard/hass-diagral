@@ -25,6 +25,8 @@ from custom_components.diagral.const import (
     CONF_PIN_CODE,
     CONF_SERIAL_ID,
     DIAGRAL_VENDOR,
+    SERIAL_GUIDE_URL,
+    SERIAL_IMAGE_URL,
 )
 from custom_components.diagral.models import AccountInfoData
 from pydiagral.exceptions import (
@@ -346,7 +348,7 @@ class TestConfigFlowLogs:
         flow.serials = ["FAKECENTRAL01"]
         flow.async_set_unique_id = AsyncMock()
         flow._abort_if_unique_id_configured = MagicMock()
-        flow._async_current_ids = MagicMock(return_value=set())
+        flow._async_current_entries = MagicMock(return_value=[])
         return flow
 
     async def test_user_step_hides_credentials(self, caplog):
@@ -507,6 +509,11 @@ def account_input() -> dict:
     }
 
 
+CONFIGURED_ENTRY = SimpleNamespace(
+    unique_id="FAKECENTRAL01", title="fake home (FAKECENTRAL01)"
+)
+
+
 def central_choices(result: dict) -> list[str]:
     """Return the serials the central step offers."""
     return result["data_schema"].schema[CONF_SERIAL_ID].config["options"]
@@ -569,9 +576,9 @@ class TestAccountStep:
     """The account step lists the centrals, or falls back to typing the serial."""
 
     async def test_lists_only_the_centrals_not_in_home_assistant(self):
-        """Centrals already set up are left out of the list and named above it."""
+        """Centrals already set up are left out and named above, as Name (Serial)."""
         flow = TestConfigFlowLogs.make_flow()
-        flow._async_current_ids = MagicMock(return_value={"FAKECENTRAL01"})
+        flow._async_current_entries = MagicMock(return_value=[CONFIGURED_ENTRY])
         with patch(
             "custom_components.diagral.config_flow.list_serials",
             AsyncMock(return_value=["FAKECENTRAL01", "FAKECENTRAL02"]),
@@ -580,7 +587,22 @@ class TestAccountStep:
 
         assert result["step_id"] == "central"
         assert central_choices(result) == ["FAKECENTRAL02"]
-        assert result["description_placeholders"] == {"configured": "FAKECENTRAL01"}
+        assert result["description_placeholders"]["configured"] == (
+            "fake home (FAKECENTRAL01)"
+        )
+
+    async def test_central_step_shows_where_the_serial_is(self):
+        """No name before a key exists: the step helps check the serial instead."""
+        flow = TestConfigFlowLogs.make_flow()
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(return_value=["FAKECENTRAL01"]),
+        ):
+            result = await flow.async_step_user(account_input())
+
+        placeholders = result["description_placeholders"]
+        assert placeholders["setup_guide_url"] == SERIAL_GUIDE_URL
+        assert placeholders["serial_id_image_url"] == SERIAL_IMAGE_URL
 
     async def test_single_central_is_still_shown(self):
         """A single available central is listed, so the user sees what is added."""
@@ -593,12 +615,12 @@ class TestAccountStep:
 
         assert result["step_id"] == "central"
         assert central_choices(result) == ["FAKECENTRAL01"]
-        assert result["description_placeholders"] == {"configured": "-"}
+        assert result["description_placeholders"]["configured"] == "-"
 
     async def test_every_central_already_set_up_aborts(self):
         """Nothing left to add: the flow stops, without asking for anything."""
         flow = TestConfigFlowLogs.make_flow()
-        flow._async_current_ids = MagicMock(return_value={"FAKECENTRAL01"})
+        flow._async_current_entries = MagicMock(return_value=[CONFIGURED_ENTRY])
         with patch(
             "custom_components.diagral.config_flow.list_serials",
             AsyncMock(return_value=["FAKECENTRAL01"]),
