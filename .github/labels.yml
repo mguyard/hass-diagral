@@ -38,3 +38,14 @@
 - name: waiting
   description: Waiting for something
   color: daa036
+
+# Stale handling (match entries in `lock-stale.yml`).
+- name: waiting-for-response
+  description: Waiting for a reply from the reporter
+  color: fbca04
+- name: stale
+  description: No activity while waiting for a response
+  color: ededed
+- name: no-stale
+  description: Never marked as stale
+  color: c2e0c6
