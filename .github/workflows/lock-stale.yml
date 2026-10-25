@@ -21,9 +21,11 @@ jobs:
           pr-lock-reason: ''
           log-output: true
 
-  stale: # Mark stale issues and pull requests
+  stale: # Mark stale issues
+    if: github.repository_owner == 'mguyard'
     runs-on: ubuntu-latest
     permissions:
+      actions: write # keeps the action's state between runs
       issues: write
 
     steps:
@@ -37,4 +39,8 @@ jobs:
             recent activity. It will be closed if no further activity occurs. Thank you
             for your contributions.
           exempt-issue-labels: "no-stale, bug, documentation"
+          # Pull requests would otherwise get the defaults: all of them, stale
+          # after 60 days, closed 7 days later
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
     
