@@ -393,10 +393,14 @@ class TestSetupEntry:
     """async_setup_entry() builds the Diagral client."""
 
     @staticmethod
-    async def build_client(hass: MagicMock) -> MagicMock:
+    async def build_client(
+        hass: MagicMock,
+        entry: MagicMock | None = None,
+        coordinator_cls: MagicMock | None = None,
+    ) -> MagicMock:
         """Run the setup until the client is built; return the client class."""
         api_cls = MagicMock()
-        coordinator_cls = MagicMock()
+        coordinator_cls = coordinator_cls or MagicMock()
         coordinator_cls.return_value.async_config_entry_first_refresh = AsyncMock(
             side_effect=DiagralAPIError("stop after construction")
         )
@@ -414,8 +418,15 @@ class TestSetupEntry:
             ),
             pytest.raises(ConfigEntryNotReady),
         ):
-            await async_setup_entry(hass, MagicMock())
+            await async_setup_entry(hass, entry or MagicMock())
         return api_cls
+
+    async def test_coordinator_is_given_its_config_entry(self):
+        """The coordinator scopes its device lookups to the entry it serves."""
+        hass, entry, coordinator_cls = MagicMock(), MagicMock(), MagicMock()
+        api_cls = await self.build_client(hass, entry, coordinator_cls)
+
+        coordinator_cls.assert_called_once_with(hass, entry, api_cls.return_value)
 
     async def test_client_allows_the_longest_read_attempt(self):
         """The client's request timeout covers the coordinator's last attempt."""

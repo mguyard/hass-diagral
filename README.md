@@ -28,6 +28,7 @@
 
 ## Requirements
 
+- Home Assistant 2026.8 or later.
 - A Diagral alarm with a connectivity module (DIAG56AAX, or DIAG59AAX inside a DIAG99AGX).
 - A Diagral eOne account, the one used by the mobile application.
 - For real-time updates: a Home Assistant reachable from the Internet over HTTPS, or a [Home Assistant Cloud](https://www.nabucasa.com) subscription. Without it, the state is refreshed every 5 minutes.

@@ -3,7 +3,7 @@
 import asyncio
 from datetime import datetime, timedelta
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import ClientError, DiagralAPIError, ServerError
@@ -26,6 +26,9 @@ from .const import (
     READ_RETRY_PAUSES,
 )
 
+if TYPE_CHECKING:
+    from . import DiagralConfigEntry
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -40,11 +43,16 @@ def is_transient_error(err: Exception) -> bool:
 class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching Diagral data."""
 
-    def __init__(self, hass: HomeAssistant, api: DiagralAPI) -> None:
+    config_entry: DiagralConfigEntry
+
+    def __init__(
+        self, hass: HomeAssistant, config_entry: DiagralConfigEntry, api: DiagralAPI
+    ) -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=config_entry,
             name=DOMAIN,
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
         )
@@ -161,8 +169,8 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
         """Update device info."""
         alarm_config: AlarmConfiguration = self.data.get("alarm_config")
         dev_reg = dr.async_get(self.hass)
-        hadevice = dev_reg.async_get_device(
-            identifiers={(DOMAIN, alarm_config.alarm.central.serial)}
+        hadevice = dev_reg.async_get_device_by_identifier(
+            (DOMAIN, alarm_config.alarm.central.serial), self.config_entry.entry_id
         )
         if hadevice and hadevice.sw_version is not None:
             _LOGGER.debug("Actual sw_version: %s", hadevice.sw_version)

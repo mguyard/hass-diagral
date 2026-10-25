@@ -262,3 +262,56 @@ class TestHealth:
         assert coordinator.webhook_status == "connected"
         assert coordinator.last_webhook is not None
         assert coordinator.async_update_listeners.call_count == 2
+
+
+def make_device_coordinator(sw_version: str | None) -> tuple[MagicMock, MagicMock]:
+    """Return a coordinator holding a central and the registry it reads."""
+    coordinator = object.__new__(DiagralDataUpdateCoordinator)
+    coordinator.hass = MagicMock()
+    coordinator.config_entry = MagicMock(entry_id="entry1")
+    central = SimpleNamespace(
+        serial="SERIAL123",
+        firmwares=SimpleNamespace(central="2.1", centralradio="1.4"),
+    )
+    coordinator.data = {
+        "alarm_config": SimpleNamespace(alarm=SimpleNamespace(central=central))
+    }
+    registry = MagicMock()
+    registry.async_get_device_by_identifier.return_value = (
+        None
+        if sw_version is None
+        else SimpleNamespace(id="device1", sw_version=sw_version)
+    )
+    return coordinator, registry
+
+
+class TestDeviceInfo:
+    """The central's firmware follows what Diagral reports."""
+
+    async def test_device_is_looked_up_within_its_config_entry(self):
+        """The lookup is scoped to the entry, never the deprecated global one."""
+        coordinator, registry = make_device_coordinator("2.1 / Radio:1.4")
+        with patch.object(coordinator_module.dr, "async_get", return_value=registry):
+            await coordinator._update_device_info()
+
+        registry.async_get_device_by_identifier.assert_called_once_with(
+            (coordinator_module.DOMAIN, "SERIAL123"), "entry1"
+        )
+        registry.async_get_device.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("sw_version", "expected"),
+        [
+            ("2.0 / Radio:1.4", [call("device1", sw_version="2.1 / Radio:1.4")]),
+            ("2.1 / Radio:1.4", []),
+            (None, []),
+        ],
+        ids=["firmware-changed", "firmware-unchanged", "no-device"],
+    )
+    async def test_firmware_is_updated_only_when_it_changed(self, sw_version, expected):
+        """A new firmware is written once; an unknown device is left alone."""
+        coordinator, registry = make_device_coordinator(sw_version)
+        with patch.object(coordinator_module.dr, "async_get", return_value=registry):
+            await coordinator._update_device_info()
+
+        assert registry.async_update_device.call_args_list == expected

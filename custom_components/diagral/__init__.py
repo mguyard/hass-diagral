@@ -86,7 +86,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
             session=async_get_clientsession(hass),
             vendor=DIAGRAL_VENDOR,
         )
-        coordinator = DiagralDataUpdateCoordinator(hass, api)
+        coordinator = DiagralDataUpdateCoordinator(hass, entry, api)
         await coordinator.async_config_entry_first_refresh()
 
         try:
