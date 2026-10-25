@@ -248,8 +248,21 @@ class TestTransmitterCheck:
         loaded.runtime_data.coordinator.async_request_refresh.assert_awaited_once()
         hass.bus.async_fire.assert_called_once()
 
+    async def test_own_central_logs_no_identifier(self, caplog):
+        """Debug logs name the notification, never the serial or the user."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        hass, _ = make_hass_with_entries()
+
+        with patch("custom_components.diagral.webhook.async_dispatcher_send"):
+            await handle_webhook(hass, WEBHOOK_ID, make_request(PRODUCTION_STATUS))
+
+        assert "REMOTE-ARMING-OF-GROUP" in caplog.text
+        assert "FAKECENTRAL01" not in caplog.text
+        assert "Fake User" not in caplog.text
+
     async def test_other_transmitter_is_ignored(self, caplog):
         """A notification from another central drives nothing, logs no id."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
         hass, loaded = make_hass_with_entries()
         payload = {**PRODUCTION_STATUS, "transmitter_id": "OTHERCENTRAL99"}
 
