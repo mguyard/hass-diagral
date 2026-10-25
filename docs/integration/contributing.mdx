@@ -4,62 +4,17 @@ previous: /integration/actions
 previousTitle: Actions
 ---
 
-Want to contribute to the `Diagral` integration? Great! We have a few small asks though:
-
-<Info>
-- Create your pull requests against the `dev` branch.
-- Describe your changes, and why you made them, in detail in your pull request.
-</Info>
+Want to contribute to the `Diagral` integration? Great! Bug reports, feature requests and pull requests are all welcome.
 
 <Steps>
-  <Step title="Fork and clone this repo">
-    Fork the repository on GitHub, then clone your fork
-
-    ```bash
-    git clone https://github.com/<your-account>/hass-diagral.git
-    ```
-
+  <Step title="Read the contributing guide">
+    The [contributing guide](https://github.com/mguyard/hass-diagral/blob/dev/CONTRIBUTING.md) explains how to set up your environment, the checks to run, the commit format and the ground rules.
   </Step>
-  <Step title="Create a new branch">
-    Create a new branch from `dev` in your cloned repo
-
-    ```bash
-    git checkout dev
-    git checkout -b new-feature-x
-    ```
-
+  <Step title="Work from the dev branch">
+    Fork the repository, create your branch from `dev`, and add or update the tests that cover your changes.
   </Step>
-  <Step title="Make your changes">
-    Develop your changes, and add or update the tests in `custom_components/diagral/tests/` that cover them.
-    Then run the same checks as the CI, with the `pydiagral` version pinned in `custom_components/diagral/manifest.json`:
-
-    ```bash
-    pip install homeassistant pydiagral==<pinned version> pytest pytest-asyncio pytest-timeout pytest-mock ruff==0.17.1
-    python -m pytest custom_components/diagral/tests/ -v
-    ruff check custom_components/diagral
-    ruff format --check custom_components/diagral
-    ```
-
-  </Step>
-  <Step title="Commit Your Changes">
-    Commit your changes with a clear and concise message that follows the [Conventional Commits guidelines](https://www.conventionalcommits.org/en/v1.0.0/).
-
-    ```bash
-    git commit -m 'feat: Implemented new feature x.'
-    ```
-
-  </Step>
-  <Step title="Push to GitHub">
-    Push the changes to your forked repository.
-
-    ```bash
-    git push origin new-feature-x
-    ```
-
-  </Step>
-  <Step title="Submit a Pull Request">
-    Create a PR against the original project repository in the `dev` branch. Clearly describe the changes and their motivations.
-    All PR without enough details will be quickly refused.
+  <Step title="Open a pull request against dev">
+    Fill in the template: what changed, why, and how you verified it. Every commit must be signed.
   </Step>
 </Steps>
 
