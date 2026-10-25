@@ -14,6 +14,7 @@ from pydiagral.exceptions import (
     AuthenticationError,
     ClientError,
     ConfigurationError,
+    PinCodeError,
     SessionError,
     ValidationError,
 )
@@ -135,6 +136,9 @@ async def validate_account(
                     title=f"{alarm_name} ({account_info.serial_id})",
                     keys=connection.keys,
                 )
+        except PinCodeError as error:
+            _LOGGER.error("Error during validation: %s", str(error))
+            raise InvalidPin from error
         except AuthenticationError as error:
             _LOGGER.error("Error during validation: %s", str(error))
             raise InvalidAuth from error
@@ -244,7 +248,11 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                         return await self.async_step_serial()
                     return await self.async_step_central()
 
-        # Build form
+        return self._async_show_account_form(errors)
+
+    @callback
+    def _async_show_account_form(self, errors: dict[str, str]) -> ConfigFlowResult:
+        """Show the account step; a PIN refused later on is fixed here too."""
         account_schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): str,
@@ -270,6 +278,8 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             errors = await self._async_check_central(user_input[CONF_SERIAL_ID])
             if not errors:
                 return await self.async_step_options()
+            if CONF_PIN_CODE in errors:
+                return self._async_show_account_form(errors)
 
         # An entry title is already "Name (Serial)"
         configured = {
@@ -316,6 +326,8 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             errors = await self._async_check_central(user_input[CONF_SERIAL_ID])
             if not errors:
                 return await self.async_step_options()
+            if CONF_PIN_CODE in errors:
+                return self._async_show_account_form(errors)
 
         return self.async_show_form(
             step_id="serial",
@@ -347,6 +359,8 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         except CannotConnect:
             return {"base": "cannot_connect"}
+        except InvalidPin:
+            return {CONF_PIN_CODE: "pin_refused"}
         except InvalidAuth:
             return {"base": "invalid_auth"}
         except Exception:
@@ -518,6 +532,8 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                     )
                 except CannotConnect:
                     errors["base"] = "cannot_connect"
+                except InvalidPin:
+                    errors[CONF_PIN_CODE] = "pin_refused"
                 except InvalidAuth:
                     errors["base"] = "invalid_auth"
                 except Exception:
@@ -676,3 +692,7 @@ class CannotConnect(HomeAssistantError):
 
 class InvalidAuth(HomeAssistantError):
     """Error to indicate there is invalid auth."""
+
+
+class InvalidPin(InvalidAuth):
+    """Error to indicate the account was accepted but the central refused the PIN."""

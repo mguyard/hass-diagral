@@ -12,6 +12,7 @@
             "invalid_alarmpanel_code": "Invalid Alarm Panel Code. Alarm Panel Code must contain only digits (4 or more).",
             "missing_alarmpanel_code": "Alarm Panel Code is required when you set the action type to something other than `Never`.",
             "invalid_pin": "Invalid Master (PIN) code. Master (PIN) code must contain only digits.",
+            "pin_refused": "Diagral refused the Master (PIN) code for this central. Check it and enter it again.",
             "unknown": "Unexpected error"
         },
         "step": {

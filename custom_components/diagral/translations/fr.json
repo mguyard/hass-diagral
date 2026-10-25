@@ -12,6 +12,7 @@
             "invalid_alarmpanel_code": "Code du panneau d'alarme invalide. Le code doit contenir uniquement des chiffres (4 ou plus).",
             "missing_alarmpanel_code": "Le code du panneau d'alarme est requis lorsque vous configurez le type d'action sur une valeur autre que `Jamais`.",
             "invalid_pin": "Master (PIN) code invalide. Le Master (PIN) code doit contenir uniquement des chiffres.",
+            "pin_refused": "Diagral a refusé le Master (PIN) code pour cette centrale. Vérifiez-le et saisissez-le à nouveau.",
             "unknown": "Erreur inattendue"
         },
         "step": {

@@ -4,7 +4,9 @@ Tests is_valid_email(), is_valid_pin(), and is_valid_alarmpanel_code()
 which have no side effects and require only Home Assistant to be importable.
 """
 
+import json
 import logging
+import pathlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,6 +15,7 @@ from custom_components.diagral.config_flow import (
     DiagralConfigFlow,
     DiagralOptionsFlow,
     InvalidAuth,
+    InvalidPin,
     is_valid_alarmpanel_code,
     is_valid_email,
     is_valid_pin,
@@ -35,12 +38,15 @@ from pydiagral.exceptions import (
     AuthenticationError,
     ClientError,
     DiagralAPIError,
+    PinCodeError,
     ServerError,
 )
 import pytest
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import AbortFlow
+
+TRANSLATIONS = pathlib.Path(__file__).parent.parent / "translations"
 
 
 @pytest.fixture(autouse=True)
@@ -433,11 +439,18 @@ class TestValidateAccountErrors:
         ("error", "expected"),
         [
             (AuthenticationError("Authentication rejected by Diagral"), InvalidAuth),
+            (PinCodeError("Diagral rejected the PIN code (HTTP 401)"), InvalidPin),
             (ServerError("Diagral service error (HTTP 503)"), CannotConnect),
             (ClientError("Diagral request timed out"), CannotConnect),
             (DiagralAPIError("Diagral API error (HTTP 400)"), CannotConnect),
         ],
-        ids=["refused-login", "server-error", "network-error", "other-api-error"],
+        ids=[
+            "refused-login",
+            "refused-pin",
+            "server-error",
+            "network-error",
+            "other-api-error",
+        ],
     )
     async def test_error_is_classified(self, error, expected):
         """Only a refused login is reported as invalid authentication."""
@@ -747,6 +760,47 @@ class TestCentralChoice:
             await getattr(flow, f"async_step_{step}")(user_input)
 
         validate.assert_not_awaited()
+
+
+class TestPinRefused:
+    """A refused PIN is shown under the PIN field, where it can be fixed."""
+
+    @staticmethod
+    async def refuse_pin(*_, **__):
+        """Fail the validation as a central refusing the PIN does."""
+        raise InvalidPin from PinCodeError("Diagral rejected the PIN code (HTTP 401)")
+
+    @pytest.mark.parametrize("step", ["central", "serial"])
+    async def test_central_step_returns_to_the_account_step(self, step):
+        """Only the account step has a PIN field: the user is taken back to it."""
+        flow, user_input = make_step(step)
+        with patch(
+            "custom_components.diagral.config_flow.validate_account", self.refuse_pin
+        ):
+            result = await getattr(flow, f"async_step_{step}")(user_input)
+
+        assert result["step_id"] == "user"
+        assert result["errors"] == {CONF_PIN_CODE: "pin_refused"}
+
+    async def test_reconfigure_flags_the_pin_field(self):
+        """Reconfiguring with a refused PIN flags that field, not the account."""
+        flow, user_input = make_step("reconfigure")
+        with patch(
+            "custom_components.diagral.config_flow.validate_account", self.refuse_pin
+        ):
+            result = await flow.async_step_reconfigure(user_input)
+
+        assert result["errors"] == {CONF_PIN_CODE: "pin_refused"}
+
+    @pytest.mark.parametrize("language", ["en", "fr"])
+    def test_is_translated(self, language):
+        """Both languages explain a refused PIN, apart from a malformed one."""
+        translations = json.loads(
+            (TRANSLATIONS / f"{language}.json").read_text(encoding="utf-8")
+        )
+        errors = translations["config"]["error"]
+        assert errors["pin_refused"]
+        assert errors["pin_refused"] != errors["invalid_pin"]
 
 
 class TestReconfigureSecrets:
