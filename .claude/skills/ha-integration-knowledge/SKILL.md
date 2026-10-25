@@ -16,7 +16,7 @@ The rules themselves — invariants, commit format, branches — are in `AGENTS.
 - **Language**: Python 3.14 (required by Home Assistant since 2026.3), `async`/`await` everywhere for I/O
 - **Framework**: Home Assistant custom component, `integration_type: hub`, `iot_class: cloud_polling`
 - **Dependencies**: `pydiagral` (pinned in `manifest.json`); HA `alarm_control_panel` and `cloud` (declared in `dependencies`)
-  - Documentation: [mguyard.github.io/pydiagral](https://mguyard.github.io/pydiagral/), or Context7. Source: [github.com/mguyard/pydiagral](https://github.com/mguyard/pydiagral).
+  - Documentation: [mguyard.github.io/pydiagral/beta](https://mguyard.github.io/pydiagral/beta/) for the 2.0 beta that `dev` pins (`/stable/` is 1.6), or Context7. Source: [github.com/mguyard/pydiagral](https://github.com/mguyard/pydiagral).
   - Check the installed version's API before using a class, method or model — do not assume it.
 - **Linter**: `ruff` — `ruff check` and `ruff format --check`, configured in `custom_components/diagral/pyproject.toml`. Line length 88, `E501` deliberately ignored. CI pins `ruff==0.17.1`.
 - **Tests**: `pytest` with `asyncio_mode = "auto"` — see `testing-hass-diagral`
