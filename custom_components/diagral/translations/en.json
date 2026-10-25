@@ -182,6 +182,20 @@
             "title": "Diagral webhook used by another installation: {entry_title}",
             "fix_flow": {
                 "step": {
+                    "init": {
+                        "title": "Diagral webhook used by another installation",
+                        "description": "The Diagral cloud sends the events of **{entry_title}** to **{other_host}**, not to this Home Assistant. Intrusion alerts only arrive this way.",
+                        "menu_options": {
+                            "confirm": "Take the webhook over",
+                            "ignore": "Ignore this warning",
+                            "unignore": "Stop ignoring this warning"
+                        },
+                        "menu_option_descriptions": {
+                            "confirm": "Events come to this Home Assistant. {other_host} stops receiving them.",
+                            "ignore": "{other_host} keeps the events. The warning stays hidden until this Home Assistant owns the webhook.",
+                            "unignore": "The warning shows in the repairs again. {other_host} keeps the events."
+                        }
+                    },
                     "confirm": {
                         "title": "Take over the Diagral webhook",
                         "description": "The Diagral cloud sends the events of **{entry_title}** to another installation (**{other_host}**), so Home Assistant does not receive them. Intrusion alerts only arrive this way: the alarm panel cannot show *triggered* while this lasts. Polling still updates the arming state every 5 minutes.\n\nThe integration no longer overwrites a subscription it did not create. If **{other_host}** is not in use any more, or you want this installation to receive the events, confirm below: the subscription will point here, and **{other_host}** will stop receiving events.\n\nYou can also do this at any time with the `diagral.register_webhook` action."
@@ -189,7 +203,9 @@
                 },
                 "abort": {
                     "entry_not_loaded": "The Diagral integration is not loaded. Reload it, then try again.",
-                    "take_over_failed": "The Diagral cloud refused the change. Check the logs, then try again."
+                    "take_over_failed": "The Diagral cloud refused the change. Check the logs, then try again.",
+                    "ignored": "The warning is ignored. It stays hidden while {other_host} keeps the webhook; show ignored repairs to see it again.",
+                    "unignored": "The warning shows in the repairs again."
                 }
             }
         },

@@ -9,9 +9,10 @@ from homeassistant.components.repairs import (
 )
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 
 from . import WebhookUnavailable, register_webhook
-from .const import ISSUE_WEBHOOK_REGISTRATION_FAILED, WEBHOOK_CONNECTED
+from .const import DOMAIN, ISSUE_WEBHOOK_REGISTRATION_FAILED, WEBHOOK_CONNECTED
 
 
 class TakeOverWebhookFlow(ConfirmRepairFlow):
@@ -24,6 +25,43 @@ class TakeOverWebhookFlow(ConfirmRepairFlow):
         """Initialize the flow for one config entry."""
         super().__init__()
         self._entry_id = entry_id
+
+    async def async_step_init(
+        self, user_input: dict[str, str] | None = None
+    ) -> RepairsFlowResult:
+        """Offer to take the webhook over, or to leave it to the other installation."""
+        issue = ir.async_get(self.hass).async_get_issue(DOMAIN, self.issue_id)
+        # Opened from the ignored repairs, the second choice shows it again
+        ignored = issue is not None and issue.dismissed_version is not None
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["confirm", "unignore" if ignored else "ignore"],
+            description_placeholders=self._placeholders(),
+        )
+
+    async def async_step_ignore(
+        self, user_input: dict[str, str] | None = None
+    ) -> RepairsFlowResult:
+        """Hide the issue; the hourly check recreating it keeps it hidden."""
+        placeholders = self._placeholders()
+        ir.async_ignore_issue(self.hass, DOMAIN, self.issue_id, True)
+        # An abort keeps the issue: finishing the flow would delete it
+        return self.async_abort(reason="ignored", description_placeholders=placeholders)
+
+    async def async_step_unignore(
+        self, user_input: dict[str, str] | None = None
+    ) -> RepairsFlowResult:
+        """Show an ignored issue in the repairs again."""
+        placeholders = self._placeholders()
+        ir.async_ignore_issue(self.hass, DOMAIN, self.issue_id, False)
+        return self.async_abort(
+            reason="unignored", description_placeholders=placeholders
+        )
+
+    def _placeholders(self) -> dict[str, str] | None:
+        """Return the entry title and other host the issue was raised with."""
+        issue = ir.async_get(self.hass).async_get_issue(DOMAIN, self.issue_id)
+        return issue.translation_placeholders if issue else None
 
     async def async_step_confirm(
         self, user_input: dict[str, str] | None = None
@@ -57,6 +95,12 @@ class RetryWebhookFlow(TakeOverWebhookFlow):
 
     take_over = False
     failed_reason = "retry_failed"
+
+    async def async_step_init(
+        self, user_input: dict[str, str] | None = None
+    ) -> RepairsFlowResult:
+        """Retrying spares any foreign subscription: nothing to choose."""
+        return await self.async_step_confirm()
 
 
 async def async_create_fix_flow(
