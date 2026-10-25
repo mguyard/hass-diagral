@@ -150,6 +150,8 @@ The changelog credits contributors: an author other than the maintainer appears 
 
 References in commit messages render only when a closing keyword introduces them (`Closes #N`, `Fixes #N`); a plain mention is dropped from the notes. Keep issue and PR references (`#N`, `owner/repo#N`) out of a `BREAKING CHANGE:` paragraph: the commit parser ends the note at the first line that holds one and drops that line and the rest, silently. Put the reference in the body instead.
 
+Never write a closing keyword (`close`, `fix`, `resolve` and their forms) before a `#N` in a commit message or a PR body unless that issue must close — not even quoted. GitHub closes the issue when the commit reaches `main`, and `@semantic-release/github` comments on it and labels it at every release; a number that does not exist fails that step after the tag is pushed. Backticks are safe from semantic-release, which ignores code spans.
+
 Put a `BREAKING CHANGE:` footer last, after the `Tests:` line and any `Co-authored-by:` trailer: the parser appends every line that follows the footer to the note, so they would be published under BREAKING CHANGES. A co-author placed before the footer is still credited, since the credits read the whole message.
 
 ## Pull requests
