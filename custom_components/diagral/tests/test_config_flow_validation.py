@@ -360,7 +360,7 @@ class TestConfigFlowLogs:
         return flow
 
     async def test_user_step_hides_credentials(self, caplog):
-        """Submitting the account step logs neither password nor PIN."""
+        """Submitting the account step does not log the password."""
         caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
         flow = self.make_flow()
         with (
@@ -371,13 +371,23 @@ class TestConfigFlowLogs:
             patch.object(flow, "async_step_central", AsyncMock()),
         ):
             await flow.async_step_user(
-                {
-                    CONF_USERNAME: "user@example.com",
-                    CONF_PASSWORD: "SECRETPASSWORD",
-                    CONF_PIN_CODE: "97531",
-                }
+                {CONF_USERNAME: "user@example.com", CONF_PASSWORD: "SECRETPASSWORD"}
             )
         assert "SECRETPASSWORD" not in caplog.text
+
+    async def test_central_step_hides_the_pin(self, caplog):
+        """Submitting the central step does not log the PIN."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        flow = self.make_flow()
+        with (
+            patch(
+                "custom_components.diagral.config_flow.validate_account",
+                AsyncMock(side_effect=CannotConnect),
+            ),
+        ):
+            await flow.async_step_central(
+                {CONF_SERIAL_ID: "FAKECENTRAL01", CONF_PIN_CODE: "97531"}
+            )
         assert "97531" not in caplog.text
 
     async def test_reconfigure_step_hides_credentials(self, caplog):
@@ -477,7 +487,7 @@ def make_step(step: str) -> tuple[DiagralConfigFlow, dict]:
     if step == "options":
         return flow, {"alarmpanel_options": {CONF_ALARMPANEL_ACTIONTYPE_CODE: "never"}}
     if step in ("central", "serial"):
-        return flow, {CONF_SERIAL_ID: ACCOUNT.serial_id}
+        return flow, {CONF_SERIAL_ID: ACCOUNT.serial_id, CONF_PIN_CODE: "4321"}
     if step == "reconfigure":
         flow.context = {"entry_id": "entry"}
         flow.hass.config_entries.async_get_entry.return_value.data = {
@@ -517,11 +527,12 @@ class TestFlowErrorMessages:
 
 def account_input() -> dict:
     """Return a valid submission of the account step."""
-    return {
-        CONF_USERNAME: ACCOUNT.username,
-        CONF_PASSWORD: ACCOUNT.password,
-        CONF_PIN_CODE: ACCOUNT.pin_code,
-    }
+    return {CONF_USERNAME: ACCOUNT.username, CONF_PASSWORD: ACCOUNT.password}
+
+
+def form_fields(result: dict) -> set[str]:
+    """Return the names of the fields a form step asks for."""
+    return {str(key) for key in result["data_schema"].schema}
 
 
 CONFIGURED_ENTRY = SimpleNamespace(
@@ -659,6 +670,21 @@ class TestAccountStep:
         assert placeholders["setup_guide_url"] == SERIAL_GUIDE_URL
         assert placeholders["serial_id_image_url"] == SERIAL_IMAGE_URL
 
+    async def test_pin_is_asked_with_the_central(self):
+        """Each central has its own PIN: the account step asks for none."""
+        flow = TestConfigFlowLogs.make_flow()
+        account = await flow.async_step_user()
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(return_value=["FAKECENTRAL01"]),
+        ):
+            central = await flow.async_step_user(account_input())
+        serial = await flow.async_step_serial()
+
+        assert form_fields(account) == {CONF_USERNAME, CONF_PASSWORD}
+        assert form_fields(central) == {CONF_SERIAL_ID, CONF_PIN_CODE}
+        assert form_fields(serial) == {CONF_SERIAL_ID, CONF_PIN_CODE}
+
     async def test_single_central_is_still_shown(self):
         """A single available central is listed, so the user sees what is added."""
         flow = TestConfigFlowLogs.make_flow()
@@ -741,6 +767,8 @@ class TestCentralChoice:
 
         flow.async_set_unique_id.assert_awaited_once_with(ACCOUNT.serial_id)
         assert validate.call_args.kwargs["account_info"].serial_id == ACCOUNT.serial_id
+        assert validate.call_args.kwargs["account_info"].pin_code == "4321"
+        assert flow.account_pincode == "4321"
         assert validate.call_args.kwargs["ephemeral"] is True
         assert flow.serialid == ACCOUNT.serial_id
         options.assert_awaited_once()
@@ -771,16 +799,30 @@ class TestPinRefused:
         raise InvalidPin from PinCodeError("Diagral rejected the PIN code (HTTP 401)")
 
     @pytest.mark.parametrize("step", ["central", "serial"])
-    async def test_central_step_returns_to_the_account_step(self, step):
-        """Only the account step has a PIN field: the user is taken back to it."""
+    async def test_central_step_flags_its_pin_field(self, step):
+        """The PIN belongs to the central: it is fixed on the step that asks for it."""
         flow, user_input = make_step(step)
         with patch(
             "custom_components.diagral.config_flow.validate_account", self.refuse_pin
         ):
             result = await getattr(flow, f"async_step_{step}")(user_input)
 
-        assert result["step_id"] == "user"
+        assert result["step_id"] == step
         assert result["errors"] == {CONF_PIN_CODE: "pin_refused"}
+
+    @pytest.mark.parametrize("step", ["central", "serial"])
+    async def test_malformed_pin_is_refused_before_any_call(self, step):
+        """A PIN that is not digits is flagged without asking Diagral."""
+        flow, user_input = make_step(step)
+        validate = AsyncMock()
+        with patch("custom_components.diagral.config_flow.validate_account", validate):
+            result = await getattr(flow, f"async_step_{step}")(
+                {**user_input, CONF_PIN_CODE: "12ab"}
+            )
+
+        assert result["step_id"] == step
+        assert result["errors"] == {CONF_PIN_CODE: "invalid_pin"}
+        validate.assert_not_awaited()
 
     async def test_reconfigure_flags_the_pin_field(self):
         """Reconfiguring with a refused PIN flags that field, not the account."""

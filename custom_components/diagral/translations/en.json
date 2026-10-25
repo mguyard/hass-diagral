@@ -21,20 +21,21 @@
                 "description": "Please provide your Diagral credentials. The centrals of this account are listed in the next step. **Clicking Next takes a few seconds: the centrals of this account are fetched from Diagral**.\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
                 "data": {
                     "username": "Username (email address)",
-                    "password": "Password",
-                    "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
+                    "password": "Password"
                 }
             },
             "central": {
                 "title": "Diagral central",
                 "description": "Choose the Diagral central to add to Home Assistant.\n\rTo check its serial ID, look at the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})\n\rAlready in Home Assistant, so not listed: {configured}",
                 "data": {
-                    "serial_id": "Central (serial ID)"
+                    "serial_id": "Central (serial ID)",
+                    "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
                 }
             },
             "serial": {
                 "data": {
-                    "serial_id": "Serial ID of DIAG56AAX/DIAG59AAX module"
+                    "serial_id": "Serial ID of DIAG56AAX/DIAG59AAX module",
+                    "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
                 },
                 "description": "The centrals of your account could not be listed: enter the serial ID of your central.\n\rTo set up your Diagral alarm system, you need a DIAG56AAX/DIAG59AAX module which connects your alarm to the internet for remote control.\n\rTo find your Serial ID, check the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})",
                 "title": "Diagral"

@@ -222,16 +222,12 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             _LOGGER.debug("Validating account credentials")
-            # Check if the user has entered a valid email and pin code
             if not is_valid_email(user_input[CONF_USERNAME]):
                 errors[CONF_USERNAME] = "invalid_email"
-            if not is_valid_pin(user_input[CONF_PIN_CODE]):
-                errors[CONF_PIN_CODE] = "invalid_pin"
 
             if not errors:
                 self.account_username = user_input[CONF_USERNAME]
                 self.account_password = user_input[CONF_PASSWORD]
-                self.account_pincode = user_input[CONF_PIN_CODE]
                 try:
                     self.serials = await list_serials(
                         self.hass, self.account_username, self.account_password
@@ -248,16 +244,11 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                         return await self.async_step_serial()
                     return await self.async_step_central()
 
-        return self._async_show_account_form(errors)
-
-    @callback
-    def _async_show_account_form(self, errors: dict[str, str]) -> ConfigFlowResult:
-        """Show the account step; a PIN refused later on is fixed here too."""
+        # The PIN belongs to a central: it is asked with the central
         account_schema = vol.Schema(
             {
                 vol.Required(CONF_USERNAME): str,
                 vol.Required(CONF_PASSWORD): SECRET_SELECTOR,
-                vol.Required(CONF_PIN_CODE): SECRET_SELECTOR,
             }
         )
 
@@ -275,11 +266,11 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            errors = await self._async_check_central(user_input[CONF_SERIAL_ID])
+            errors = await self._async_check_central(
+                user_input[CONF_SERIAL_ID], user_input[CONF_PIN_CODE]
+            )
             if not errors:
                 return await self.async_step_options()
-            if CONF_PIN_CODE in errors:
-                return self._async_show_account_form(errors)
 
         # An entry title is already "Name (Serial)"
         configured = {
@@ -300,6 +291,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                             options=available, mode=SelectSelectorMode.LIST
                         )
                     ),
+                    vol.Required(CONF_PIN_CODE): SECRET_SELECTOR,
                 }
             ),
             errors=errors or {},
@@ -323,15 +315,20 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            errors = await self._async_check_central(user_input[CONF_SERIAL_ID])
+            errors = await self._async_check_central(
+                user_input[CONF_SERIAL_ID], user_input[CONF_PIN_CODE]
+            )
             if not errors:
                 return await self.async_step_options()
-            if CONF_PIN_CODE in errors:
-                return self._async_show_account_form(errors)
 
         return self.async_show_form(
             step_id="serial",
-            data_schema=vol.Schema({vol.Required(CONF_SERIAL_ID): str}),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SERIAL_ID): str,
+                    vol.Required(CONF_PIN_CODE): SECRET_SELECTOR,
+                }
+            ),
             errors=errors or {},
             description_placeholders={
                 "setup_guide_url": SERIAL_GUIDE_URL,
@@ -340,8 +337,12 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             last_step=False,
         )
 
-    async def _async_check_central(self, serial_id: str) -> dict[str, str]:
+    async def _async_check_central(
+        self, serial_id: str, pin_code: str
+    ) -> dict[str, str]:
         """Claim the central, then check the account drives it; return form errors."""
+        if not is_valid_pin(pin_code):
+            return {CONF_PIN_CODE: "invalid_pin"}
         # A duplicate must stop here, before the options step creates an API key
         await self.async_set_unique_id(serial_id)
         self._abort_if_unique_id_configured()
@@ -352,7 +353,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
                 account_info=AccountInfoData(
                     username=self.account_username,
                     password=self.account_password,
-                    pin_code=self.account_pincode,
+                    pin_code=pin_code,
                     serial_id=serial_id,
                 ),
                 ephemeral=True,
@@ -367,6 +368,7 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.exception("Unexpected exception")
             return {"base": "unknown"}
         self.serialid = serial_id
+        self.account_pincode = pin_code
         return {}
 
     async def async_step_options(
