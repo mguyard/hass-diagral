@@ -156,12 +156,22 @@ class DiagralSensor(DiagralEntity, SensorEntity):
         """Return the icon to use in the frontend."""
         return self.entity_description.icon
 
+    async def async_added_to_hass(self) -> None:
+        """Compute the value from the data read before the entity existed."""
+        await super().async_added_to_hass()
+        self._update_from_coordinator()
+
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        self._update_from_coordinator()
+        # Always write state so availability follows the coordinator
+        self.async_write_ha_state()
 
+    def _update_from_coordinator(self) -> None:
+        """Compute the value and attributes from the coordinator data."""
         _LOGGER.debug(
-            "_handle_coordinator_update called for %s (%s)",
+            "Updating %s (%s) from the coordinator",
             self.name,
             self.entity_description.key,
         )
@@ -183,9 +193,6 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             self._update_anomalies(anomalies, groups, devices_infos)
         if self.entity_description.key == "active_groups":
             self._update_active_groups(system_status, groups, alarm_config)
-
-        _LOGGER.debug("State updated for %s: %s", self.name, self.state)
-        self.async_write_ha_state()
 
     def _update_anomalies(
         self, anomalies: Anomalies, groups: list[Group], devices_infos: DeviceList
