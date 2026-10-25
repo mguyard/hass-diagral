@@ -54,6 +54,8 @@ from .const import (
     CONFIG_VERSION,
     DIAGRAL_VENDOR,
     DOMAIN,
+    INTERACTIVE_REQUEST_TIMEOUT,
+    LIST_SERIALS_ATTEMPTS,
     SERIAL_GUIDE_URL,
     SERIAL_IMAGE_URL,
 )
@@ -155,24 +157,33 @@ async def validate_account(
 
 async def list_serials(hass: HomeAssistant, username: str, password: str) -> list[str]:
     """Return the serials of the account's centrals; asking needs no serial."""
-    try:
-        async with DiagralAPI(
-            username=username,
-            password=password,
-            session=async_get_clientsession(hass),
-            vendor=DIAGRAL_VENDOR,
-        ) as diagral:
-            systems = await diagral.get_systems()
-    except AuthenticationError as error:
-        raise InvalidAuth from error
-    except DiagralAPIError as error:
-        _LOGGER.warning(
-            "Could not list the Diagral centrals of the account (%s)",
-            type(error).__name__,
-        )
-        raise CannotConnect from error
-    _LOGGER.debug("The Diagral account has %d centrals", len(systems))
-    return [system.serial_id for system in systems]
+    for attempt in range(1, LIST_SERIALS_ATTEMPTS + 1):
+        try:
+            async with DiagralAPI(
+                username=username,
+                password=password,
+                request_timeout=INTERACTIVE_REQUEST_TIMEOUT,
+                session=async_get_clientsession(hass),
+                vendor=DIAGRAL_VENDOR,
+            ) as diagral:
+                systems = await diagral.get_systems()
+        except AuthenticationError as error:
+            raise InvalidAuth from error
+        except DiagralAPIError as error:
+            if attempt < LIST_SERIALS_ATTEMPTS:
+                _LOGGER.debug(
+                    "Listing the Diagral centrals failed (%s), trying again",
+                    type(error).__name__,
+                )
+                continue
+            _LOGGER.warning(
+                "Could not list the Diagral centrals of the account (%s)",
+                type(error).__name__,
+            )
+            raise CannotConnect from error
+        _LOGGER.debug("The Diagral account has %d centrals", len(systems))
+        return [system.serial_id for system in systems]
+    raise CannotConnect
 
 
 class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):

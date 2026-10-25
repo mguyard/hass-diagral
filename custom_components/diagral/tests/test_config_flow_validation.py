@@ -25,6 +25,8 @@ from custom_components.diagral.const import (
     CONF_PIN_CODE,
     CONF_SERIAL_ID,
     DIAGRAL_VENDOR,
+    INTERACTIVE_REQUEST_TIMEOUT,
+    LIST_SERIALS_ATTEMPTS,
     SERIAL_GUIDE_URL,
     SERIAL_IMAGE_URL,
 )
@@ -550,6 +552,7 @@ class TestListSerials:
         assert "serial_id" not in kwargs
         assert kwargs["vendor"] == DIAGRAL_VENDOR
         assert kwargs["session"] is hass.http_session
+        assert kwargs["request_timeout"] == INTERACTIVE_REQUEST_TIMEOUT
         assert "FAKECENTRAL0" not in caplog.text
         assert "SECRETKEY" not in caplog.text
 
@@ -570,6 +573,45 @@ class TestListSerials:
             pytest.raises(expected),
         ):
             await list_serials(MagicMock(), ACCOUNT.username, ACCOUNT.password)
+
+    async def test_a_stalled_listing_is_tried_again(self):
+        """Diagral stalls now and then: a second try is made before falling back."""
+        api_cls = self.make_api(
+            side_effect=[
+                ClientError("Diagral request timed out"),
+                [SimpleNamespace(serial_id="FAKECENTRAL01", api_keys=[])],
+            ]
+        )
+        with patch("custom_components.diagral.config_flow.DiagralAPI", api_cls):
+            serials = await list_serials(
+                MagicMock(), ACCOUNT.username, ACCOUNT.password
+            )
+
+        assert serials == ["FAKECENTRAL01"]
+
+    @pytest.mark.parametrize(
+        ("error", "expected", "attempts"),
+        [
+            (
+                ClientError("Diagral request timed out"),
+                CannotConnect,
+                LIST_SERIALS_ATTEMPTS,
+            ),
+            (AuthenticationError("Authentication rejected by Diagral"), InvalidAuth, 1),
+        ],
+        ids=["stalled-twice", "refused-login"],
+    )
+    async def test_attempts_are_bounded(self, error, expected, attempts):
+        """A stall is tried again up to the limit; refused credentials are not."""
+        api_cls = self.make_api(side_effect=error)
+        with (
+            patch("custom_components.diagral.config_flow.DiagralAPI", api_cls),
+            pytest.raises(expected),
+        ):
+            await list_serials(MagicMock(), ACCOUNT.username, ACCOUNT.password)
+
+        diagral = api_cls.return_value.__aenter__.return_value
+        assert diagral.get_systems.await_count == attempts
 
 
 class TestAccountStep:

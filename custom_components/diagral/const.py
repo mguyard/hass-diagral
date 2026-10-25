@@ -42,6 +42,10 @@ HTTP_SERVER_ERROR = 500
 DIAGRAL_REQUEST_TIMEOUT = max(READ_ATTEMPT_TIMEOUTS)
 # Stated rather than left to pydiagral's default: only DIAGRAL is supported.
 DIAGRAL_VENDOR = "DIAGRAL"
+# A user is waiting on these calls: Diagral stalls now and then, so fail fast.
+INTERACTIVE_REQUEST_TIMEOUT = 10
+LIST_SERIALS_ATTEMPTS = 2
+
 SERIAL_GUIDE_URL = "https://docs.page/mguyard/hass-diagral/integration/setup#finding-your-system-serial-id"
 SERIAL_IMAGE_URL = "https://raw.githubusercontent.com/mguyard/pydiagral/main/docs/how-to-find-diagral-serial.png"
 
