@@ -24,6 +24,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_WEBHOOK_ID, P
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
@@ -77,9 +78,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
             secret_key=config_dict[CONF_SECRET_KEY],
             pincode=config_dict[CONF_PIN_CODE],
             request_timeout=DIAGRAL_REQUEST_TIMEOUT,
+            session=async_get_clientsession(hass),
         )
-
-        await api.__aenter__()  # Open the session explicitly  # pylint: disable=C2801
         coordinator = DiagralDataUpdateCoordinator(hass, api)
         await coordinator.async_config_entry_first_refresh()
 
@@ -541,8 +541,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> 
 
     await unregister_webhook(hass, entry, api, webhook_id, "unload_entry")
 
-    await api.__aexit__(None, None, None)  # Close explicitly the session
-
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
             hass.data[DOMAIN].pop(entry.entry_id)
@@ -561,6 +559,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> 
                 username=entry.data[CONF_USERNAME],
                 password=entry.data[CONF_PASSWORD],
                 serial_id=entry.data[CONF_SERIAL_ID],
+                session=async_get_clientsession(hass),
             ) as diagral:
                 await diagral.login()
                 try:

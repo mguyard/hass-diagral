@@ -28,7 +28,7 @@ The rules themselves — invariants, commit format, branches — are in `AGENTS.
 ### 2.1 Setup (`__init__.py`)
 
 1. `DiagralConfigData.from_config_entry(entry)` builds typed config from `entry.data` + `entry.options`.
-2. `DiagralAPI(username, password, serial_id, apikey, secret_key, pincode)` is created and its session opened explicitly with `await api.__aenter__()`. It is closed in `async_unload_entry` with `__aexit__`.
+2. `DiagralAPI(username, password, serial_id, apikey, secret_key, pincode, request_timeout=..., session=async_get_clientsession(hass))` is created. It uses Home Assistant's shared HTTP session, which pydiagral never closes, so there is no `__aenter__`/`__aexit__` to pair. The config flow and `async_remove_entry` pass the same session.
 3. `DiagralDataUpdateCoordinator(hass, api)` runs `async_config_entry_first_refresh()`.
 4. `register_webhook(...)` runs (see §2.3) and returns a webhook id, or `None` when no suitable URL exists.
 5. `entry.runtime_data = DiagralData(config, coordinator, api, webhook_id)`, then platforms are forwarded.

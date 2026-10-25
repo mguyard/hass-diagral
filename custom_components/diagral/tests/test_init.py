@@ -327,10 +327,18 @@ class TestLogsHideSecrets:
         api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
         api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("custom_components.diagral.DiagralAPI", api_cls):
-            await async_remove_entry(MagicMock(), entry)
+        hass = MagicMock()
+        with (
+            patch("custom_components.diagral.DiagralAPI", api_cls),
+            patch(
+                "custom_components.diagral.async_get_clientsession",
+                lambda given: given.http_session,
+            ),
+        ):
+            await async_remove_entry(hass, entry)
 
         diagral.delete_apikey.assert_awaited_once_with(apikey="SECRETAPIKEY")
+        assert api_cls.call_args.kwargs["session"] is hass.http_session
         assert "SECRETAPIKEY" not in debug_log.text
         assert "SECRETPASSWORD" not in debug_log.text
 
@@ -376,21 +384,43 @@ class TestMigrateEntry:
 class TestSetupEntry:
     """async_setup_entry() builds the Diagral client."""
 
-    async def test_client_allows_the_longest_read_attempt(self):
-        """The client's request timeout covers the coordinator's last attempt."""
+    @staticmethod
+    async def build_client(hass: MagicMock) -> MagicMock:
+        """Run the setup until the client is built; return the client class."""
         api_cls = MagicMock()
-        api_cls.return_value.__aenter__ = AsyncMock(
+        coordinator_cls = MagicMock()
+        coordinator_cls.return_value.async_config_entry_first_refresh = AsyncMock(
             side_effect=DiagralAPIError("stop after construction")
         )
         with (
             patch("custom_components.diagral.DiagralConfigData"),
+            patch(
+                "custom_components.diagral.DiagralDataUpdateCoordinator",
+                coordinator_cls,
+            ),
             patch("custom_components.diagral.asdict", return_value=MagicMock()),
             patch("custom_components.diagral.DiagralAPI", api_cls),
+            patch(
+                "custom_components.diagral.async_get_clientsession",
+                lambda given: given.http_session,
+            ),
             pytest.raises(ConfigEntryNotReady),
         ):
-            await async_setup_entry(MagicMock(), MagicMock())
+            await async_setup_entry(hass, MagicMock())
+        return api_cls
+
+    async def test_client_allows_the_longest_read_attempt(self):
+        """The client's request timeout covers the coordinator's last attempt."""
+        api_cls = await self.build_client(MagicMock())
 
         assert api_cls.call_args.kwargs["request_timeout"] == DIAGRAL_REQUEST_TIMEOUT
+
+    async def test_client_uses_home_assistant_session(self):
+        """The client shares Home Assistant's HTTP session, closed by HA alone."""
+        hass = MagicMock()
+        api_cls = await self.build_client(hass)
+
+        assert api_cls.call_args.kwargs["session"] is hass.http_session
 
 
 def stored_webhook_id(hass: MagicMock) -> str | None:
@@ -525,12 +555,12 @@ class TestSetupReportsWebhookFailure:
         hass.config_entries.async_forward_entry_setups = AsyncMock()
         entry = make_entry()
         api_cls = MagicMock()
-        api_cls.return_value.__aenter__ = AsyncMock()
         with (
             patch("custom_components.diagral.DiagralConfigData"),
             patch("custom_components.diagral.asdict", return_value=MagicMock()),
             patch("custom_components.diagral.DiagralAPI", api_cls),
             patch("custom_components.diagral.DiagralDataUpdateCoordinator") as coord,
+            patch("custom_components.diagral.async_get_clientsession"),
             patch(
                 "custom_components.diagral.register_webhook",
                 AsyncMock(side_effect=WebhookUnavailable(reason)),

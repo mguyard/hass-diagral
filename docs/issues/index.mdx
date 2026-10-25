@@ -46,6 +46,22 @@ logger:
 ```
 </Card>
 
+### Warnings about Diagral data
+
+The `pydiagral` library checks every answer of the Diagral cloud. When a field it expects is missing, it keeps working without it and writes a warning, once per field:
+
+```logs
+WARNING (MainThread) [pydiagral.models] Diagral sent Webhook data whose webhook_url field is missing. Please report it at https://github.com/mguyard/pydiagral/issues, with your pydiagral version, so the model can be fixed
+```
+
+Please report it as the message asks: Diagral changed its data, and the library needs to follow.
+
+A webhook notification Diagral sends without its date, system ID or alarm code cannot be used. It is ignored, and the reason is written in the logs:
+
+```logs
+ERROR (MainThread) [custom_components.diagral.webhook] Ignoring an invalid Diagral webhook: Webhook date_time must be an ISO date string
+```
+
 ## Declare issue
 
 If you encounter an issue, you can [open a GitHub issue](https://github.com/mguyard/hass-diagral/issues/new/choose) and share all relevant information to help us resolve it as quickly as possible.

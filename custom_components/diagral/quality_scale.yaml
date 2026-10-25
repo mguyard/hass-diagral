@@ -86,9 +86,7 @@ rules:
 
   # Platinum
   async-dependency: done
-  inject-websession:
-    status: todo
-    comment: pydiagral creates its own aiohttp session and accepts none
+  inject-websession: done
   strict-typing:
     status: todo
     comment: no mypy configuration; pydiagral ships no py.typed

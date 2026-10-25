@@ -3,6 +3,7 @@
 import logging
 
 from aiohttp.web import Request
+from pydiagral.exceptions import ModelValidationError
 from pydiagral.models import DeviceInfos, DeviceList, WebHookNotification
 
 from homeassistant.components.alarm_control_panel import DOMAIN as PANEL_DOMAIN
@@ -77,6 +78,9 @@ async def handle_webhook(
         # Publish the event to the event bus
         publish_event(hass, enriched_data.__dict__, entry.entry_id)
 
+    except ModelValidationError as err:
+        # pydiagral keeps the payload, which carries the serial, out of the message
+        _LOGGER.error("Ignoring an invalid Diagral webhook: %s", err)
     except ValueError:
         _LOGGER.error("Received invalid JSON data from webhook")
 

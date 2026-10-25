@@ -190,6 +190,30 @@ class TestHandleWebhook:
         assert "matches no loaded Diagral entry" in caplog.text
         assert "SECRETUNKNOWNID" not in caplog.text
 
+    async def test_invalid_notification_logs_the_reason(self, caplog):
+        """A notification pydiagral rejects is logged with the reason, not as bad JSON."""
+        hass, _ = make_hass_with_entries()
+        request = make_request(
+            {"transmitter_id": "FAKECENTRAL01", "alarm_code": "3401"}
+        )
+
+        await handle_webhook(hass, WEBHOOK_ID, request)
+
+        assert "date_time" in caplog.text
+        assert "invalid JSON" not in caplog.text
+        hass.bus.async_fire.assert_not_called()
+
+    async def test_unreadable_body_is_reported_as_invalid_json(self, caplog):
+        """A body that is not JSON keeps its own error."""
+        hass, _ = make_hass_with_entries()
+        request = MagicMock()
+        request.json = AsyncMock(side_effect=ValueError("Expecting value"))
+
+        await handle_webhook(hass, WEBHOOK_ID, request)
+
+        assert "invalid JSON" in caplog.text
+        hass.bus.async_fire.assert_not_called()
+
 
 # A production STATUS notification, serial and user name anonymised: no
 # `detail`, an `alarm_family` the model does not know, a group code instead
