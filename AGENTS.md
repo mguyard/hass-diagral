@@ -33,6 +33,7 @@ Custom [Home Assistant](https://www.home-assistant.io/) integration for Diagral 
 custom_components/diagral/
 ├── __init__.py             # Entry setup/teardown, migration, webhook register/unregister, DiagralConfigEntry
 ├── alarm_control_panel.py  # Alarm panel entity + entity services (arm/disarm groups, (un)register webhook)
+├── binary_sensor.py        # Diagral cloud connectivity sensor (diagnostic, available during outages)
 ├── config_flow.py          # 3-step config flow, reconfigure flow, options flow (CONFIG_VERSION=2.1)
 ├── const.py                # DOMAIN, config keys, service names, DEFAULT_SCAN_INTERVAL
 ├── coordinator.py          # DiagralDataUpdateCoordinator — polls every 300 s, keeps sw_version in sync

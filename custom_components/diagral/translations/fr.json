@@ -73,6 +73,11 @@
         }
     },
     "entity": {
+        "binary_sensor": {
+            "cloud_connection": {
+                "name": "Cloud Diagral"
+            }
+        },
         "alarm_control_panel": {
             "central": {
                 "name": "Centrale"
