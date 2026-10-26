@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/mguyard/hass-diagral/issues",
   "quality_scale": "bronze",
   "requirements": ["pydiagral==2.0.0b3"],
-  "version": "1.3.3"
+  "version": "1.4.0-beta.1"
 }
