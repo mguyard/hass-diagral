@@ -3,19 +3,60 @@
 Tests is_valid_email(), is_valid_pin(), and is_valid_alarmpanel_code()
 which have no side effects and require only Home Assistant to be importable.
 """
-import pytest
-from unittest.mock import MagicMock
 
-from custom_components.diagral.config_flow import DiagralOptionsFlow
-from custom_components.diagral.const import (
-    CONF_ALARMPANEL_ACTIONTYPE_CODE,
-    CONF_ALARMPANEL_CODE,
-)
+import json
+import logging
+import pathlib
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
 from custom_components.diagral.config_flow import (
+    CannotConnect,
+    DiagralConfigFlow,
+    DiagralOptionsFlow,
+    InvalidAuth,
+    InvalidPin,
     is_valid_alarmpanel_code,
     is_valid_email,
     is_valid_pin,
+    list_serials,
+    validate_account,
 )
+from custom_components.diagral.const import (
+    CONF_ALARMPANEL_ACTIONTYPE_CODE,
+    CONF_ALARMPANEL_CODE,
+    CONF_PIN_CODE,
+    CONF_SERIAL_ID,
+    DIAGRAL_VENDOR,
+    INTERACTIVE_REQUEST_TIMEOUT,
+    LIST_SERIALS_ATTEMPTS,
+    SERIAL_GUIDE_URL,
+    SERIAL_IMAGE_URL,
+)
+from custom_components.diagral.models import AccountInfoData
+from pydiagral.exceptions import (
+    AuthenticationError,
+    ClientError,
+    DiagralAPIError,
+    PinCodeError,
+    ServerError,
+)
+import pytest
+
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.data_entry_flow import AbortFlow
+
+TRANSLATIONS = pathlib.Path(__file__).parent.parent / "translations"
+
+
+@pytest.fixture(autouse=True)
+def client_session():
+    """Hand each client the session of the Home Assistant it is given."""
+    with patch(
+        "custom_components.diagral.config_flow.async_get_clientsession",
+        lambda hass: hass.http_session,
+    ):
+        yield
 
 
 class TestIsValidEmail:
@@ -195,7 +236,9 @@ class TestAlarmPanelFlowValidation:
 class TestDiagralOptionsFlowRegression:
     """Regression tests for options flow input handling."""
 
-    async def test_async_step_init_missing_alarmpanel_code_key_returns_missing_error(self):
+    async def test_async_step_init_missing_alarmpanel_code_key_returns_missing_error(
+        self,
+    ):
         """Missing alarm panel code key must return missing_alarmpanel_code instead of raising KeyError."""
         flow = object.__new__(DiagralOptionsFlow)
         flow.handler = "entry_id"
@@ -221,3 +264,610 @@ class TestDiagralOptionsFlowRegression:
 
         assert result["type"] == "form"
         assert result["errors"]["base"] == "missing_alarmpanel_code"
+
+
+class TestValidateAccount:
+    """Tests for validate_account()."""
+
+    async def test_unchanged_credentials_skip_validation(self):
+        """Credentials identical to the stored ones must not reach the API."""
+        account = AccountInfoData(
+            username="user@example.com",
+            password="secret",
+            serial_id="SERIAL123",
+            pin_code="1234",
+        )
+        previous = {
+            CONF_USERNAME: "user@example.com",
+            CONF_PASSWORD: "secret",
+            CONF_PIN_CODE: "1234",
+        }
+        with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
+            result = await validate_account(
+                MagicMock(), account, previous_data=previous
+            )
+        assert result is None
+        api_cls.assert_not_called()
+
+    async def test_no_previous_data_validates_against_api(self):
+        """Without stored data, the credentials must be checked against the API."""
+        account = AccountInfoData(
+            username="user@example.com",
+            password="secret",
+            serial_id="SERIAL123",
+            pin_code="1234",
+        )
+        diagral = MagicMock()
+        diagral.try_connection = AsyncMock(return_value=MagicMock(keys="KEYS"))
+        with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
+            api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+            api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            result = await validate_account(MagicMock(), account)
+        diagral.try_connection.assert_awaited_once_with(ephemeral=True)
+        assert result.keys == "KEYS"
+
+    async def test_client_uses_home_assistant_session(self):
+        """The client shares Home Assistant's HTTP session, closed by HA alone."""
+        hass = MagicMock()
+        diagral = MagicMock()
+        diagral.try_connection = AsyncMock(return_value=MagicMock(keys="KEYS"))
+        with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
+            api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+            api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            await validate_account(hass, ACCOUNT)
+        assert api_cls.call_args.kwargs["session"] is hass.http_session
+
+    async def test_client_logs_in_as_diagral(self):
+        """The client states the vendor instead of relying on pydiagral's default."""
+        diagral = MagicMock()
+        diagral.try_connection = AsyncMock(return_value=MagicMock(keys="KEYS"))
+        with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
+            api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+            api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            await validate_account(MagicMock(), ACCOUNT)
+        assert api_cls.call_args.kwargs["vendor"] == DIAGRAL_VENDOR
+
+    @pytest.mark.parametrize(
+        ("alarm_name", "expected_title"),
+        [("Home", "Home (FAKECENTRAL01)"), (None, "Diagral (FAKECENTRAL01)")],
+        ids=["named", "unnamed"],
+    )
+    async def test_title_names_the_alarm(self, alarm_name, expected_title):
+        """The entry title uses the alarm name, or Diagral when it has none."""
+        diagral = MagicMock()
+        diagral.try_connection = AsyncMock(return_value=MagicMock(keys="KEYS"))
+        diagral.get_alarm_name = AsyncMock(return_value=alarm_name)
+        with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
+            api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+            api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            result = await validate_account(MagicMock(), ACCOUNT, ephemeral=False)
+        assert result.title == expected_title
+
+
+class TestConfigFlowLogs:
+    """The config flow must never log credentials or the panel code."""
+
+    @staticmethod
+    def make_flow() -> DiagralConfigFlow:
+        """Return a config flow bound to a mocked Home Assistant."""
+        flow = DiagralConfigFlow()
+        flow.hass = MagicMock()
+        flow.serialid = "FAKECENTRAL01"
+        flow.serials = ["FAKECENTRAL01"]
+        flow.async_set_unique_id = AsyncMock()
+        flow._abort_if_unique_id_configured = MagicMock()
+        flow._async_current_entries = MagicMock(return_value=[])
+        return flow
+
+    async def test_user_step_hides_credentials(self, caplog):
+        """Submitting the account step does not log the password."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        flow = self.make_flow()
+        with (
+            patch(
+                "custom_components.diagral.config_flow.list_serials",
+                AsyncMock(return_value=["FAKECENTRAL01"]),
+            ),
+            patch.object(flow, "async_step_central", AsyncMock()),
+        ):
+            await flow.async_step_user(
+                {CONF_USERNAME: "user@example.com", CONF_PASSWORD: "SECRETPASSWORD"}
+            )
+        assert "SECRETPASSWORD" not in caplog.text
+
+    async def test_central_step_hides_the_pin(self, caplog):
+        """Submitting the central step does not log the PIN."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        flow = self.make_flow()
+        with (
+            patch(
+                "custom_components.diagral.config_flow.validate_account",
+                AsyncMock(side_effect=CannotConnect),
+            ),
+        ):
+            await flow.async_step_central(
+                {CONF_SERIAL_ID: "FAKECENTRAL01", CONF_PIN_CODE: "97531"}
+            )
+        assert "97531" not in caplog.text
+
+    async def test_reconfigure_step_hides_credentials(self, caplog):
+        """Submitting the reconfigure step logs neither password nor PIN."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        flow = self.make_flow()
+        flow.context = {"entry_id": "entry"}
+        flow.hass.config_entries.async_get_entry.return_value.data = {
+            "serial_id": "FAKECENTRAL01",
+            CONF_USERNAME: "user@example.com",
+            CONF_PASSWORD: "old",
+            CONF_PIN_CODE: "1111",
+        }
+        with patch(
+            "custom_components.diagral.config_flow.validate_account",
+            AsyncMock(side_effect=CannotConnect),
+        ):
+            await flow.async_step_reconfigure(
+                {
+                    CONF_USERNAME: "user@example.com",
+                    CONF_PASSWORD: "SECRETPASSWORD",
+                    CONF_PIN_CODE: "97531",
+                }
+            )
+        assert "SECRETPASSWORD" not in caplog.text
+        assert "97531" not in caplog.text
+
+    async def test_options_step_hides_panel_code(self, caplog):
+        """Submitting the options step does not log the alarm panel code."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        flow = self.make_flow()
+        with patch(
+            "custom_components.diagral.config_flow.validate_account",
+            AsyncMock(side_effect=CannotConnect),
+        ):
+            await flow.async_step_options(
+                {
+                    "alarmpanel_options": {
+                        CONF_ALARMPANEL_ACTIONTYPE_CODE: "always",
+                        CONF_ALARMPANEL_CODE: 24680,
+                    }
+                }
+            )
+        assert "24680" not in caplog.text
+
+
+ACCOUNT = AccountInfoData(
+    username="user@example.com",
+    password="secret",
+    serial_id="FAKECENTRAL01",
+    pin_code="1234",
+)
+
+
+class TestValidateAccountErrors:
+    """validate_account() tells a refused login from a failed connection."""
+
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            (AuthenticationError("Authentication rejected by Diagral"), InvalidAuth),
+            (PinCodeError("Diagral rejected the PIN code (HTTP 401)"), InvalidPin),
+            (ServerError("Diagral service error (HTTP 503)"), CannotConnect),
+            (ClientError("Diagral request timed out"), CannotConnect),
+            (DiagralAPIError("Diagral API error (HTTP 400)"), CannotConnect),
+        ],
+        ids=[
+            "refused-login",
+            "refused-pin",
+            "server-error",
+            "network-error",
+            "other-api-error",
+        ],
+    )
+    async def test_error_is_classified(self, error, expected):
+        """Only a refused login is reported as invalid authentication."""
+        diagral = MagicMock()
+        diagral.try_connection = AsyncMock(side_effect=error)
+        with patch("custom_components.diagral.config_flow.DiagralAPI") as api_cls:
+            api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+            api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+            with pytest.raises(expected):
+                await validate_account(MagicMock(), ACCOUNT)
+
+
+def make_step(step: str) -> tuple[DiagralConfigFlow, dict]:
+    """Return a config flow ready to submit the given step, and its input."""
+    flow = TestConfigFlowLogs.make_flow()
+    flow.account_username = ACCOUNT.username
+    flow.account_password = ACCOUNT.password
+    flow.account_pincode = ACCOUNT.pin_code
+    credentials = {
+        CONF_USERNAME: ACCOUNT.username,
+        CONF_PASSWORD: "new-secret",
+        CONF_PIN_CODE: ACCOUNT.pin_code,
+    }
+    if step == "options":
+        return flow, {"alarmpanel_options": {CONF_ALARMPANEL_ACTIONTYPE_CODE: "never"}}
+    if step in ("central", "serial"):
+        return flow, {CONF_SERIAL_ID: ACCOUNT.serial_id, CONF_PIN_CODE: "4321"}
+    if step == "reconfigure":
+        flow.context = {"entry_id": "entry"}
+        flow.hass.config_entries.async_get_entry.return_value.data = {
+            "serial_id": ACCOUNT.serial_id,
+            CONF_USERNAME: ACCOUNT.username,
+            CONF_PASSWORD: ACCOUNT.password,
+            CONF_PIN_CODE: ACCOUNT.pin_code,
+        }
+    return flow, credentials
+
+
+class TestFlowErrorMessages:
+    """Each step shows a translated error, never the exception text."""
+
+    @pytest.mark.parametrize("step", ["central", "serial", "options", "reconfigure"])
+    @pytest.mark.parametrize(
+        ("raised", "key"),
+        [
+            (CannotConnect, "cannot_connect"),
+            (InvalidAuth, "invalid_auth"),
+            (RuntimeError, "unknown"),
+        ],
+        ids=["cannot-connect", "invalid-auth", "unexpected"],
+    )
+    async def test_error_shows_translation_key(self, step, raised, key):
+        """The form error is a translation key present in both languages."""
+        flow, user_input = make_step(step)
+
+        async def fail(*_, **__):
+            raise raised from DiagralAPIError("Diagral API error (HTTP 401)")
+
+        with patch("custom_components.diagral.config_flow.validate_account", fail):
+            result = await getattr(flow, f"async_step_{step}")(user_input)
+
+        assert result["errors"] == {"base": key}
+
+
+def account_input() -> dict:
+    """Return a valid submission of the account step."""
+    return {CONF_USERNAME: ACCOUNT.username, CONF_PASSWORD: ACCOUNT.password}
+
+
+def form_fields(result: dict) -> set[str]:
+    """Return the names of the fields a form step asks for."""
+    return {str(key) for key in result["data_schema"].schema}
+
+
+CONFIGURED_ENTRY = SimpleNamespace(
+    unique_id="FAKECENTRAL01", title="fake home (FAKECENTRAL01)"
+)
+
+
+def central_choices(result: dict) -> list[str]:
+    """Return the serials the central step offers."""
+    return result["data_schema"].schema[CONF_SERIAL_ID].config["options"]
+
+
+class TestListSerials:
+    """list_serials() asks the account for its centrals, without a serial."""
+
+    @staticmethod
+    def make_api(**get_systems) -> MagicMock:
+        """Return a DiagralAPI class whose client answers get_systems()."""
+        diagral = MagicMock()
+        diagral.get_systems = AsyncMock(**get_systems)
+        api_cls = MagicMock()
+        api_cls.return_value.__aenter__ = AsyncMock(return_value=diagral)
+        api_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+        return api_cls
+
+    async def test_lists_the_serials_without_a_serial(self, caplog):
+        """The client has no serial; the serials are returned, never logged."""
+        caplog.set_level(logging.DEBUG, logger="custom_components.diagral")
+        hass = MagicMock()
+        api_cls = self.make_api(
+            return_value=[
+                SimpleNamespace(serial_id="FAKECENTRAL01", api_keys=["SECRETKEY"]),
+                SimpleNamespace(serial_id="FAKECENTRAL02", api_keys=[]),
+            ]
+        )
+        with patch("custom_components.diagral.config_flow.DiagralAPI", api_cls):
+            serials = await list_serials(hass, ACCOUNT.username, ACCOUNT.password)
+
+        assert serials == ["FAKECENTRAL01", "FAKECENTRAL02"]
+        kwargs = api_cls.call_args.kwargs
+        assert "serial_id" not in kwargs
+        assert kwargs["vendor"] == DIAGRAL_VENDOR
+        assert kwargs["session"] is hass.http_session
+        assert kwargs["request_timeout"] == INTERACTIVE_REQUEST_TIMEOUT
+        assert "FAKECENTRAL0" not in caplog.text
+        assert "SECRETKEY" not in caplog.text
+
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            (AuthenticationError("Authentication rejected by Diagral"), InvalidAuth),
+            (ServerError("Diagral service error (HTTP 503)"), CannotConnect),
+            (ClientError("Diagral request timed out"), CannotConnect),
+        ],
+        ids=["refused-login", "server-error", "network-error"],
+    )
+    async def test_error_is_classified(self, error, expected):
+        """A refused login stays an authentication error, anything else a failure."""
+        api_cls = self.make_api(side_effect=error)
+        with (
+            patch("custom_components.diagral.config_flow.DiagralAPI", api_cls),
+            pytest.raises(expected),
+        ):
+            await list_serials(MagicMock(), ACCOUNT.username, ACCOUNT.password)
+
+    async def test_a_stalled_listing_is_tried_again(self):
+        """Diagral stalls now and then: a second try is made before falling back."""
+        api_cls = self.make_api(
+            side_effect=[
+                ClientError("Diagral request timed out"),
+                [SimpleNamespace(serial_id="FAKECENTRAL01", api_keys=[])],
+            ]
+        )
+        with patch("custom_components.diagral.config_flow.DiagralAPI", api_cls):
+            serials = await list_serials(
+                MagicMock(), ACCOUNT.username, ACCOUNT.password
+            )
+
+        assert serials == ["FAKECENTRAL01"]
+
+    @pytest.mark.parametrize(
+        ("error", "expected", "attempts"),
+        [
+            (
+                ClientError("Diagral request timed out"),
+                CannotConnect,
+                LIST_SERIALS_ATTEMPTS,
+            ),
+            (AuthenticationError("Authentication rejected by Diagral"), InvalidAuth, 1),
+        ],
+        ids=["stalled-twice", "refused-login"],
+    )
+    async def test_attempts_are_bounded(self, error, expected, attempts):
+        """A stall is tried again up to the limit; refused credentials are not."""
+        api_cls = self.make_api(side_effect=error)
+        with (
+            patch("custom_components.diagral.config_flow.DiagralAPI", api_cls),
+            pytest.raises(expected),
+        ):
+            await list_serials(MagicMock(), ACCOUNT.username, ACCOUNT.password)
+
+        diagral = api_cls.return_value.__aenter__.return_value
+        assert diagral.get_systems.await_count == attempts
+
+
+class TestAccountStep:
+    """The account step lists the centrals, or falls back to typing the serial."""
+
+    async def test_lists_only_the_centrals_not_in_home_assistant(self):
+        """Centrals already set up are left out and named above, as Name (Serial)."""
+        flow = TestConfigFlowLogs.make_flow()
+        flow._async_current_entries = MagicMock(return_value=[CONFIGURED_ENTRY])
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(return_value=["FAKECENTRAL01", "FAKECENTRAL02"]),
+        ):
+            result = await flow.async_step_user(account_input())
+
+        assert result["step_id"] == "central"
+        assert central_choices(result) == ["FAKECENTRAL02"]
+        assert result["description_placeholders"]["configured"] == (
+            "fake home (FAKECENTRAL01)"
+        )
+
+    async def test_central_step_shows_where_the_serial_is(self):
+        """No name before a key exists: the step helps check the serial instead."""
+        flow = TestConfigFlowLogs.make_flow()
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(return_value=["FAKECENTRAL01"]),
+        ):
+            result = await flow.async_step_user(account_input())
+
+        placeholders = result["description_placeholders"]
+        assert placeholders["setup_guide_url"] == SERIAL_GUIDE_URL
+        assert placeholders["serial_id_image_url"] == SERIAL_IMAGE_URL
+
+    async def test_pin_is_asked_with_the_central(self):
+        """Each central has its own PIN: the account step asks for none."""
+        flow = TestConfigFlowLogs.make_flow()
+        account = await flow.async_step_user()
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(return_value=["FAKECENTRAL01"]),
+        ):
+            central = await flow.async_step_user(account_input())
+        serial = await flow.async_step_serial()
+
+        assert form_fields(account) == {CONF_USERNAME, CONF_PASSWORD}
+        assert form_fields(central) == {CONF_SERIAL_ID, CONF_PIN_CODE}
+        assert form_fields(serial) == {CONF_SERIAL_ID, CONF_PIN_CODE}
+
+    async def test_single_central_is_still_shown(self):
+        """A single available central is listed, so the user sees what is added."""
+        flow = TestConfigFlowLogs.make_flow()
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(return_value=["FAKECENTRAL01"]),
+        ):
+            result = await flow.async_step_user(account_input())
+
+        assert result["step_id"] == "central"
+        assert central_choices(result) == ["FAKECENTRAL01"]
+        assert result["description_placeholders"]["configured"] == "-"
+
+    async def test_every_central_already_set_up_aborts(self):
+        """Nothing left to add: the flow stops, without asking for anything."""
+        flow = TestConfigFlowLogs.make_flow()
+        flow._async_current_entries = MagicMock(return_value=[CONFIGURED_ENTRY])
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(return_value=["FAKECENTRAL01"]),
+        ):
+            result = await flow.async_step_user(account_input())
+
+        assert result["type"] == "abort"
+        assert result["reason"] == "already_configured"
+
+    @pytest.mark.parametrize(
+        "listing",
+        [AsyncMock(side_effect=CannotConnect), AsyncMock(return_value=[])],
+        ids=["listing-failed", "no-central-listed"],
+    )
+    async def test_falls_back_to_typing_the_serial(self, listing):
+        """When the account's centrals cannot be listed, the serial is typed."""
+        flow = TestConfigFlowLogs.make_flow()
+        with patch("custom_components.diagral.config_flow.list_serials", listing):
+            result = await flow.async_step_user(account_input())
+
+        assert result["step_id"] == "serial"
+
+    async def test_refused_login_stays_on_the_account_step(self):
+        """Wrong credentials are reported on the form, not hidden by a fallback."""
+        flow = TestConfigFlowLogs.make_flow()
+        with patch(
+            "custom_components.diagral.config_flow.list_serials",
+            AsyncMock(side_effect=InvalidAuth),
+        ):
+            result = await flow.async_step_user(account_input())
+
+        assert result["step_id"] == "user"
+        assert result["errors"] == {"base": "invalid_auth"}
+
+
+class TestSerialStep:
+    """The manual serial step shows where to find the serial."""
+
+    async def test_guide_points_to_the_serial_section(self):
+        """The link opens the docs section on the serial, under its real anchor."""
+        flow = TestConfigFlowLogs.make_flow()
+
+        result = await flow.async_step_serial()
+
+        assert result["description_placeholders"]["setup_guide_url"].endswith(
+            "/integration/setup#finding-your-system-serial-id"
+        )
+
+
+class TestCentralChoice:
+    """Choosing a central claims it before any API key is created."""
+
+    @pytest.mark.parametrize("step", ["central", "serial"])
+    async def test_chosen_central_is_claimed_then_checked(self, step):
+        """The unique id is set first, then the account is checked on that central."""
+        flow, user_input = make_step(step)
+        validate = AsyncMock(return_value=None)
+        with (
+            patch("custom_components.diagral.config_flow.validate_account", validate),
+            patch.object(flow, "async_step_options", AsyncMock()) as options,
+        ):
+            await getattr(flow, f"async_step_{step}")(user_input)
+
+        flow.async_set_unique_id.assert_awaited_once_with(ACCOUNT.serial_id)
+        assert validate.call_args.kwargs["account_info"].serial_id == ACCOUNT.serial_id
+        assert validate.call_args.kwargs["account_info"].pin_code == "4321"
+        assert flow.account_pincode == "4321"
+        assert validate.call_args.kwargs["ephemeral"] is True
+        assert flow.serialid == ACCOUNT.serial_id
+        options.assert_awaited_once()
+
+    @pytest.mark.parametrize("step", ["central", "serial"])
+    async def test_central_already_set_up_aborts_before_any_key(self, step):
+        """A duplicate stops before the account is checked: no key is created."""
+        flow, user_input = make_step(step)
+        flow._abort_if_unique_id_configured = MagicMock(
+            side_effect=AbortFlow("already_configured")
+        )
+        validate = AsyncMock()
+        with (
+            patch("custom_components.diagral.config_flow.validate_account", validate),
+            pytest.raises(AbortFlow),
+        ):
+            await getattr(flow, f"async_step_{step}")(user_input)
+
+        validate.assert_not_awaited()
+
+
+class TestPinRefused:
+    """A refused PIN is shown under the PIN field, where it can be fixed."""
+
+    @staticmethod
+    async def refuse_pin(*_, **__):
+        """Fail the validation as a central refusing the PIN does."""
+        raise InvalidPin from PinCodeError("Diagral rejected the PIN code (HTTP 401)")
+
+    @pytest.mark.parametrize("step", ["central", "serial"])
+    async def test_central_step_flags_its_pin_field(self, step):
+        """The PIN belongs to the central: it is fixed on the step that asks for it."""
+        flow, user_input = make_step(step)
+        with patch(
+            "custom_components.diagral.config_flow.validate_account", self.refuse_pin
+        ):
+            result = await getattr(flow, f"async_step_{step}")(user_input)
+
+        assert result["step_id"] == step
+        assert result["errors"] == {CONF_PIN_CODE: "pin_refused"}
+
+    @pytest.mark.parametrize("step", ["central", "serial"])
+    async def test_malformed_pin_is_refused_before_any_call(self, step):
+        """A PIN that is not digits is flagged without asking Diagral."""
+        flow, user_input = make_step(step)
+        validate = AsyncMock()
+        with patch("custom_components.diagral.config_flow.validate_account", validate):
+            result = await getattr(flow, f"async_step_{step}")(
+                {**user_input, CONF_PIN_CODE: "12ab"}
+            )
+
+        assert result["step_id"] == step
+        assert result["errors"] == {CONF_PIN_CODE: "invalid_pin"}
+        validate.assert_not_awaited()
+
+    async def test_reconfigure_flags_the_pin_field(self):
+        """Reconfiguring with a refused PIN flags that field, not the account."""
+        flow, user_input = make_step("reconfigure")
+        with patch(
+            "custom_components.diagral.config_flow.validate_account", self.refuse_pin
+        ):
+            result = await flow.async_step_reconfigure(user_input)
+
+        assert result["errors"] == {CONF_PIN_CODE: "pin_refused"}
+
+    @pytest.mark.parametrize("language", ["en", "fr"])
+    def test_is_translated(self, language):
+        """Both languages explain a refused PIN, apart from a malformed one."""
+        translations = json.loads(
+            (TRANSLATIONS / f"{language}.json").read_text(encoding="utf-8")
+        )
+        errors = translations["config"]["error"]
+        assert errors["pin_refused"]
+        assert errors["pin_refused"] != errors["invalid_pin"]
+
+
+class TestReconfigureSecrets:
+    """The reconfigure form never shows the stored password or PIN."""
+
+    async def test_form_does_not_prefill_secrets(self):
+        """Password and PIN are blank, only the username is pre-filled."""
+        flow, _ = make_step("reconfigure")
+        result = await flow.async_step_reconfigure()
+
+        defaults = {
+            str(key): key.default()
+            for key in result["data_schema"].schema
+            if callable(getattr(key, "default", None))
+        }
+        assert defaults == {CONF_USERNAME: ACCOUNT.username}
+
+    async def test_blank_secrets_keep_stored_values(self):
+        """Leaving password and PIN empty keeps them, so only the email changes."""
+        flow, _ = make_step("reconfigure")
+        validate = AsyncMock(return_value=None)
+        with patch("custom_components.diagral.config_flow.validate_account", validate):
+            await flow.async_step_reconfigure({CONF_USERNAME: "new@example.com"})
+
+        account = validate.call_args.kwargs["account_info"]
+        assert account.username == "new@example.com"
+        assert account.password == ACCOUNT.password
+        assert account.pin_code == ACCOUNT.pin_code

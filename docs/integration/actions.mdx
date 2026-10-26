@@ -2,8 +2,8 @@
 title: Actions
 previous: /integration/events
 previousTitle: Events
-next: /misc/contributing
-nextTitle: Misc
+next: /integration/contributing
+nextTitle: Contributing
 ---
 
 For all actions, you can specify a `target` property to specify the device to send the action or refer to.
@@ -13,12 +13,17 @@ target:
   device_id: a1b2c3d4e5f6g7h8i9j0
 ```
 
+<Info>
+Arm Group(s), Disarm Group(s) and the alarm panel's own arm and disarm actions fail with an error when the code is wrong, when Diagral refuses the command, or when Diagral does not answer in time and the alarm state does not show the change. A failed action stops the automation that called it. A command is never sent twice: check the alarm state before retrying.
+</Info>
+
 ## Arm Group(s)
 
 <Property name="action" type="diagral.arm_groups" required>
 Activate one or more groups
 
-    ```yaml
+    <CodeGroup>
+    ```yaml title="One group"
     action: diagral.arm_groups
     target:
       device_id: a1b2c3d4e5f6g7h8i9j0
@@ -26,13 +31,14 @@ Activate one or more groups
       group_ids: "3"
     ```
 
-    ```yaml
+    ```yaml title="Several groups"
     action: diagral.arm_groups
     target:
       device_id: a1b2c3d4e5f6g7h8i9j0
     data:
       group_ids: "[2,3]"
     ```
+    </CodeGroup>
 
     The `data` object should contain the following properties:
 
@@ -48,7 +54,8 @@ Activate one or more groups
 <Property name="action" type="diagral.disarm_groups" required>
 Disarm one or more groups
 
-    ```yaml
+    <CodeGroup>
+    ```yaml title="One group"
     action: diagral.disarm_groups
     target:
       device_id: a1b2c3d4e5f6g7h8i9j0
@@ -56,13 +63,14 @@ Disarm one or more groups
       group_ids: "3"
     ```
 
-    ```yaml
+    ```yaml title="Several groups"
     action: diagral.disarm_groups
     target:
       device_id: a1b2c3d4e5f6g7h8i9j0
     data:
       group_ids: "[2,3]"
     ```
+    </CodeGroup>
 
     The `data` object should contain the following properties:
 
@@ -78,6 +86,10 @@ Disarm one or more groups
 <Property name="action" type="diagral.register_webhook" required>
 Register webhook in Diagral Cloud - **Only one webhook can be registered for an installation**
 
+If the subscription currently points to another installation, this action takes it over: the other installation stops receiving events. See [Existing subscription](/integration/webhook#existing-subscription).
+
+The action fails with an error when Diagral or Home Assistant Cloud does not answer, or when Home Assistant has no address for the webhook. See [Registration failure](/integration/webhook#registration-failure).
+
     ```yaml
     action: diagral.register_webhook
     target:
@@ -90,6 +102,8 @@ Register webhook in Diagral Cloud - **Only one webhook can be registered for an 
 
 <Property name="action" type="diagral.unregister_webhook" required>
 Unregister Webhook in Diagral Cloud
+
+The action fails with an error when Diagral cannot read or delete the subscription.
 
     ```yaml
     action: diagral.unregister_webhook

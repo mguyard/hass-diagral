@@ -84,8 +84,24 @@
       "pages": [
         {
           "title": "Contributing",
-          "href": "/misc/contributing",
+          "href": "/integration/contributing",
           "icon": "heart"
+        }
+      ]
+    },
+    {
+      "group": "Issues",
+      "tab": "issues",
+      "pages": [
+        {
+          "title": "Report an issue",
+          "href": "/issues",
+          "icon": "bug"
+        },
+        {
+          "title": "Reading the diagnostics",
+          "href": "/issues/diagnostics",
+          "icon": "stethoscope"
         }
       ]
     }
@@ -101,5 +117,8 @@
       "full_repo": "mguyard/hass-diagral",
       "repo_name": "hass-diagral"
     }
+  },
+  "redirects": {
+    "/misc/contributing": "/integration/contributing"
   }
 }

@@ -1,3 +1,66 @@
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+# Inspired by Home Assistant core's own ruleset, minus the rules that conflict
+# with deliberate choices in this integration (see `ignore` below).
+select = [
+    "A",    # flake8-builtins
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "D",    # pydocstyle
+    "DTZ",  # flake8-datetimez
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "FURB", # refurb
+    "I",    # isort
+    "LOG",  # flake8-logging
+    "N",    # pep8-naming
+    "PL",   # pylint
+    "RUF",  # ruff-specific rules
+    "SIM",  # flake8-simplify
+    "SLF",  # flake8-self
+    "T20",  # flake8-print
+    "UP",   # pyupgrade
+    "W",    # pycodestyle warnings
+]
+ignore = [
+    # Line length is the formatter's job, not the linter's.
+    "E501",
+    # A blank line after the docstring is the style used throughout this repo.
+    "D202",
+    # Conflicts with the D211/D212 pair that ruff enables by default.
+    "D203",
+    "D213",
+    # Complexity metrics: not enforced here, same as Home Assistant core.
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR0917",
+    # CannotConnect / InvalidAuth are the names Home Assistant config flows use.
+    "N818",
+]
+
+[tool.ruff.lint.isort]
+# Same import layout as Home Assistant core, which this integration follows.
+force-sort-within-sections = true
+known-first-party = ["homeassistant"]
+combine-as-imports = true
+split-on-trailing-comma = false
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "SLF001",   # tests legitimately reach into private members
+    "PLR2004",  # magic values are expected in assertions
+    "DTZ",      # naive datetimes are fine in fixtures and assertions
+    "PLC0415",  # fixtures import lazily so that collection stays cheap
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["../.."]

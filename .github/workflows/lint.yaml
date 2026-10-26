@@ -1,0 +1,51 @@
+---
+name: Lint
+
+# Runs ruff (lint + format) on the integration.
+# Configuration lives in custom_components/diagral/pyproject.toml, so the same
+# command reproduces this job locally:
+#   ruff check custom_components/diagral
+#   ruff format --check custom_components/diagral
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - 'custom_components/diagral/**'
+      - '.github/workflows/lint.yaml'
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - 'custom_components/diagral/**'
+      - '.github/workflows/lint.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # Pinned: a new ruff release must not be able to turn a green PR red
+      # on its own. Bump deliberately, together with the fixes it requires.
+      - name: Install ruff
+        run: pip install ruff==0.17.1
+
+      - name: Ruff check
+        run: ruff check --output-format=github custom_components/diagral
+
+      - name: Ruff format
+        run: ruff format --check --diff custom_components/diagral

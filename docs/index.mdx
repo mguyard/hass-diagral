@@ -4,24 +4,14 @@ next: /integration
 nextTitle: Installation
 ---
 
-<Badges>
-    <Image src="https://img.shields.io/github/license/mguyard/hass-diagral?style=default&color=0080ff" alt="License" />
-    <Image src="https://img.shields.io/github/last-commit/mguyard/hass-diagral?style=default&color=0080ff" alt="Last Commit" />
-    <Image src="https://img.shields.io/github/languages/top/mguyard/hass-diagral?style=default&color=0080ff" alt="repo-top-language" />
-    <Image src="https://img.shields.io/github/languages/count/mguyard/hass-diagral?style=default&color=0080ff" alt="repo-language-count" />
-</Badges>
-<Badges>
-    <Image src="https://img.shields.io/github/v/release/mguyard/hass-diagral?display_date=published_at&label=Stable" alt="Last Stable Release" />
-    <Image src="https://img.shields.io/github/release-date/mguyard/hass-diagral?label=Stable" alt="Last Release Date Stable" />
-    <Image src="https://img.shields.io/github/v/release/mguyard/hass-diagral?include_prereleases&filter=*-beta.*&display_name=release&label=Beta" alt="Last Beta Release" />
-    <Image src="https://img.shields.io/github/release-date-pre/mguyard/hass-diagral?display_date=published_at&label=Beta" alt="Last Release Date Beta" />
-    <Image src="https://img.shields.io/github/issues-search/mguyard/hass-diagral?query=label%3Abug%20is%3Aopened&label=Open%20Bugs" alt="Open Bugs" />
-    <Image src="https://img.shields.io/github/issues-pr/mguyard/hass-diagral" alt="Open PRs" />
-</Badges>
-<Badges>
-    <Image src="https://github.com/mguyard/hass-diagral/actions/workflows/home-assistant.yaml/badge.svg" alt="Home Assistant Actions" />
-    <Image src="https://github.com/mguyard/hass-diagral/actions/workflows/release.yaml/badge.svg" alt="Release Actions" />
-</Badges>
+| ![License](https://img.shields.io/github/license/mguyard/hass-diagral?style=default&color=0080ff) | ![Last Commit](https://img.shields.io/github/last-commit/mguyard/hass-diagral?style=default&color=0080ff) | ![repo-top-language](https://img.shields.io/github/languages/top/mguyard/hass-diagral?style=default&color=0080ff) | ![repo-language-count](https://img.shields.io/github/languages/count/mguyard/hass-diagral?style=default&color=0080ff) |
+|:---:|:---:|:---:|:---:|
+
+| ![Last Stable Release](https://img.shields.io/github/v/release/mguyard/hass-diagral?display_date=published_at&label=Stable) | ![Last Release Date Stable](https://img.shields.io/github/release-date/mguyard/hass-diagral?label=Stable) | ![Last Beta Release](https://img.shields.io/github/v/release/mguyard/hass-diagral?include_prereleases&filter=*-beta.*&display_name=release&label=Beta) | ![Last Release Date Beta](https://img.shields.io/github/release-date-pre/mguyard/hass-diagral?display_date=published_at&label=Beta) | ![Open Bugs](https://img.shields.io/github/issues-search/mguyard/hass-diagral?query=label%3Abug%20is%3Aissue%20is%3Aopen&label=Open%20Bugs) | ![Open PRs](https://img.shields.io/github/issues-pr/mguyard/hass-diagral) |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+
+| ![Home Assistant Actions](https://github.com/mguyard/hass-diagral/actions/workflows/home-assistant.yaml/badge.svg) | ![Release Actions](https://github.com/mguyard/hass-diagral/actions/workflows/release.yaml/badge.svg) |
+|:---:|:---:|
 
 # Introduction
 
@@ -31,6 +21,27 @@ This integration provides real-time monitoring and control of your Diagral alarm
 Additionally, it supports various sensors and services, such as activating or disabling alarm groups, and provides detailed information about anomalies and system status.
 
 With this integration, you can enhance the security of your home by integrating Diagral's robust alarm system with Home Assistant's powerful automation and monitoring capabilities.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/integration">
+    Install the integration with HACS.
+  </Card>
+  <Card title="Setup" icon="gear" href="/integration/setup">
+    Connect your Diagral account and choose your central.
+  </Card>
+  <Card title="Entities" icon="sitemap" href="/integration/entities">
+    The alarm panel, the anomalies and the health sensors.
+  </Card>
+  <Card title="Webhook" icon="envelope" href="/integration/webhook">
+    Receive intrusion alerts and changes in real time.
+  </Card>
+  <Card title="FAQ" icon="circle-question" href="/faq">
+    Answers to the most common questions.
+  </Card>
+  <Card title="Something is wrong?" icon="stethoscope" href="/issues/diagnostics">
+    Understand the problem from the diagnostics file.
+  </Card>
+</CardGroup>
 
 # Who is Diagral
 
@@ -52,16 +63,10 @@ This development relies on the `pydiagral` library, which is available on GitHub
 The `pydiagral` library provides the necessary tools and functions to interface with Diagral alarm systems, enabling seamless integration with Home Assistant.
 Make sure to check out the repository for more information.
 
-# Responsability
+# Responsibility
 
 <Warning>
 Please note that the Diagral alarm system is a security system, and it may be preferable not to connect it to the Home Assistant home automation platform for security reasons.
 In no event shall the developer of this integration or the [`pydiagral`](https://github.com/mguyard/pydiagral) library be held liable for any issues arising from the use of this integration or the [`pydiagral`](https://github.com/mguyard/pydiagral) library.
 The user installs and uses this integration at their own risk and with full knowledge of the potential implications.
 </Warning>
-
-<!--  Custom component to show Github Badges on a oneline : https://use.docs.page/components/custom  -->
-
-export const Badges = props => {
-  return <div class="justify-center items-center flex flex-wrap gap-2">{props.children}</div>;
-};

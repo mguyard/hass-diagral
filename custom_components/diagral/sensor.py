@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import logging
+from typing import Any
 
 from pydiagral.models import (
     AlarmConfiguration,
@@ -15,13 +16,18 @@ from pydiagral.models import (
     SystemStatus,
 )
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+)
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 import homeassistant.util.dt as dt_util
 
 from . import DiagralConfigEntry
-from .const import DOMAIN
+from .const import DOMAIN, WEBHOOK_STATUSES
 from .coordinator import DiagralDataUpdateCoordinator
 from .entity import DiagralEntity
 
@@ -51,6 +57,33 @@ SENSORS: tuple[DiagralSensorEntityDescription, ...] = (
 )
 
 
+@dataclass(frozen=True, kw_only=True)
+class DiagralHealthSensorEntityDescription(SensorEntityDescription):
+    """Diagnostic sensor reading the coordinator's health, not the alarm."""
+
+    value_fn: Callable[[DiagralDataUpdateCoordinator], Any]
+
+
+HEALTH_SENSORS: tuple[DiagralHealthSensorEntityDescription, ...] = (
+    DiagralHealthSensorEntityDescription(
+        key="webhook_status",
+        translation_key="webhook_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(WEBHOOK_STATUSES),
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.webhook_status,
+    ),
+    DiagralHealthSensorEntityDescription(
+        key="last_webhook",
+        translation_key="last_webhook",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda coordinator: coordinator.last_webhook,
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: DiagralConfigEntry,
@@ -62,6 +95,40 @@ async def async_setup_entry(
     for sensor in SENSORS:
         if sensor.exists_fn(coordinator):
             async_add_entities([DiagralSensor(coordinator, sensor, entry)])
+    async_add_entities(
+        DiagralHealthSensor(coordinator, description, entry)
+        for description in HEALTH_SENSORS
+    )
+
+
+class DiagralHealthSensor(DiagralEntity, SensorEntity):
+    """Diagnostic sensor about the webhook, readable during a polling outage."""
+
+    entity_description: DiagralHealthSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: DiagralDataUpdateCoordinator,
+        description: DiagralHealthSensorEntityDescription,
+        config_entry: DiagralConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        serial = coordinator.data["alarm_config"].alarm.central.serial
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{DOMAIN}_{serial}_{description.key}"
+        )
+
+    @property
+    def available(self) -> bool:
+        """The webhook state does not depend on polling."""
+        return True
+
+    @property
+    def native_value(self) -> Any:
+        """Return the value read from the coordinator."""
+        return self.entity_description.value_fn(self.coordinator)
 
 
 class DiagralSensor(DiagralEntity, SensorEntity):
@@ -89,12 +156,22 @@ class DiagralSensor(DiagralEntity, SensorEntity):
         """Return the icon to use in the frontend."""
         return self.entity_description.icon
 
+    async def async_added_to_hass(self) -> None:
+        """Compute the value from the data read before the entity existed."""
+        await super().async_added_to_hass()
+        self._update_from_coordinator()
+
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        self._update_from_coordinator()
+        # Always write state so availability follows the coordinator
+        self.async_write_ha_state()
 
+    def _update_from_coordinator(self) -> None:
+        """Compute the value and attributes from the coordinator data."""
         _LOGGER.debug(
-            "_handle_coordinator_update called for %s (%s)",
+            "Updating %s (%s) from the coordinator",
             self.name,
             self.entity_description.key,
         )
@@ -116,9 +193,6 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             self._update_anomalies(anomalies, groups, devices_infos)
         if self.entity_description.key == "active_groups":
             self._update_active_groups(system_status, groups, alarm_config)
-
-        _LOGGER.debug("State updated for %s: %s", self.name, self.state)
-        self.async_write_ha_state()
 
     def _update_anomalies(
         self, anomalies: Anomalies, groups: list[Group], devices_infos: DeviceList
@@ -146,7 +220,7 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             # Create a list of anomalies
             self._attr_extra_state_attributes = {}
             # Add created_at with the date and time of the anomaly creation in local timezone
-            if hasattr(anomalies, "created_at"):
+            if getattr(anomalies, "created_at", None):
                 created_at_utc = anomalies.created_at
                 created_at_local = dt_util.as_local(created_at_utc)
                 self._attr_extra_state_attributes["created_at"] = (
@@ -158,11 +232,12 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             # Create a mapping from group index to group name
             group_mapping = {group.index: group.name for group in groups}
 
-            # Create a mapping from device index to device label
-            device_mapping = {
-                device.index: device.label
-                for device_list in vars(devices_infos).values()
-                for device in device_list
+            # Diagral numbers devices per type: sensor 1 and siren 1 both exist
+            device_labels = {
+                kind: {device.index: device.label for device in devices or []}
+                for kind, devices in (
+                    vars(devices_infos) if devices_infos else {}
+                ).items()
             }
 
             # Define the order of keys
@@ -175,6 +250,7 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                 if isinstance(getattr(anomalies, attr), list) and all(
                     isinstance(item, AnomalyDetail) for item in getattr(anomalies, attr)
                 ):
+                    labels = device_labels.get(attr, {})
                     # Create a list of details for each anomaly
                     # Order the keys and remove None values
                     details = [
@@ -182,15 +258,17 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                             key: (
                                 group_mapping[value]
                                 if key == "group" and value in group_mapping
-                                else device_mapping[value]
-                                if key == "index" and value in device_mapping
+                                else labels[value]
+                                if key == "index" and value in labels
                                 else value
                             )
                             for key, value in sorted(
                                 vars(equipment).items(),
-                                key=lambda item: key_order.index(item[0])
-                                if item[0] in key_order
-                                else len(key_order),
+                                key=lambda item: (
+                                    key_order.index(item[0])
+                                    if item[0] in key_order
+                                    else len(key_order)
+                                ),
                             )
                             if value is not None
                         }
@@ -214,17 +292,11 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                 self._attr_extra_state_attributes["anomalies"] = anomalies_dict
 
             # Sort extra state attributes by key with created_at and updated_at first
+            attributes = self._attr_extra_state_attributes
+            first = [k for k in ("created_at", "updated_at") if k in attributes]
             self._attr_extra_state_attributes = {
-                k: self._attr_extra_state_attributes[k]
-                for k in (
-                    "created_at",
-                    "updated_at",
-                    *sorted(
-                        k
-                        for k in self._attr_extra_state_attributes
-                        if k not in ["created_at", "updated_at"]
-                    ),
-                )
+                k: attributes[k]
+                for k in (*first, *sorted(attributes.keys() - set(first)))
             }
         else:
             self._attr_native_value = 0
@@ -238,10 +310,9 @@ class DiagralSensor(DiagralEntity, SensorEntity):
     ) -> None:
         """Update the active groups sensor."""
         _LOGGER.debug(
-            "Update active_groups sensor. SystemStatus: %s / Groups: %s / AlarmConfig: %s",
+            "Update active_groups sensor. SystemStatus: %s / Groups: %s",
             system_status,
             groups,
-            alarm_config,
         )
 
         if system_status.status == "PRESENCE":

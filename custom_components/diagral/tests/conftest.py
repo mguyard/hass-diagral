@@ -1,6 +1,9 @@
 """Shared test fixtures for hass-diagral."""
-import pytest
+
 from unittest.mock import MagicMock
+
+import pytest
+
 from homeassistant.core import HomeAssistant
 
 
@@ -47,6 +50,7 @@ def diagral_config():
         CONF_ALARMPANEL_ACTIONTYPE_CODE,
         CONF_ALARMPANEL_CODE,
     )
+
     config = MagicMock()
     config.options.alarmpanel_options = {
         CONF_ALARMPANEL_ACTIONTYPE_CODE: "never",

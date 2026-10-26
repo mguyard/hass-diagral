@@ -12,39 +12,51 @@
             "invalid_alarmpanel_code": "Invalid Alarm Panel Code. Alarm Panel Code must contain only digits (4 or more).",
             "missing_alarmpanel_code": "Alarm Panel Code is required when you set the action type to something other than `Never`.",
             "invalid_pin": "Invalid Master (PIN) code. Master (PIN) code must contain only digits.",
+            "pin_refused": "Diagral refused the Master (PIN) code for this central. Check it and enter it again.",
             "unknown": "Unexpected error"
         },
         "step": {
             "user": {
+                "title": "Diagral Account",
+                "description": "Please provide your Diagral credentials. The centrals of this account are listed in the next step. **Clicking Next takes a few seconds: the centrals of this account are fetched from Diagral**.\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
                 "data": {
-                    "serial_id": "Serial ID of DIAG56AAX/DIAG59AAX module"
-                },
-                "description": "To set up your Diagral alarm system, you need a DIAG56AAX/DIAG59AAX module which connects your alarm to the internet for remote control.\n\rTo find your Serial ID, check the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})",
-                "title": "Diagral"
+                    "username": "Username (email address)",
+                    "password": "Password"
+                }
             },
-            "account": {
-              "title": "Diagral Account",
-              "description": "Please provide your Diagral credentials\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
-              "data": {
-                "username": "Username (email address)",
-                "password": "Password",
-                "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
-              }
-            }
-            ,
+            "central": {
+                "title": "Diagral central",
+                "description": "Choose the Diagral central to add to Home Assistant.\n\rTo check its serial ID, look at the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})\n\r**Already in Home Assistant, so not listed**: {configured}",
+                "data": {
+                    "serial_id": "Central (serial ID)",
+                    "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
+                }
+            },
+            "serial": {
+                "data": {
+                    "serial_id": "Serial ID of DIAG56AAX/DIAG59AAX module",
+                    "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
+                },
+                "description": "The centrals of your account could not be listed: enter the serial ID of your central.\n\rTo set up your Diagral alarm system, you need a DIAG56AAX/DIAG59AAX module which connects your alarm to the internet for remote control.\n\rTo find your Serial ID, check the label on your module or visit our setup guide: [{setup_guide_url}]({setup_guide_url})\n\r![SerialID Location]({serial_id_image_url})",
+                "title": "Diagral central"
+            },
             "reconfigure": {
-              "title": "Diagral Account",
-              "description": "Please update your Diagral credentials\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
-              "data": {
-                "username": "Username (email address)",
-                "password": "Password",
-                "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
-              }
+                "title": "Diagral Account",
+                "description": "Please update your Diagral credentials\n\r_Note: Make sure this account is associated with your Diagral alarm system and has sufficient permissions to interact with the alarm._",
+                "data": {
+                    "username": "Username (email address)",
+                    "password": "Password",
+                    "pin_code": "Diagral Master (PIN) Code (numbers only, e.g. 1234)"
+                },
+                "data_description": {
+                    "password": "Leave empty to keep the current value.",
+                    "pin_code": "Leave empty to keep the current value."
+                }
             },
             "options": {
-              "title": "Options",
-              "description": "_More details about these options are available [here]({options_url})_",
-              "sections": {
+                "title": "Options",
+                "description": "_More details about these options are available [here]({options_url})_",
+                "sections": {
                     "alarmpanel_options": {
                         "name": "Alarm Panel Options",
                         "description": "These options apply to your Alarm Control Panel UI",
@@ -70,6 +82,14 @@
         }
     },
     "entity": {
+        "binary_sensor": {
+            "cloud_connection": {
+                "name": "Diagral cloud"
+            },
+            "cloud_reachable": {
+                "name": "Diagral cloud reachable"
+            }
+        },
         "alarm_control_panel": {
             "central": {
                 "name": "Central"
@@ -81,6 +101,19 @@
             },
             "active_groups": {
                 "name": "Active Groups"
+            },
+            "webhook_status": {
+                "name": "Webhook",
+                "state": {
+                    "connected": "Connected",
+                    "owned_elsewhere": "Used by another installation",
+                    "registration_failed": "Registration failed",
+                    "no_url": "No address",
+                    "unregistered": "Unregistered"
+                }
+            },
+            "last_webhook": {
+                "name": "Last webhook"
             }
         }
     },
@@ -142,6 +175,78 @@
         "unregister_webhook": {
             "description": "Unregister Webhook in Diagral Cloud",
             "name": "Unregister Webhook"
+        }
+    },
+    "issues": {
+        "webhook_owned_elsewhere": {
+            "title": "Diagral webhook used by another installation: {entry_title}",
+            "fix_flow": {
+                "step": {
+                    "init": {
+                        "title": "Diagral webhook used by another installation",
+                        "description": "The Diagral cloud sends the events of **{entry_title}** to **{other_host}**, not to this Home Assistant. Intrusion alerts only arrive this way.",
+                        "menu_options": {
+                            "confirm": "Take the webhook over",
+                            "ignore": "Ignore this warning",
+                            "unignore": "Stop ignoring this warning"
+                        },
+                        "menu_option_descriptions": {
+                            "confirm": "Events come to this Home Assistant. {other_host} stops receiving them.",
+                            "ignore": "{other_host} keeps the events. The warning stays hidden until this Home Assistant owns the webhook.",
+                            "unignore": "The warning shows in the repairs again. {other_host} keeps the events."
+                        }
+                    },
+                    "confirm": {
+                        "title": "Take over the Diagral webhook",
+                        "description": "The Diagral cloud sends the events of **{entry_title}** to another installation (**{other_host}**), so Home Assistant does not receive them. Intrusion alerts only arrive this way: the alarm panel cannot show *triggered* while this lasts. Polling still updates the arming state every 5 minutes.\n\nThe integration no longer overwrites a subscription it did not create. If **{other_host}** is not in use any more, or you want this installation to receive the events, confirm below: the subscription will point here, and **{other_host}** will stop receiving events.\n\nYou can also do this at any time with the `diagral.register_webhook` action."
+                    }
+                },
+                "abort": {
+                    "entry_not_loaded": "The Diagral integration is not loaded. Reload it, then try again.",
+                    "take_over_failed": "The Diagral cloud refused the change. Check the logs, then try again.",
+                    "ignored": "The warning is ignored. It stays hidden while {other_host} keeps the webhook; show ignored repairs to see it again.",
+                    "unignored": "The warning shows in the repairs again."
+                }
+            }
+        },
+        "webhook_registration_failed": {
+            "title": "Diagral webhook could not be registered: {entry_title}",
+            "fix_flow": {
+                "step": {
+                    "confirm": {
+                        "title": "Retry the Diagral webhook registration",
+                        "description": "Home Assistant could not register its webhook with the Diagral cloud for **{entry_title}**, so it does not receive Diagral events. Intrusion alerts only arrive this way: the alarm panel cannot show *triggered* while this lasts. Polling still updates the arming state every 5 minutes.\n\nThis usually comes from a temporary outage of the Diagral cloud or of Home Assistant Cloud. Confirm below to try again; reloading the integration does the same."
+                    }
+                },
+                "abort": {
+                    "entry_not_loaded": "The Diagral integration is not loaded. Reload it, then try again.",
+                    "retry_failed": "The registration failed again. Check the logs, then try again later."
+                }
+            }
+        },
+        "webhook_no_url": {
+            "title": "No address for the Diagral webhook: {entry_title}",
+            "description": "Home Assistant cannot receive Diagral events for **{entry_title}**: the Diagral cloud needs an HTTPS address reachable from the internet, and none is available. Intrusion alerts only arrive this way: the alarm panel cannot show *triggered* while this lasts. Polling still updates the arming state every 5 minutes.\n\nTo fix it, set an external URL starting with `https://` in **Settings > System > Network**, or connect Home Assistant Cloud with an active subscription. Then reload the Diagral integration."
+        }
+    },
+    "exceptions": {
+        "invalid_code": {
+            "message": "The code is wrong or missing."
+        },
+        "command_failed": {
+            "message": "Diagral refused the command. Check the alarm, then try again."
+        },
+        "command_not_confirmed": {
+            "message": "Diagral did not confirm the command in time, and the alarm state does not show it. Check the alarm state before trying again."
+        },
+        "webhook_registration_failed": {
+            "message": "The Diagral webhook could not be registered. Check the logs, then try again."
+        },
+        "webhook_no_url": {
+            "message": "No HTTPS address reachable from the internet is available for the Diagral webhook. Set an external URL, or connect Home Assistant Cloud."
+        },
+        "webhook_unregistration_failed": {
+            "message": "The Diagral webhook subscription could not be read or deleted. Check the logs, then try again."
         }
     }
 }

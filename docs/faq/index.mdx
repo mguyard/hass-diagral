@@ -7,13 +7,21 @@ summary: Frequently Asked Questions
 
 ### Change Credentials (login/password/mastercode)
 
-<Accordion title="How to" icon="question" defaultOpen>
-To change your credentials, go to [the integration configuration](https://my.home-assistant.io/redirect/integration/?domain=diagral), click on the 3 vertical dots icon and select `Reconfigure`.
+<Accordion title="How do I change my credentials?" icon="key" defaultOpen>
+To change your credentials, go to [the integration configuration](https://my.home-assistant.io/redirect/integration/?domain=diagral), click on the 3 vertical dots icon and select `Reconfigure`. The password and the PIN code are never shown: leave them empty to keep their current value.
+</Accordion>
+
+### PIN code starting with 0
+
+<Accordion title="My PIN code starts with 0 and the integration fails to start" icon="hashtag">
+Versions before `1.2.0` stored the PIN code as a number, which drops leading zeros: `0123` was saved as `123`. The integration cannot restore the missing zeros, since the length of a Diagral PIN code varies.
+
+If you configured the integration before `1.2.0` and your PIN code starts with 0, go to [the integration configuration](https://my.home-assistant.io/redirect/integration/?domain=diagral), click on the 3 vertical dots icon, select `Reconfigure` and enter your full PIN code.
 </Accordion>
 
 ### Enable/Disable Code for Arming/Disarming
 
-<Accordion title="How to" icon="question">
+<Accordion title="How do I require a code, or stop requiring it?" icon="lock">
 To enable/disable this feature, go to [the integration configuration](https://my.home-assistant.io/redirect/integration/?domain=diagral), click on `Configure` and you'll find the settings under `Alarm Panel Options`.
 </Accordion>
 
@@ -21,21 +29,21 @@ To enable/disable this feature, go to [the integration configuration](https://my
 
 ### Cloud subscription not active. Webhook will not be created
 
-<Accordion title="What is the reason" icon="question">
-The Diagral integration automatically detects your Home Assistant configuration compatible with receiving a [Webhook](/integration/webhook) from Diagral servers.<br /><br />
-This error message indicates that according to Home Assistant, the only method meeting the [prerequisites](/integration/webhook#home-assistant-url) and allowing to receive a webhook from Diagral is through `Home Assistant Cloud` from [Nabu Casa](https://www.nabucasa.com) but your Home Assistant Cloud subscription is no longer valid (but still configured on your Home Assistant) or you are experiencing connectivity issues between your Home Assistant and Home Assistant Cloud.<br />
-In any case, the Diagral integration cannot create the Webhook through Home Assistant Cloud.
+<Accordion title="Why does this happen, and how do I fix it?" icon="cloud">
+The Diagral integration automatically detects how your Home Assistant can receive a [Webhook](/integration/webhook) from the Diagral servers.
 
-`How to solve?`: Depending on your situation, either renew your subscription/fix the connectivity issue with Home Assistant Cloud, or configure your Home Assistant to stop using Home Assistant Cloud and use another connection solution such as direct access, [NGINX](https://nginx.org) or [DuckDns](http://www.duckdns.org) for example that meets the [prerequisites](/integration/webhook#home-assistant-url).
+This error message means that, according to Home Assistant, the only way meeting the [prerequisites](/integration/webhook#home-assistant-url) is `Home Assistant Cloud` from [Nabu Casa](https://www.nabucasa.com), but your Home Assistant Cloud subscription is no longer valid (while still configured on your Home Assistant), or you are experiencing connectivity issues between your Home Assistant and Home Assistant Cloud. In any case, the Diagral integration cannot create the webhook through Home Assistant Cloud.
+
+**How to solve it:** Depending on your situation, either renew your subscription/fix the connectivity issue with Home Assistant Cloud, or configure your Home Assistant to stop using Home Assistant Cloud and use another connection solution such as direct access, [NGINX](https://nginx.org) or [DuckDns](http://www.duckdns.org) for example that meets the [prerequisites](/integration/webhook#home-assistant-url).
 </Accordion>
 
 ### Session already opened
 
-<Accordion title="What is the reason" icon="question">
+<Accordion title="Why does this happen, and how do I fix it?" icon="right-to-bracket">
 The Diagral Cloud only accepts a single simultaneous connection for the same serial ID. It is possible that you have another open session that is blocking your access.
 This can be through the eOne application that you are using or from which you have not logged out, or another solution using the Diagral API.
 
-`How to solve?`: Disconnect from the other session.
+**How to solve it:** disconnect from the other session.
 </Accordion>
 
 ---

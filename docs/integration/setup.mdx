@@ -19,7 +19,7 @@ Users install and use this integration at their own risk and with full understan
 ## Requirements
 
 1. A working Diagral Alarm system
-2. A Diagral connectovity box (DIAG56AAX (End of Sales) or a [DIAG59AAX](https://www.diagral.fr/2026/01/19/nouvelle-centrale-dalarme-ip-4g-diagral-diag99agx/) available inside DIAG99AGX)
+2. A Diagral connectivity box (DIAG56AAX (End of Sales) or a [DIAG59AAX](https://www.diagral.fr/2026/01/19/nouvelle-centrale-dalarme-ip-4g-diagral-diag99agx/) available inside DIAG99AGX)
 3. An active Diagral eOne mobile application account
 4. Internet connectivity for your Home Assistant
 
@@ -28,8 +28,8 @@ Users install and use this integration at their own risk and with full understan
 You'll need just a few details to configure the Diagral integration:
 - Your Diagral username (email address)
 - Your account password
-- Your system serial ID (from the DIAG56AAX/DIAG59AAX box)
-- The PIN code associated with your username/password
+- The PIN code of your central — each central has its own
+- Your system serial ID (from the DIAG56AAX/DIAG59AAX box), only if the centrals of your account cannot be listed during setup
 
 ### Finding Your System Serial ID
 
@@ -45,26 +45,41 @@ For guidance on opening the box, refer to the official DIAG56AAX/DIAG99AGX docum
 
 ## Integration Setup in Home Assistant
 
+The setup takes a few minutes and is done from the Home Assistant interface.
+
 <Warning>
 As [only one simultaneous connection is allowed by the Diagral API](/faq#session-already-opened), before starting the integration setup, make sure you don't have any other active connections such as with the Diagral eOne mobile application.
 </Warning>
 
-Start the setup process by clicking the button below:
-[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=diagral)
+<Steps>
+  <Step title="Start the setup">
+    Click the button below:
 
-The setup process consists of 3 steps:
-- Enter your `Serial ID`
-- Provide your `Diagral credentials`
-- Configure `Options`
-<Image src="/images/configflow-step1.png" alt="Step 1 - Serial ID" />
-<Image src="/images/configflow-step2.png" alt="Step 2 - Diagral Credentials" />
-<Image src="/images/configflow-step3.png" alt="Step 3 - Diagral Options" />
+    [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=diagral)
+  </Step>
+  <Step title="Enter your Diagral credentials">
+    The e-mail address and password of your Diagral eOne account.
 
-Fill in all fields and click `Submit`.
-A success popup will appear where you can select an area for your Diagral alarm.
-<Image src="/images/configflow-success.png" />
+    <Image src="/images/configflow-step1.png" alt="Step 1 - Diagral Credentials" />
+  </Step>
+  <Step title="Choose your central and enter its PIN code">
+    The centrals of your account are listed; those already in Home Assistant are not. Each central has its own PIN code.
 
-Click `Finish` to complete the setup! 🎉
+    <Image src="/images/configflow-step2.png" alt="Step 2 - Diagral Central and PIN Code" />
+
+    If the centrals of your account cannot be listed, this step asks for your `Serial ID` instead — see [Finding Your System Serial ID](/integration/setup#finding-your-system-serial-id).
+  </Step>
+  <Step title="Configure the options">
+    Choose when a code is required on the alarm panel — see [Options](/integration/setup#options).
+
+    <Image src="/images/configflow-step3.png" alt="Step 3 - Diagral Options" />
+  </Step>
+  <Step title="Finish">
+    A success popup appears, where you can select an area for your Diagral alarm. Click `Finish` to complete the setup! 🎉
+
+    <Image src="/images/configflow-success.png" alt="Setup completed" />
+  </Step>
+</Steps>
 
 <Success>
 Please check your Home Assistant logs to ensure there are no errors related to the Diagral Integration.
@@ -77,11 +92,13 @@ You can customize your integration experience through various options.
 
 ### Alarm Panel Options
 
-The Alarm Panel options allow you to specify whether a code should be required when using the Alarm Control Panel UI.
-You can configure when a code is required:
-- Never: No code required for any action
-- Disarm Only: Code required only for disarm actions
-- Always: Code required for both arm and disarm actions
+The Alarm Panel options allow you to specify whether a code should be required when using the Alarm Control Panel UI:
+
+| Option | Code required |
+| --- | --- |
+| Never | For no action |
+| Disarm Only | Only to disarm |
+| Always | To arm and to disarm |
 
 <Image src="/images/alarm-control-panel.png" alt="Alarm Control Panel" />
 
