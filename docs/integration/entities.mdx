@@ -75,19 +75,28 @@ anomalies: # [!code highlight]
       index: 0 # [!code highlight]
       group: Kitchen # [!code highlight]
       label: Kitchen Door # [!code highlight]
-      id: 23456789 # [!code highlight]
-      name: sensorAlert # [!code highlight]
-    - id: 98765432 # [!code highlight]
-      name: sensorAlert2 # [!code highlight]
+      anomaly_names: # [!code highlight]
+        - id: 23456789 # [!code highlight]
+          name: sensorAlert # [!code highlight]
+        - id: 23456790 # [!code highlight]
+          name: sensorAlert2 # [!code highlight]
+    - anomaly_names: # [!code highlight]
+        - id: 98765432 # [!code highlight]
+          name: sensorAlert2 # [!code highlight]
   central: # [!code highlight]
-    - id: 12805213 # [!code highlight]
-      name: mainPowerSupplyAlert # [!code highlight]
+    - anomaly_names: # [!code highlight]
+        - id: 12805213 # [!code highlight]
+          name: mainPowerSupplyAlert # [!code highlight]
     - serial: 234 # [!code highlight]
       group: Détecteurs de Mouvements # [!code highlight]
-      id: 12345678 # [!code highlight]
-      name: mainPowerSupplyAlert2 # [!code highlight]
+      anomaly_names: # [!code highlight]
+        - id: 12345678 # [!code highlight]
+          name: mainPowerSupplyAlert2 # [!code highlight]
+fault_count: 5 # [!code highlight]
 ```
 </Card>
+
+The sensor state counts the devices with an anomaly. The `fault_count` attribute counts every fault across all devices, so one device with two faults contributes `1` to the state and `2` to `fault_count`. With no anomaly, `fault_count` is `0`.
 
 All anomalies are under the `anomalies` key. The first level (`sensors` and `central` in this example) is the type of element with anomalies: `sensors`, `badges`, `sirens`, `cameras`, `commands`, `transceivers`, `transmitters` or `central`.
 
@@ -95,22 +104,21 @@ Each anomaly can have several attributes:
 
 | Attribute | Description |
 | --- | --- |
-| `id` | The identifier of the anomaly, defined by Diagral |
-| `name` | The name of the anomaly, defined by Diagral |
 | `serial` | The serial number of the element that triggered the anomaly (optional) |
 | `index` | The name of the element, looked up among the elements of the same type, or its number when it is not found (optional) |
 | `group` | The group of the element: its name if defined, otherwise its ID (optional) |
 | `label` | The name of the element that triggered the anomaly (optional) |
+| `anomaly_names` | Every fault of the element, each with the `id` and `name` defined by Diagral |
 
 Using this attribute format, you can leverage Jinja2 templates to extract and utilize the information you need.
 Below is a quick and simple example for a [Home Assistant Template](https://my.home-assistant.io/redirect/developer_template/) (replace `sensor.home_anomalies` with your actual entity):
 
 ```jinja title="Template"
-{% set anomalies = state_attr('sensor.home_anomalies', 'anomalies') %}
-{% for location in anomalies.keys() -%}
-{% if anomalies[location]|list -%}
-Anomalie {{ anomalies[location]|map(attribute='name')|join(', ') }} on {{ location|capitalize }}
-{% endif -%}
+{% set anomalies = state_attr('sensor.home_anomalies', 'anomalies') or {} %}
+{% for location, devices in anomalies.items() -%}
+{% for device in devices -%}
+{{ device.get('label') or device.get('index', location|capitalize) }} — {{ device.anomaly_names|map(attribute='name')|join(', ') }}
+{% endfor -%}
 {% endfor %}
 ```
 
