@@ -38,6 +38,9 @@
 - name: waiting
   description: Waiting for something
   color: daa036
+- name: waiting-community-feedback
+  description: On hold until other users show interest
+  color: fef2c0
 
 # Stale handling (match entries in `lock-stale.yml`).
 - name: waiting-for-response
