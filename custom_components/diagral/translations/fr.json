@@ -148,7 +148,7 @@
         }
     },
     "services": {
-        "activate_groups": {
+        "arm_groups": {
             "description": "Activer le(s) groupe(s) d'alarme",
             "fields": {
                 "group_ids": {
@@ -158,7 +158,7 @@
             },
             "name": "Activer le(s) groupe(s)"
         },
-        "disable_groups": {
+        "disarm_groups": {
             "description": "Désactiver le(s) groupe(s) d'alarme",
             "fields": {
                 "group_ids": {

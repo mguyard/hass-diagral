@@ -242,7 +242,6 @@ class DiagralSensor(DiagralEntity, SensorEntity):
 
             # Define the order of keys
             key_order = ["serial", "index", "group", "label", "anomaly_names"]
-            anomaly_name_order = ["id", "name"]
 
             # Add each list of anomalies to extra state attributes
             anomalies_dict = {}
@@ -274,22 +273,22 @@ class DiagralSensor(DiagralEntity, SensorEntity):
                         }
                         for equipment in getattr(anomalies, attr)
                     ]
-                    # Flatten anomaly names directly into the details
                     for detail in details:
                         if "anomaly_names" in detail:
-                            for anomaly in detail.pop("anomaly_names"):
-                                detail.update(
-                                    {
-                                        key: value
-                                        for key, value in vars(anomaly).items()
-                                        if key in anomaly_name_order
-                                    }
-                                )
+                            detail["anomaly_names"] = [
+                                {"id": anomaly.id, "name": anomaly.name}
+                                for anomaly in detail["anomaly_names"]
+                            ]
                     if details:  # Only add if there are anomalies
                         anomalies_dict[attr] = details
 
             if anomalies_dict:
                 self._attr_extra_state_attributes["anomalies"] = anomalies_dict
+            self._attr_extra_state_attributes["fault_count"] = sum(
+                len(detail.get("anomaly_names", []))
+                for details in anomalies_dict.values()
+                for detail in details
+            )
 
             # Sort extra state attributes by key with created_at and updated_at first
             attributes = self._attr_extra_state_attributes
@@ -300,7 +299,7 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             }
         else:
             self._attr_native_value = 0
-            self._attr_extra_state_attributes = {}
+            self._attr_extra_state_attributes = {"fault_count": 0}
 
     def _update_active_groups(
         self,

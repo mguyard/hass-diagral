@@ -24,6 +24,7 @@ from pydiagral.models import (
     AnomalyName,
     DeviceInfos,
     DeviceList,
+    Group,
 )
 import pytest
 
@@ -56,12 +57,74 @@ def make_sensor_mock() -> DiagralSensor:
 class TestUpdateAnomalies:
     """Tests for _update_anomalies()."""
 
+    def test_every_device_fault_is_preserved_in_api_order(self):
+        """Multiple faults must not overwrite one another or device metadata."""
+        sensor = make_sensor_mock()
+        anomalies = Anomalies(
+            created_at=None,
+            sensors=[
+                AnomalyDetail(
+                    serial="123",
+                    index=1,
+                    group=1,
+                    label="Door detector",
+                    anomaly_names=[
+                        AnomalyName(id=1384, name="lowBattery"),
+                        AnomalyName(id=1383, name="radioAlert"),
+                    ],
+                )
+            ],
+            sirens=[
+                AnomalyDetail(
+                    index=1,
+                    anomaly_names=[AnomalyName(id=1385, name="tamperAlert")],
+                )
+            ],
+        )
+
+        sensor._update_anomalies(
+            anomalies,
+            [Group(index=1, name="Entrance")],
+            self.devices_numbered_one(),
+        )
+
+        detail = sensor._attr_extra_state_attributes["anomalies"]["sensors"][0]
+        assert detail["anomaly_names"] == [
+            {"id": 1384, "name": "lowBattery"},
+            {"id": 1383, "name": "radioAlert"},
+        ]
+        assert "id" not in detail
+        assert "name" not in detail
+        assert list(detail) == ["serial", "index", "group", "label", "anomaly_names"]
+        assert {key: detail[key] for key in ("serial", "index", "group", "label")} == {
+            "serial": "123",
+            "index": "Front door",
+            "group": "Entrance",
+            "label": "Door detector",
+        }
+        assert sensor._attr_extra_state_attributes["fault_count"] == 3
+        assert sensor._attr_native_value == 2
+
+    @pytest.mark.parametrize(
+        "anomalies",
+        [None, Anomalies(created_at=None), Anomalies(created_at=None, sensors=[])],
+        ids=["none", "unset-lists", "empty-list"],
+    )
+    def test_no_anomalies_has_zero_fault_count(self, anomalies):
+        """The total fault count is explicitly zero even without device entries."""
+        sensor = make_sensor_mock()
+
+        sensor._update_anomalies(anomalies, [], EMPTY_DEVICE_LIST)
+
+        assert sensor._attr_extra_state_attributes["fault_count"] == 0
+        assert sensor._attr_native_value == 0
+
     def test_no_anomalies_sets_value_to_zero(self):
-        """None anomalies must set native_value to 0 and clear attributes."""
+        """None anomalies must set both the device and fault counts to zero."""
         sensor = make_sensor_mock()
         sensor._update_anomalies(None, [], MagicMock())
         assert sensor._attr_native_value == 0
-        assert sensor._attr_extra_state_attributes == {}
+        assert sensor._attr_extra_state_attributes == {"fault_count": 0}
 
     def test_empty_anomalies_object_sets_value_to_zero(self):
         """Anomalies object with all None lists must count as 0."""
@@ -101,7 +164,11 @@ class TestUpdateAnomalies:
         sensor._update_anomalies(anomalies, [], EMPTY_DEVICE_LIST)
 
         assert sensor._attr_native_value == 1
-        assert list(sensor._attr_extra_state_attributes) == ["updated_at", "anomalies"]
+        assert list(sensor._attr_extra_state_attributes) == [
+            "updated_at",
+            "anomalies",
+            "fault_count",
+        ]
 
     @staticmethod
     def devices_numbered_one() -> DeviceList:

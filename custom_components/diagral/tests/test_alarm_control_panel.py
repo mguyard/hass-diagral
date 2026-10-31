@@ -5,7 +5,9 @@ without making real API calls or instantiating the full entity.
 """
 
 import asyncio
+import json
 import logging
+import pathlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,6 +24,7 @@ from pydiagral.exceptions import (
     ServerError,
 )
 import pytest
+import yaml
 
 from homeassistant.components.alarm_control_panel import AlarmControlPanelState
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
@@ -616,4 +619,28 @@ class TestWebhookActionStatus:
         entry = panel.hass.config_entries.async_get_entry.return_value
         entry.runtime_data.coordinator.async_set_webhook_status.assert_called_with(
             "unregistered"
+        )
+
+
+INTEGRATION = pathlib.Path(__file__).parent.parent
+SERVICES = yaml.safe_load((INTEGRATION / "services.yaml").read_text(encoding="utf-8"))
+
+
+class TestServiceTranslations:
+    """Every action of the panel is named in each language."""
+
+    @pytest.mark.parametrize("language", ["en", "fr"])
+    @pytest.mark.parametrize("service", sorted(SERVICES))
+    def test_service_is_translated(self, language, service):
+        """The translation keys match the service and its fields."""
+        translations = json.loads(
+            (INTEGRATION / "translations" / f"{language}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        translated = translations["services"].get(service)
+        assert translated, f"{service} is not translated in {language}.json"
+        assert translated["name"]
+        assert set(translated.get("fields", {})) == set(
+            SERVICES[service].get("fields") or {}
         )
