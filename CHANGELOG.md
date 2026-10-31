@@ -1,3 +1,11 @@
+# [1.4.0-beta.2](https://github.com/mguyard/hass-diagral/compare/v1.4.0-beta.1...v1.4.0-beta.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* **sensor:** 🐛 List every fault of a device under `anomaly_names` (by @Mins95) ([d2c0d88](https://github.com/mguyard/hass-diagral/commit/d2c0d8851d1cab3d426a8b33bb8abd6ea378157f))
+* **translations:** 🐛 Name the group actions in French ([e173830](https://github.com/mguyard/hass-diagral/commit/e173830238038c5adbde57c51e83ff1d8264187d))
+
 # [1.4.0-beta.1](https://github.com/mguyard/hass-diagral/compare/v1.3.3...v1.4.0-beta.1) (2026-10-26)
 
 
