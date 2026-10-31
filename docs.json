@@ -75,6 +75,11 @@
           "title": "Actions",
           "href": "/integration/actions",
           "icon": "microchip"
+        },
+        {
+          "title": "Examples",
+          "href": "/integration/examples",
+          "icon": "lightbulb"
         }
       ]
     },

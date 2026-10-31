@@ -1,0 +1,126 @@
+---
+title: Examples
+description: Templates and automations built on the Diagral entities
+previous: /integration/actions
+previousTitle: Actions
+next: /integration/contributing
+nextTitle: Contributing
+---
+
+Ready-to-use templates and automations for the Diagral entities.
+Try a template in the [template editor](https://my.home-assistant.io/redirect/developer_template/) before using it in an automation, and replace `sensor.<alarm>_anomalies` with your own entity.
+
+## Anomalies
+
+These examples read the attributes of the anomalies sensor, described in [Anomalies - Details](/integration/entities#anomalies---details).
+A device entry only has the keys Diagral sent for it: the central, for instance, has neither `label` nor `index`. Read them with `.get()`, as below, so that a missing key does not log a warning.
+
+### Count the devices and the faults
+
+The state counts the devices with an anomaly, `fault_count` every fault.
+
+```jinja title="Template"
+{{ states('sensor.<alarm>_anomalies') }} device(s), {{ state_attr('sensor.<alarm>_anomalies', 'fault_count') }} fault(s)
+```
+
+```text title="Result"
+3 device(s), 4 fault(s)
+```
+
+### One line per device
+
+```jinja title="Template"
+{%- set anomalies = state_attr('sensor.<alarm>_anomalies', 'anomalies') or {} %}
+{%- for type, devices in anomalies.items() %}
+{%- for device in devices %}
+- {{ device.get('label') or device.get('index') or type | capitalize }}: {{ device.anomaly_names | map(attribute='name') | join(', ') }}
+{%- endfor %}
+{%- endfor %}
+```
+
+```text title="Result"
+- Front door: lowBattery, radioAlert
+- Indoor siren: tamperAlert
+- Central: mainPowerSupplyAlert
+```
+
+### One line per fault
+
+Each line also gives the group of the device and the code Diagral uses for the fault.
+
+```jinja title="Template"
+{%- set ns = namespace(lines=[]) %}
+{%- set anomalies = state_attr('sensor.<alarm>_anomalies', 'anomalies') or {} %}
+{%- for type, devices in anomalies.items() %}
+{%- for device in devices %}
+{%- for fault in device.anomaly_names %}
+{%- set ns.lines = ns.lines + [(device.get('label') or device.get('index') or type | capitalize) ~ ' (' ~ device.get('group', '—') ~ '): ' ~ fault.name ~ ' [' ~ fault.id ~ ']'] %}
+{%- endfor %}
+{%- endfor %}
+{%- endfor %}
+{{ ns.lines | join('\n') }}
+```
+
+```text title="Result"
+Front door (Ground floor): lowBattery [1384]
+Front door (Ground floor): radioAlert [1383]
+Indoor siren (Ground floor): tamperAlert [1385]
+Central (—): mainPowerSupplyAlert [12805213]
+```
+
+### Devices with a given fault
+
+Replace `lowBattery` with the fault name to look for, as it appears in `anomaly_names`.
+
+```jinja title="Template"
+{%- set anomalies = state_attr('sensor.<alarm>_anomalies', 'anomalies') or {} %}
+{%- set ns = namespace(devices=[]) %}
+{%- for type, devices in anomalies.items() %}
+{%- for device in devices if 'lowBattery' in device.anomaly_names | map(attribute='name') | list %}
+{%- set ns.devices = ns.devices + [device.get('label') or device.get('index') or type] %}
+{%- endfor %}
+{%- endfor %}
+Low battery: {{ ns.devices | join(', ') if ns.devices else 'none' }}
+```
+
+```text title="Result"
+Low battery: Front door
+```
+
+### Notify when a new fault appears
+
+This automation sends a notification listing every device and its faults whenever the number of faults goes up.
+
+- It triggers on the `fault_count` attribute rather than on the state, so that a second fault on a device already in anomaly is not missed: the state, which counts the devices, does not change then.
+- The condition only lets an increase through, and ignores the start of Home Assistant and the return of an unavailable sensor, so known faults are not notified again.
+
+```yaml title="Automation"
+alias: Diagral - new fault
+triggers:
+  - trigger: state
+    entity_id: sensor.<alarm>_anomalies
+    attribute: fault_count
+conditions:
+  - condition: template
+    value_template: >
+      {{ trigger.from_state is not none
+         and trigger.from_state.state not in ['unknown', 'unavailable']
+         and trigger.to_state.attributes.fault_count | int(0)
+             > trigger.from_state.attributes.fault_count | int(0) }}
+actions:
+  - action: persistent_notification.create
+    data:
+      title: "Diagral: {{ trigger.to_state.attributes.fault_count }} fault(s)"
+      message: |
+        {%- set anomalies = trigger.to_state.attributes.anomalies or {} %}
+        {%- for type, devices in anomalies.items() %}
+        {%- for device in devices %}
+        - {{ device.get('label') or device.get('index') or type | capitalize }}: {{ device.anomaly_names | map(attribute='name') | join(', ') }}
+        {%- endfor %}
+        {%- endfor %}
+mode: queued
+```
+
+<Info>
+To receive it on your phone, replace `persistent_notification.create` with the notify action of the [Home Assistant Companion app](https://companion.home-assistant.io/docs/notifications/basic/), such as `notify.mobile_app_<your_phone>`, with the same `title` and `message`.
+</Info>
