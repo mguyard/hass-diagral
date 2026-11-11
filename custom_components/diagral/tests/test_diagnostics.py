@@ -118,6 +118,9 @@ def make_entry() -> MagicMock:
     coordinator.last_update_success = False
     coordinator.last_success = datetime(2026, 10, 25, 0, 30, tzinfo=UTC)
     coordinator.last_error = "ServerError"
+    coordinator.fallback_api_connected = None
+    coordinator.anomalies_available = True
+    entry.runtime_data.api.uses_topaze = False
     coordinator.webhook_status = "owned_elsewhere"
     coordinator.last_webhook = None
     device = SimpleNamespace(index=1, label=SECRETS["device"])
@@ -198,6 +201,35 @@ async def test_diagnostics_report_health_and_counts():
         "devices": {"cameras": 0, "commands": 0, "sensors": 2, "sirens": 1},
         "anomalies": 1,
     }
+
+
+@pytest.mark.parametrize("connected", [None, False, True])
+async def test_diagnostics_distinguish_fallback_from_emerald(connected):
+    """Emergency state is explicit and independent from the Emerald ping."""
+    entry = make_entry()
+    entry.runtime_data.api.uses_topaze = True
+    entry.runtime_data.coordinator.fallback_api_connected = connected
+
+    result = await run_diagnostics(entry=entry)
+
+    assert result["health"]["fallback_api"] == {
+        "active": True,
+        "connected": connected,
+    }
+    assert result["health"]["cloud"]["ping"]["reachable"] is True
+
+
+@pytest.mark.parametrize("available", [False, True])
+async def test_diagnostics_do_not_report_failed_anomalies_as_current(available):
+    """A failed anomaly read has no current count, even if cached data exists."""
+    entry = make_entry()
+    entry.runtime_data.coordinator.anomalies_available = available
+
+    result = await run_diagnostics(entry=entry)
+
+    assert result["health"]["anomalies_available"] is available
+    assert result["alarm"]["anomalies"] == (1 if available else None)
+    assert result["health"]["fallback_api"] == {"active": False, "connected": None}
 
 
 @pytest.mark.parametrize(

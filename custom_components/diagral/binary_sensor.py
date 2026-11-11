@@ -44,6 +44,14 @@ CLOUD_REACHABLE = DiagralHealthSensorDescription(
     is_on_fn=lambda coordinator: coordinator.cloud_reachable,
 )
 
+FALLBACK_API_CONNECTION = DiagralHealthSensorDescription(
+    key="fallback_api_connection",
+    translation_key="fallback_api_connection",
+    device_class=BinarySensorDeviceClass.CONNECTIVITY,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    is_on_fn=lambda coordinator: coordinator.fallback_api_connected,
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -52,9 +60,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Diagral binary sensors."""
     coordinator = entry.runtime_data.coordinator
+    descriptions = [CLOUD_CONNECTION, CLOUD_REACHABLE]
+    if getattr(coordinator.api, "uses_topaze", False) is True:
+        descriptions.append(FALLBACK_API_CONNECTION)
     async_add_entities(
         DiagralHealthSensor(coordinator, entry, description)
-        for description in (CLOUD_CONNECTION, CLOUD_REACHABLE)
+        for description in descriptions
     )
 
 

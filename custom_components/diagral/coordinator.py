@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import ClientError, DiagralAPIError, ServerError
-from pydiagral.models import AlarmConfiguration, Anomalies, DeviceInfos, SystemStatus
+from pydiagral.models import AlarmConfiguration, DeviceInfos, SystemStatus
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
@@ -18,6 +18,7 @@ import homeassistant.util.dt as dt_util
 from .const import (
     BRAND,
     DEFAULT_SCAN_INTERVAL,
+    DIAGRAL_REQUEST_TIMEOUT,
     DOMAIN,
     HTTP_SERVER_ERROR,
     PING_TIMEOUT,
@@ -62,6 +63,11 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
         self.webhook_status: str | None = None
         self.last_webhook: datetime | None = None
         self.cloud_reachable: bool | None = None
+        self.fallback_api_connected: bool | None = None
+        self._cloud_ping_task: asyncio.Task[None] | None = None
+        self.anomalies_available = False
+        self._anomalies_error: str | None = None
+        self._anomalies_task: asyncio.Task[None] | None = None
 
     @callback
     def async_set_webhook_status(self, status: str) -> None:
@@ -78,20 +84,30 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Diagral API, retrying transient failures."""
         _LOGGER.debug("Updating data with API instance: %s", id(self.api))
-        self.cloud_reachable = await self._async_ping()
+        local_topaze = getattr(self.api, "uses_topaze", False) is True
+        if local_topaze:
+            self._async_schedule_cloud_ping()
+        else:
+            self.cloud_reachable = await self._async_ping()
         # A failed first refresh fails the setup, which Home Assistant retries.
         timeouts = READ_ATTEMPT_TIMEOUTS if self.data else READ_ATTEMPT_TIMEOUTS[:1]
         try:
             async with asyncio.timeout(READ_RETRY_BUDGET):
                 updated_data = await self._async_read_with_retries(timeouts)
         except TimeoutError as err:
+            if local_topaze:
+                self.fallback_api_connected = False
             self.last_error = type(err).__name__
             raise UpdateFailed("Timeout communicating with API") from err
         except DiagralAPIError as err:
+            if local_topaze:
+                self.fallback_api_connected = False
             self.last_error = type(err).__name__
             raise UpdateFailed(f"Error communicating with API: {err}") from err
 
         self.last_success = dt_util.utcnow()
+        if local_topaze:
+            self.fallback_api_connected = True
         self.last_error = None
 
         if updated_data is None:
@@ -99,7 +115,67 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
             return self.data
         self.data = updated_data
         await self._update_device_info()
-        return updated_data
+        self._async_schedule_anomalies_refresh()
+        return self.data
+
+    @callback
+    def _async_schedule_cloud_ping(self) -> None:
+        """Check Emerald independently while Topaze serves the central."""
+        if self._shutdown_requested or (
+            self._cloud_ping_task is not None and not self._cloud_ping_task.done()
+        ):
+            return
+        self._cloud_ping_task = self.config_entry.async_create_background_task(
+            self.hass,
+            self._async_refresh_cloud_ping(),
+            f"{DOMAIN}-cloud-ping",
+            eager_start=False,
+        )
+
+    async def _async_refresh_cloud_ping(self) -> None:
+        """Report main API reachability without changing fallback availability."""
+        reachable = await self._async_ping()
+        if not self._shutdown_requested:
+            self.cloud_reachable = reachable
+            self.async_update_listeners()
+
+    @callback
+    def _async_schedule_anomalies_refresh(self) -> None:
+        """Keep a slow secondary endpoint out of setup and central polling."""
+        if self._shutdown_requested or (
+            self._anomalies_task is not None and not self._anomalies_task.done()
+        ):
+            return
+        self._anomalies_task = self.config_entry.async_create_background_task(
+            self.hass,
+            self._async_refresh_anomalies(),
+            f"{DOMAIN}-anomalies",
+            eager_start=False,
+        )
+
+    async def _async_refresh_anomalies(self) -> None:
+        """Publish secondary availability without changing central health."""
+        try:
+            async with asyncio.timeout(DIAGRAL_REQUEST_TIMEOUT):
+                anomalies = await self.api.get_anomalies()
+        except (DiagralAPIError, TimeoutError) as err:
+            self.anomalies_available = False
+            error = type(err).__name__
+            if self._anomalies_error != error:
+                _LOGGER.warning("Diagral anomalies unavailable (%s)", error)
+            self._anomalies_error = error
+        else:
+            if self._shutdown_requested or self.data is None:
+                return
+            # Merge into current data: a command may have updated the status.
+            self.data["anomalies"] = anomalies
+            self.anomalies_available = True
+            if self._anomalies_error is not None:
+                _LOGGER.info("Diagral anomalies available again")
+            self._anomalies_error = None
+        if not self._shutdown_requested:
+            # async_set_updated_data would also mark stale central data healthy.
+            self.async_update_listeners()
 
     async def _async_ping(self) -> bool:
         """Tell whether the cloud answers at all, whatever the credentials."""
@@ -139,7 +215,6 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
         alarm_config: AlarmConfiguration = await self.api.get_configuration()
         devices_infos: DeviceInfos = await self.api.get_devices_info()
         system_status: SystemStatus = await self.api.get_system_status()
-        anomalies: Anomalies = await self.api.get_anomalies()
         if not (alarm_config and system_status):
             return None
         return {
@@ -147,7 +222,7 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
             "devices_infos": devices_infos,
             "groups": alarm_config.groups,
             "system_status": system_status,
-            "anomalies": anomalies,
+            "anomalies": (self.data or {}).get("anomalies"),
         }
 
     def get_alarm_central_device(self) -> DeviceInfo:

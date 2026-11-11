@@ -25,6 +25,7 @@ CONF_ALARMPANEL_ACTIONTYPE_CODE_OPTIONS = [
     "always",
 ]
 CONF_ALARMPANEL_CODE = "alarmpanel_code"
+CONF_USE_TOPAZE = "use_topaze"
 ALARMPANEL_CODE_MIN_LENGTH = 4
 
 # Diagral alert codes that mean an intrusion:

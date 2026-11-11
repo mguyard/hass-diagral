@@ -46,6 +46,10 @@ def make_coordinator(data=OLD_DATA):
     coordinator.api.get_system_status = AsyncMock(return_value=MagicMock())
     coordinator.api.get_anomalies = AsyncMock(return_value={})
     coordinator._update_device_info = AsyncMock()
+    coordinator._async_schedule_anomalies_refresh = MagicMock()
+    coordinator._async_schedule_cloud_ping = MagicMock()
+    coordinator.cloud_reachable = None
+    coordinator.fallback_api_connected = None
     return coordinator
 
 
@@ -66,6 +70,40 @@ class TestRetries:
         assert data["system_status"] is not OLD_DATA["system_status"]
         assert coordinator.api.get_system_status.await_count == 1
         sleep.assert_not_awaited()
+
+    async def test_topaze_health_uses_the_working_service(self):
+        """A stalled Emerald ping must not delay the local Topaze read path."""
+        coordinator = make_coordinator()
+        coordinator.api.uses_topaze = True
+        await coordinator._async_update_data()
+        coordinator.api.ping.assert_not_awaited()
+        coordinator._async_schedule_cloud_ping.assert_called_once()
+        assert coordinator.fallback_api_connected is True
+        assert coordinator.cloud_reachable is None
+
+    async def test_topaze_failure_marks_the_used_service_unreachable(self):
+        """A cached configuration is not evidence that the central is reachable."""
+        coordinator = make_coordinator(data=None)
+        coordinator.api.uses_topaze = True
+        coordinator.api.get_system_status.side_effect = AuthenticationError("failed")
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+        assert coordinator.fallback_api_connected is False
+        assert coordinator.cloud_reachable is None
+
+    async def test_background_ping_cannot_mark_a_failed_central_healthy(self):
+        """Emerald reachability and Topaze availability have separate meanings."""
+        coordinator = make_coordinator()
+        coordinator._async_ping = AsyncMock(return_value=False)
+        coordinator._shutdown_requested = False
+        coordinator.async_update_listeners = MagicMock()
+        coordinator.last_update_success = False
+        coordinator.fallback_api_connected = True
+        await coordinator._async_refresh_cloud_ping()
+        assert coordinator.cloud_reachable is False
+        assert coordinator.fallback_api_connected is True
+        assert coordinator.last_update_success is False
+        coordinator.async_update_listeners.assert_called_once()
 
     @pytest.mark.parametrize("error", TRANSIENT_ERRORS, ids=TRANSIENT_IDS)
     async def test_transient_error_is_retried(self, sleep, error):

@@ -266,6 +266,72 @@ class TestDiagralOptionsFlowRegression:
         assert result["errors"]["base"] == "missing_alarmpanel_code"
 
 
+class TestEmergencyModeOptions:
+    """Emergency mode is explicit and can be disabled without cloud access."""
+
+    @staticmethod
+    def make_flow(use_topaze=None):
+        """Build an options flow with optional pre-existing emergency mode."""
+        flow = object.__new__(DiagralOptionsFlow)
+        flow.handler = "entry_id"
+        entry = MagicMock(entry_id="entry_id")
+        entry.options = {
+            "alarmpanel_options": {
+                CONF_ALARMPANEL_ACTIONTYPE_CODE: "never",
+                CONF_ALARMPANEL_CODE: None,
+            }
+        }
+        if use_topaze is not None:
+            entry.options["use_topaze"] = use_topaze
+        flow.hass = MagicMock()
+        flow.hass.config_entries.async_get_known_entry.return_value = entry
+        return flow, entry
+
+    @pytest.mark.parametrize("stored", [None, False, True])
+    async def test_form_preserves_choice_with_default_off(self, stored):
+        """An older entry keeps Emerald unless its user changes this option."""
+        flow, _ = self.make_flow(stored)
+
+        result = await flow.async_step_init()
+
+        key = next(k for k in result["data_schema"].schema if str(k) == "use_topaze")
+        assert key.default() is (stored is True)
+
+    @pytest.mark.parametrize("stored", [False, True])
+    async def test_changed_mode_reloads_entry(self, stored):
+        """Changing only the transport is sufficient to schedule a reload."""
+        flow, entry = self.make_flow(stored)
+        user_input = {**entry.options, "use_topaze": not stored}
+        with patch("pydiagral.TopazeDiagralAPI", MagicMock(), create=True):
+            result = await flow.async_step_init(user_input)
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["use_topaze"] is not stored
+        flow.hass.config_entries.async_schedule_reload.assert_called_once_with(
+            "entry_id"
+        )
+
+    async def test_unchanged_default_does_not_reload(self):
+        """Saving an old entry without opting in does not migrate its transport."""
+        flow, entry = self.make_flow()
+
+        result = await flow.async_step_init({**entry.options, "use_topaze": False})
+
+        assert result["type"] == "abort"
+        assert result["reason"] == "no_changes"
+        flow.hass.config_entries.async_schedule_reload.assert_not_called()
+
+    async def test_old_sdk_reports_update_required(self):
+        """A release without Topaze support cannot accept the emergency option."""
+        flow, entry = self.make_flow()
+        with patch("pydiagral.TopazeDiagralAPI", None, create=True):
+            result = await flow.async_step_init({**entry.options, "use_topaze": True})
+
+        assert result["type"] == "form"
+        assert result["errors"]["base"] == "emergency_api_unavailable"
+        flow.hass.config_entries.async_schedule_reload.assert_not_called()
+
+
 class TestValidateAccount:
     """Tests for validate_account()."""
 

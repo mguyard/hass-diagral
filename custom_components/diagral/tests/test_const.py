@@ -119,6 +119,10 @@ class TestServiceNames:
 class TestConfKeys:
     """Tests for CONF_* key constants."""
 
+    def test_emergency_mode_key(self, const):
+        """Stored emergency choices use a stable key."""
+        assert const.CONF_USE_TOPAZE == "use_topaze"
+
     def test_conf_serial_id_defined(self, const):
         """CONF_SERIAL_ID must be defined."""
         assert hasattr(const, "CONF_SERIAL_ID")

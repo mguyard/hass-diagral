@@ -8,6 +8,7 @@ import logging
 import re
 from typing import Any
 
+import pydiagral
 from pydiagral import DiagralAPIError
 from pydiagral.api import DiagralAPI
 from pydiagral.exceptions import (
@@ -51,6 +52,7 @@ from .const import (
     CONF_PIN_CODE,
     CONF_SECRET_KEY,
     CONF_SERIAL_ID,
+    CONF_USE_TOPAZE,
     CONFIG_MINOR_VERSION,
     CONFIG_VERSION,
     DIAGRAL_VENDOR,
@@ -574,13 +576,22 @@ class DiagralConfigFlow(ConfigFlow, domain=DOMAIN):
 class DiagralOptionsFlow(config_entries.OptionsFlow):
     """Handle a config flow for Diagral options."""
 
-    async def async_step_init(self, user_input: None = None) -> ConfigFlowResult:
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Manage the options."""
         _LOGGER.debug("Initializing DiagralOptionsFlow")
         options: DiagralOptionsData = deepcopy(dict(self.config_entry.options))
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            use_topaze = user_input.get(
+                CONF_USE_TOPAZE, options.get(CONF_USE_TOPAZE, False)
+            )
+            user_input[CONF_USE_TOPAZE] = use_topaze
+            transport_updated = use_topaze != options.get(CONF_USE_TOPAZE, False)
+            if use_topaze and getattr(pydiagral, "TopazeDiagralAPI", None) is None:
+                errors["base"] = "emergency_api_unavailable"
             # Check if the user has changed the alarm panel action type
             alarmpaneltypecode = user_input["alarmpanel_options"][
                 CONF_ALARMPANEL_ACTIONTYPE_CODE
@@ -602,7 +613,11 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
                 != options["alarmpanel_options"][CONF_ALARMPANEL_CODE]
             )
             # Set a global variable to check if options have been updated
-            options_updated = alarmpaneltypecode_updated or alarmpanelcode_updated
+            options_updated = (
+                alarmpaneltypecode_updated
+                or alarmpanelcode_updated
+                or transport_updated
+            )
 
             if options_updated:
                 if alarmpaneltypecode:
@@ -630,7 +645,7 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
                         self.config_entry.entry_id
                     )
                     return self.async_create_entry(title="", data=user_input)
-            else:
+            elif not errors:
                 _LOGGER.debug("No configuration changes detected, skipping update.")
                 return self.async_abort(reason="no_changes")
 
@@ -639,6 +654,9 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
         code_default = stored_code if stored_code is not None else vol.UNDEFINED
         options_schema = vol.Schema(
             {
+                vol.Optional(
+                    CONF_USE_TOPAZE, default=options.get(CONF_USE_TOPAZE, False)
+                ): bool,
                 vol.Required("alarmpanel_options"): section(
                     vol.Schema(
                         {
@@ -673,7 +691,7 @@ class DiagralOptionsFlow(config_entries.OptionsFlow):
                         }
                     ),
                     {"collapsed": True},
-                )
+                ),
             }
         )
 

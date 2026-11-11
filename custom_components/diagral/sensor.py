@@ -152,6 +152,14 @@ class DiagralSensor(DiagralEntity, SensorEntity):
         self._attr_unique_id = f"{self._entry_id}_{DOMAIN}_{self._alarm_config.alarm.central.serial}_{description.key}"
 
     @property
+    def available(self) -> bool:
+        """A failed anomaly read must not appear as zero faults."""
+        return super().available and (
+            self.entity_description.key != "anomalies"
+            or self.coordinator.anomalies_available
+        )
+
+    @property
     def icon(self) -> str | None:
         """Return the icon to use in the frontend."""
         return self.entity_description.icon
@@ -190,6 +198,8 @@ class DiagralSensor(DiagralEntity, SensorEntity):
         _LOGGER.debug("Devices infos received: %s", devices_infos)
 
         if self.entity_description.key == "anomalies":
+            if not self.coordinator.anomalies_available:
+                return
             self._update_anomalies(anomalies, groups, devices_infos)
         if self.entity_description.key == "active_groups":
             self._update_active_groups(system_status, groups, alarm_config)

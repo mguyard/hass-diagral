@@ -8,7 +8,9 @@ from unittest.mock import MagicMock
 from custom_components.diagral.binary_sensor import (
     CLOUD_CONNECTION,
     CLOUD_REACHABLE,
+    FALLBACK_API_CONNECTION,
     DiagralHealthSensor,
+    async_setup_entry,
 )
 import pytest
 
@@ -16,16 +18,21 @@ from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.const import EntityCategory
 
 TRANSLATIONS = pathlib.Path(__file__).parent.parent / "translations"
-DESCRIPTIONS = [CLOUD_CONNECTION, CLOUD_REACHABLE]
-DESCRIPTION_IDS = ["cloud-connection", "cloud-reachable"]
+DESCRIPTIONS = [CLOUD_CONNECTION, CLOUD_REACHABLE, FALLBACK_API_CONNECTION]
+DESCRIPTION_IDS = ["cloud-connection", "cloud-reachable", "fallback-api"]
 
 
 def make_sensor(
-    description, last_update_success: bool = True, cloud_reachable: bool | None = True
+    description,
+    last_update_success: bool = True,
+    cloud_reachable: bool | None = True,
+    fallback_api_connected: bool | None = None,
 ) -> DiagralHealthSensor:
     """Return a sensor bound to a coordinator in the given state."""
     coordinator = MagicMock(
-        last_update_success=last_update_success, cloud_reachable=cloud_reachable
+        last_update_success=last_update_success,
+        cloud_reachable=cloud_reachable,
+        fallback_api_connected=fallback_api_connected,
     )
     coordinator.data = {
         "alarm_config": SimpleNamespace(
@@ -64,7 +71,7 @@ class TestCloudReachable:
 
 
 class TestHealthSensors:
-    """Both sensors are diagnostic connectivity sensors with a stable unique id."""
+    """Health sensors are diagnostic connectivity sensors with stable unique ids."""
 
     @pytest.mark.parametrize("description", DESCRIPTIONS, ids=DESCRIPTION_IDS)
     def test_is_a_diagnostic_connectivity_sensor(self, description):
@@ -88,3 +95,75 @@ class TestHealthSensors:
         )
         name = translations["entity"]["binary_sensor"][description.translation_key]
         assert name["name"]
+
+    @pytest.mark.parametrize("use_topaze", [False, True])
+    async def test_setup_adds_only_active_health_sensors(self, use_topaze):
+        """The fallback diagnostic is only created for the emergency transport."""
+        coordinator = make_sensor(CLOUD_CONNECTION).coordinator
+        coordinator.api.uses_topaze = use_topaze
+        entry = SimpleNamespace(
+            entry_id="entry1", runtime_data=SimpleNamespace(coordinator=coordinator)
+        )
+        entities = []
+
+        await async_setup_entry(MagicMock(), entry, entities.extend)
+
+        expected = DESCRIPTIONS if use_topaze else DESCRIPTIONS[:2]
+        assert [entity.entity_description for entity in entities] == expected
+        assert len({entity.unique_id for entity in entities}) == len(expected)
+
+
+class TestFallbackAPIConnection:
+    """Fallback connectivity is independent from Emerald and coordinator health."""
+
+    @pytest.mark.parametrize(
+        "connected", [True, False, None], ids=["connected", "disconnected", "unread"]
+    )
+    @pytest.mark.parametrize(
+        "cloud_reachable", [True, False], ids=["emerald-up", "emerald-down"]
+    )
+    @pytest.mark.parametrize(
+        "last_update_success", [True, False], ids=["core-up", "core-down"]
+    )
+    def test_follows_only_fallback_read(
+        self, connected, cloud_reachable, last_update_success
+    ):
+        """Expose unknown before a read and disconnected on failure, never stale green."""
+        sensor = make_sensor(
+            FALLBACK_API_CONNECTION,
+            last_update_success=last_update_success,
+            cloud_reachable=cloud_reachable,
+            fallback_api_connected=connected,
+        )
+        sensor.coordinator.reset_mock()
+
+        assert sensor.is_on is connected
+        assert sensor.available is True
+        assert sensor.coordinator.mock_calls == []
+
+    @pytest.mark.parametrize(
+        ("language", "expected"), [("fr", "API de secours"), ("en", "Fallback API")]
+    )
+    def test_requested_name(self, language, expected):
+        """Use the requested diagnostic label in each supported language."""
+        translations = json.loads(
+            (TRANSLATIONS / f"{language}.json").read_text(encoding="utf-8")
+        )
+        assert (
+            translations["entity"]["binary_sensor"]["fallback_api_connection"]["name"]
+            == expected
+        )
+
+    def test_unique_id_is_scoped_to_entry_and_central(self):
+        """The new sensor cannot collide with another installation or an existing key."""
+        first = make_sensor(FALLBACK_API_CONNECTION)
+        second = DiagralHealthSensor(
+            first.coordinator, MagicMock(entry_id="entry2"), FALLBACK_API_CONNECTION
+        )
+        first.coordinator.data["alarm_config"].alarm.central.serial = "FAKECENTRAL02"
+        third = DiagralHealthSensor(
+            first.coordinator, MagicMock(entry_id="entry1"), FALLBACK_API_CONNECTION
+        )
+
+        assert first.unique_id == "entry1_diagral_FAKECENTRAL01_fallback_api_connection"
+        assert len({first.unique_id, second.unique_id, third.unique_id}) == 3
