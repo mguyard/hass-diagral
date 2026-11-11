@@ -16,7 +16,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DiagralConfigEntry
 from .const import DOMAIN
-from .coordinator import DiagralDataUpdateCoordinator
+from .coordinator import DiagralDataUpdateCoordinator, fallback_connection_status
 from .entity import DiagralEntity
 
 
@@ -49,7 +49,15 @@ FALLBACK_API_CONNECTION = DiagralHealthSensorDescription(
     translation_key="fallback_api_connection",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,
-    is_on_fn=lambda coordinator: coordinator.fallback_api_connected,
+    is_on_fn=fallback_connection_status,
+)
+
+PRIMARY_API_CONNECTION = DiagralHealthSensorDescription(
+    key="primary_api_connection",
+    translation_key="primary_api_connection",
+    device_class=BinarySensorDeviceClass.CONNECTIVITY,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    is_on_fn=lambda coordinator: coordinator.api.primary_api_connected,
 )
 
 
@@ -61,8 +69,8 @@ async def async_setup_entry(
     """Set up the Diagral binary sensors."""
     coordinator = entry.runtime_data.coordinator
     descriptions = [CLOUD_CONNECTION, CLOUD_REACHABLE]
-    if getattr(coordinator.api, "uses_topaze", False) is True:
-        descriptions.append(FALLBACK_API_CONNECTION)
+    if getattr(coordinator.api, "supports_failover", False) is True:
+        descriptions.extend((PRIMARY_API_CONNECTION, FALLBACK_API_CONNECTION))
     async_add_entities(
         DiagralHealthSensor(coordinator, entry, description)
         for description in descriptions

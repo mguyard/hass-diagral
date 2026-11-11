@@ -72,24 +72,79 @@ class TestRetries:
         sleep.assert_not_awaited()
 
     async def test_topaze_health_uses_the_working_service(self):
-        """A stalled Emerald ping must not delay the local Topaze read path."""
+        """A stalled Emerald ping must not delay automatic backend selection."""
         coordinator = make_coordinator()
-        coordinator.api.uses_topaze = True
+        coordinator.api.supports_failover = True
+        coordinator.api.active_api = "topaze"
+        coordinator.api.get_core_snapshot = AsyncMock(
+            return_value=SimpleNamespace(
+                alarm_config=MagicMock(groups=[]),
+                devices_infos=MagicMock(),
+                system_status=MagicMock(),
+            )
+        )
         await coordinator._async_update_data()
         coordinator.api.ping.assert_not_awaited()
         coordinator._async_schedule_cloud_ping.assert_called_once()
         assert coordinator.fallback_api_connected is True
         assert coordinator.cloud_reachable is None
+        coordinator.api.get_configuration.assert_not_awaited()
+        coordinator.api.get_system_status.assert_not_awaited()
+        coordinator.api.get_core_snapshot.assert_awaited_once()
 
     async def test_topaze_failure_marks_the_used_service_unreachable(self):
         """A cached configuration is not evidence that the central is reachable."""
         coordinator = make_coordinator(data=None)
-        coordinator.api.uses_topaze = True
-        coordinator.api.get_system_status.side_effect = AuthenticationError("failed")
+        coordinator.api.supports_failover = True
+        coordinator.api.get_core_snapshot = AsyncMock(
+            side_effect=AuthenticationError("failed")
+        )
         with pytest.raises(UpdateFailed):
             await coordinator._async_update_data()
         assert coordinator.fallback_api_connected is False
         assert coordinator.cloud_reachable is None
+
+    async def test_automatic_switch_and_recovery_update_diagnostic(self):
+        """The same coordinator follows fresh backend decisions in both directions."""
+        coordinator = make_coordinator(data=None)
+        coordinator.api.supports_failover = True
+
+        async def snapshot():
+            return SimpleNamespace(
+                alarm_config=MagicMock(groups=[]),
+                devices_infos=MagicMock(),
+                system_status=SimpleNamespace(status="off", activated_groups=[]),
+            )
+
+        coordinator.api.get_core_snapshot = AsyncMock(side_effect=snapshot)
+        assert coordinator.fallback_api_connected is None
+        for backend, expected in (
+            ("emerald", False),
+            ("topaze", True),
+            ("emerald", False),
+        ):
+            coordinator.api.active_api = backend
+            await coordinator._async_update_data()
+            assert coordinator.fallback_api_connected is expected
+        assert coordinator.api.get_core_snapshot.await_count == 3
+        coordinator.api.get_configuration.assert_not_awaited()
+        coordinator.api.get_system_status.assert_not_awaited()
+
+    @pytest.mark.parametrize("error", [ClientError("down"), TimeoutError()])
+    async def test_failed_automatic_snapshot_is_not_replayed_by_coordinator(
+        self, sleep, error
+    ):
+        """The SDK already bounds selection; HA must not repeat the whole pipeline."""
+        coordinator = make_coordinator()
+        coordinator.api.supports_failover = True
+        coordinator.api.get_core_snapshot = AsyncMock(side_effect=error)
+
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+
+        coordinator.api.get_core_snapshot.assert_awaited_once()
+        sleep.assert_not_awaited()
+        assert coordinator.fallback_api_connected is False
 
     async def test_background_ping_cannot_mark_a_failed_central_healthy(self):
         """Emerald reachability and Topaze availability have separate meanings."""
@@ -162,6 +217,25 @@ class TestRetries:
 
 class TestDeadlines:
     """Tests for the per-attempt deadlines and the overall budget."""
+
+    async def test_automatic_pipeline_has_room_for_both_backends(self):
+        """Primary and fallback deadlines are bounded by one outer budget."""
+        coordinator = make_coordinator(data=None)
+        coordinator.api.supports_failover = True
+        coordinator.api.active_api = "emerald"
+        coordinator.api.get_core_snapshot = AsyncMock(
+            return_value=SimpleNamespace(
+                alarm_config=MagicMock(groups=[]),
+                devices_infos=MagicMock(),
+                system_status=MagicMock(),
+            )
+        )
+        with patch.object(
+            coordinator_module.asyncio, "timeout", wraps=asyncio.timeout
+        ) as timeout:
+            await coordinator._async_update_data()
+
+        assert [args.args[0] for args in timeout.call_args_list] == [READ_RETRY_BUDGET]
 
     async def test_each_attempt_gets_a_longer_deadline(self, sleep):
         """After the ping, attempts run under 30, 45 then 60 s, inside the budget."""
@@ -353,3 +427,45 @@ class TestDeviceInfo:
             await coordinator._update_device_info()
 
         assert registry.async_update_device.call_args_list == expected
+
+
+class TestBackgroundReachability:
+    """A parallel ping is bounded to one task and stops publishing on unload."""
+
+    async def test_initialization_singleflight_and_shutdown(self):
+        """The real coordinator starts one ping and ignores its late response."""
+        hass = MagicMock()
+        hass.loop = asyncio.get_running_loop()
+        entry = MagicMock()
+        api = MagicMock()
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def ping():
+            started.set()
+            await release.wait()
+
+        api.ping = AsyncMock(side_effect=ping)
+        entry.async_create_background_task.side_effect = (
+            lambda _hass, coroutine, _name, **_kwargs: asyncio.create_task(coroutine)
+        )
+        coordinator = DiagralDataUpdateCoordinator(hass, entry, api)
+        coordinator.async_update_listeners = MagicMock()
+        coordinator._async_schedule_cloud_ping()
+        task = coordinator._cloud_ping_task
+        try:
+            await started.wait()
+            coordinator._async_schedule_cloud_ping()
+            assert coordinator._cloud_ping_task is task
+            entry.async_create_background_task.assert_called_once()
+            coordinator._shutdown_requested = True
+            release.set()
+            await task
+            coordinator._async_schedule_cloud_ping()
+            entry.async_create_background_task.assert_called_once()
+            coordinator.async_update_listeners.assert_not_called()
+            assert coordinator.cloud_reachable is None
+            assert coordinator.fallback_api_connected is None
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)

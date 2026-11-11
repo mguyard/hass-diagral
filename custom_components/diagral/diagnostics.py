@@ -29,6 +29,7 @@ from .const import (
     DOMAIN,
     WEBHOOK_CHECK_INTERVAL,
 )
+from .coordinator import active_api_status, fallback_connection_status
 
 # Users attach this file to public issues: the serial (also the unique id) and
 # the alarm name in the title identify their installation.
@@ -73,6 +74,7 @@ async def async_get_config_entry_diagnostics(
     coordinator = entry.runtime_data.coordinator
     # Read before the registry and the shapes, so they cover these reads too.
     api = entry.runtime_data.api
+    automatic_failover = getattr(api, "supports_failover", False) is True
     ping = await _ping(api)
     api_keys = await _api_key_count(api, entry.runtime_data.config.serial_id)
     system = await _system_details(api)
@@ -90,14 +92,22 @@ async def async_get_config_entry_diagnostics(
             # Package metadata is read from disk, never on the event loop
             "pydiagral": await hass.async_add_executor_job(version, "pydiagral"),
             "cloud": {
+                "active_api": (
+                    active_api_status(coordinator) if automatic_failover else "emerald"
+                ),
                 "connected": coordinator.last_update_success,
                 "last_success": _iso(coordinator.last_success),
                 "last_error": coordinator.last_error,
                 "ping": ping,
             },
             "fallback_api": {
+                "automatic": automatic_failover,
                 "active": getattr(api, "uses_topaze", False) is True,
-                "connected": coordinator.fallback_api_connected,
+                "connected": fallback_connection_status(coordinator),
+            },
+            "primary_api": {
+                "connected": api.primary_api_connected if automatic_failover else None,
+                "error": api.primary_error if automatic_failover else None,
             },
             "anomalies_available": coordinator.anomalies_available,
             "webhook": {

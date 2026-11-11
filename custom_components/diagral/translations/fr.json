@@ -84,10 +84,13 @@
     "entity": {
         "binary_sensor": {
             "cloud_connection": {
-                "name": "Cloud Diagral"
+                "name": "Connexion à la centrale"
             },
             "cloud_reachable": {
-                "name": "Cloud Diagral joignable"
+                "name": "Point d’entrée cloud (ping)"
+            },
+            "primary_api_connection": {
+                "name": "API principale Emerald"
             },
             "fallback_api_connection": {
                 "name": "API de secours"
@@ -99,6 +102,13 @@
             }
         },
         "sensor": {
+            "active_api": {
+                "name": "API utilisée",
+                "state": {
+                    "emerald": "Emerald (principale)",
+                    "topaze": "Topaze (secours)"
+                }
+            },
             "alarm_anomalies": {
                 "name": "Anomalies"
             },
@@ -126,19 +136,12 @@
             "no_changes": "Aucun changement de configuration détecté, mise à jour ignorée."
         },
         "error": {
-            "emergency_api_unavailable": "Cette version de la bibliothèque Diagral ne prend pas en charge le mode de secours. Mettez à jour l’intégration avant de l’activer.",
             "invalid_alarmpanel_code": "Code du panneau d'alarme invalide. Le code doit contenir uniquement des chiffres (4 ou plus).",
             "missing_alarmpanel_code": "Le code du panneau d'alarme est requis lorsque vous configurez le type d'action sur une valeur autre que `Jamais`.",
             "unknown": "Erreur inattendue"
         },
         "step": {
             "init": {
-                "data": {
-                    "use_topaze": "Utiliser le mode de secours"
-                },
-                "data_description": {
-                    "use_topaze": "Utilise le service cloud alternatif pour l’état de la centrale et les commandes globales. Les anomalies, les commandes de groupes et la gestion du webhook dépendent toujours du service habituel. Désactivez cette option pour revenir au mode normal."
-                },
                 "title": "Options",
                 "description": "_Plus de détails sur ces options sont disponibles [ici]({options_url})_",
                 "sections": {

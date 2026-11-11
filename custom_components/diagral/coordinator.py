@@ -41,6 +41,25 @@ def is_transient_error(err: Exception) -> bool:
     return status_code is not None and status_code >= HTTP_SERVER_ERROR
 
 
+def fallback_connection_status(
+    coordinator: DiagralDataUpdateCoordinator,
+) -> bool | None:
+    """Include backend changes made by a command's read-only preflight."""
+    if getattr(coordinator.api, "supports_failover", False) is True:
+        return coordinator.api.fallback_api_connected
+    return coordinator.fallback_api_connected
+
+
+def active_api_status(coordinator: DiagralDataUpdateCoordinator) -> str | None:
+    """Name only a backend whose authenticated central read succeeded."""
+    api = coordinator.api
+    if api.active_api == "emerald" and api.primary_api_connected is True:
+        return "emerald"
+    if api.active_api == "topaze" and api.fallback_api_connected is True:
+        return "topaze"
+    return None
+
+
 class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching Diagral data."""
 
@@ -84,8 +103,8 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Diagral API, retrying transient failures."""
         _LOGGER.debug("Updating data with API instance: %s", id(self.api))
-        local_topaze = getattr(self.api, "uses_topaze", False) is True
-        if local_topaze:
+        automatic_failover = getattr(self.api, "supports_failover", False) is True
+        if automatic_failover:
             self._async_schedule_cloud_ping()
         else:
             self.cloud_reachable = await self._async_ping()
@@ -93,21 +112,25 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
         timeouts = READ_ATTEMPT_TIMEOUTS if self.data else READ_ATTEMPT_TIMEOUTS[:1]
         try:
             async with asyncio.timeout(READ_RETRY_BUDGET):
-                updated_data = await self._async_read_with_retries(timeouts)
+                if automatic_failover:
+                    # The SDK bounds both backends; do not replay that pipeline.
+                    updated_data = await self._async_read()
+                else:
+                    updated_data = await self._async_read_with_retries(timeouts)
         except TimeoutError as err:
-            if local_topaze:
+            if automatic_failover:
                 self.fallback_api_connected = False
             self.last_error = type(err).__name__
             raise UpdateFailed("Timeout communicating with API") from err
         except DiagralAPIError as err:
-            if local_topaze:
+            if automatic_failover:
                 self.fallback_api_connected = False
             self.last_error = type(err).__name__
             raise UpdateFailed(f"Error communicating with API: {err}") from err
 
         self.last_success = dt_util.utcnow()
-        if local_topaze:
-            self.fallback_api_connected = True
+        if automatic_failover:
+            self.fallback_api_connected = self.api.active_api == "topaze"
         self.last_error = None
 
         if updated_data is None:
@@ -120,7 +143,7 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
 
     @callback
     def _async_schedule_cloud_ping(self) -> None:
-        """Check Emerald independently while Topaze serves the central."""
+        """Measure reachability without delaying the SDK's authenticated probe."""
         if self._shutdown_requested or (
             self._cloud_ping_task is not None and not self._cloud_ping_task.done()
         ):
@@ -212,9 +235,15 @@ class DiagralDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_read(self) -> dict[str, Any] | None:
         """Read everything the entities need, or None when the payload is invalid."""
-        alarm_config: AlarmConfiguration = await self.api.get_configuration()
-        devices_infos: DeviceInfos = await self.api.get_devices_info()
-        system_status: SystemStatus = await self.api.get_system_status()
+        if getattr(self.api, "supports_failover", False) is True:
+            snapshot = await self.api.get_core_snapshot()
+            alarm_config = snapshot.alarm_config
+            devices_infos = snapshot.devices_infos
+            system_status = snapshot.system_status
+        else:
+            alarm_config: AlarmConfiguration = await self.api.get_configuration()
+            devices_infos: DeviceInfos = await self.api.get_devices_info()
+            system_status: SystemStatus = await self.api.get_system_status()
         if not (alarm_config and system_status):
             return None
         return {

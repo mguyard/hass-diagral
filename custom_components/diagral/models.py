@@ -49,7 +49,6 @@ class DiagralOptionsData:
     """DiagralOptionsData is a TypedDict that defines the options data for Diagral integration."""
 
     alarmpanel_options: DiagralOptionsAlarmPanelData
-    use_topaze: bool = False
 
 
 @dataclass

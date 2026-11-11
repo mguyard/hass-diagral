@@ -119,8 +119,13 @@ def make_entry() -> MagicMock:
     coordinator.last_success = datetime(2026, 10, 25, 0, 30, tzinfo=UTC)
     coordinator.last_error = "ServerError"
     coordinator.fallback_api_connected = None
+    coordinator.api = entry.runtime_data.api
     coordinator.anomalies_available = True
     entry.runtime_data.api.uses_topaze = False
+    entry.runtime_data.api.supports_failover = False
+    entry.runtime_data.api.active_api = "emerald"
+    entry.runtime_data.api.primary_api_connected = None
+    entry.runtime_data.api.primary_error = None
     coordinator.webhook_status = "owned_elsewhere"
     coordinator.last_webhook = None
     device = SimpleNamespace(index=1, label=SECRETS["device"])
@@ -185,6 +190,7 @@ async def test_diagnostics_report_health_and_counts():
     result = await run_diagnostics()
 
     assert result["health"]["cloud"] == {
+        "active_api": "emerald",
         "connected": False,
         "last_success": "2026-10-25T00:30:00+00:00",
         "last_error": "ServerError",
@@ -208,15 +214,26 @@ async def test_diagnostics_distinguish_fallback_from_emerald(connected):
     """Emergency state is explicit and independent from the Emerald ping."""
     entry = make_entry()
     entry.runtime_data.api.uses_topaze = True
+    entry.runtime_data.api.supports_failover = True
+    entry.runtime_data.api.active_api = "topaze"
+    entry.runtime_data.api.fallback_api_connected = connected
+    entry.runtime_data.api.primary_api_connected = False
+    entry.runtime_data.api.primary_error = "TimeoutError"
     entry.runtime_data.coordinator.fallback_api_connected = connected
 
     result = await run_diagnostics(entry=entry)
 
     assert result["health"]["fallback_api"] == {
+        "automatic": True,
         "active": True,
         "connected": connected,
     }
     assert result["health"]["cloud"]["ping"]["reachable"] is True
+    assert result["health"]["cloud"]["active_api"] == ("topaze" if connected else None)
+    assert result["health"]["primary_api"] == {
+        "connected": False,
+        "error": "TimeoutError",
+    }
 
 
 @pytest.mark.parametrize("available", [False, True])
@@ -229,7 +246,11 @@ async def test_diagnostics_do_not_report_failed_anomalies_as_current(available):
 
     assert result["health"]["anomalies_available"] is available
     assert result["alarm"]["anomalies"] == (1 if available else None)
-    assert result["health"]["fallback_api"] == {"active": False, "connected": None}
+    assert result["health"]["fallback_api"] == {
+        "automatic": False,
+        "active": False,
+        "connected": None,
+    }
 
 
 @pytest.mark.parametrize(

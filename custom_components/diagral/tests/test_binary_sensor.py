@@ -9,6 +9,7 @@ from custom_components.diagral.binary_sensor import (
     CLOUD_CONNECTION,
     CLOUD_REACHABLE,
     FALLBACK_API_CONNECTION,
+    PRIMARY_API_CONNECTION,
     DiagralHealthSensor,
     async_setup_entry,
 )
@@ -18,8 +19,13 @@ from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.const import EntityCategory
 
 TRANSLATIONS = pathlib.Path(__file__).parent.parent / "translations"
-DESCRIPTIONS = [CLOUD_CONNECTION, CLOUD_REACHABLE, FALLBACK_API_CONNECTION]
-DESCRIPTION_IDS = ["cloud-connection", "cloud-reachable", "fallback-api"]
+DESCRIPTIONS = [
+    CLOUD_CONNECTION,
+    CLOUD_REACHABLE,
+    PRIMARY_API_CONNECTION,
+    FALLBACK_API_CONNECTION,
+]
+DESCRIPTION_IDS = ["cloud-connection", "cloud-reachable", "primary-api", "fallback-api"]
 
 
 def make_sensor(
@@ -70,6 +76,19 @@ class TestCloudReachable:
         assert sensor.available is True
 
 
+class TestPrimaryAPIConnection:
+    """A public ping cannot certify authenticated Emerald requests."""
+
+    @pytest.mark.parametrize("connected", [None, False, True])
+    @pytest.mark.parametrize("ping", [False, True])
+    def test_reports_primary_probe_independently(self, connected, ping):
+        """The primary diagnostic follows only the SDK's authenticated probe."""
+        sensor = make_sensor(PRIMARY_API_CONNECTION, cloud_reachable=ping)
+        sensor.coordinator.api.primary_api_connected = connected
+        assert sensor.is_on is connected
+        assert sensor.available is True
+
+
 class TestHealthSensors:
     """Health sensors are diagnostic connectivity sensors with stable unique ids."""
 
@@ -96,11 +115,12 @@ class TestHealthSensors:
         name = translations["entity"]["binary_sensor"][description.translation_key]
         assert name["name"]
 
-    @pytest.mark.parametrize("use_topaze", [False, True])
-    async def test_setup_adds_only_active_health_sensors(self, use_topaze):
-        """The fallback diagnostic is only created for the emergency transport."""
+    @pytest.mark.parametrize("supports_failover", [False, True])
+    async def test_setup_adds_supported_health_sensors(self, supports_failover):
+        """A capable client keeps its fallback diagnostic while Emerald is active."""
         coordinator = make_sensor(CLOUD_CONNECTION).coordinator
-        coordinator.api.uses_topaze = use_topaze
+        coordinator.api.supports_failover = supports_failover
+        coordinator.api.uses_topaze = False
         entry = SimpleNamespace(
             entry_id="entry1", runtime_data=SimpleNamespace(coordinator=coordinator)
         )
@@ -108,13 +128,22 @@ class TestHealthSensors:
 
         await async_setup_entry(MagicMock(), entry, entities.extend)
 
-        expected = DESCRIPTIONS if use_topaze else DESCRIPTIONS[:2]
+        expected = DESCRIPTIONS if supports_failover else DESCRIPTIONS[:2]
         assert [entity.entity_description for entity in entities] == expected
         assert len({entity.unique_id for entity in entities}) == len(expected)
 
 
 class TestFallbackAPIConnection:
     """Fallback connectivity is independent from Emerald and coordinator health."""
+
+    def test_command_preflight_backend_change_is_visible_without_another_poll(self):
+        """A command's listener update immediately reflects the SDK's fresh decision."""
+        sensor = make_sensor(FALLBACK_API_CONNECTION, fallback_api_connected=True)
+        sensor.coordinator.api.supports_failover = True
+        for current in (True, False, True, False):
+            sensor.coordinator.api.fallback_api_connected = current
+            assert sensor.is_on is current
+        assert sensor.coordinator.fallback_api_connected is True
 
     @pytest.mark.parametrize(
         "connected", [True, False, None], ids=["connected", "disconnected", "unread"]

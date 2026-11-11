@@ -84,10 +84,13 @@
     "entity": {
         "binary_sensor": {
             "cloud_connection": {
-                "name": "Diagral cloud"
+                "name": "Central connection"
             },
             "cloud_reachable": {
-                "name": "Diagral cloud reachable"
+                "name": "Cloud endpoint (ping)"
+            },
+            "primary_api_connection": {
+                "name": "Primary API Emerald"
             },
             "fallback_api_connection": {
                 "name": "Fallback API"
@@ -99,6 +102,13 @@
             }
         },
         "sensor": {
+            "active_api": {
+                "name": "Active API",
+                "state": {
+                    "emerald": "Emerald (primary)",
+                    "topaze": "Topaze (fallback)"
+                }
+            },
             "alarm_anomalies": {
                 "name": "Anomalies"
             },
@@ -126,7 +136,6 @@
             "no_changes": "No configuration changes detected."
         },
         "error": {
-            "emergency_api_unavailable": "This version of the Diagral library does not support emergency mode. Update the integration before enabling it.",
             "invalid_alarmpanel_code": "Invalid Alarm Panel Code. Alarm Panel Code must contain only digits (4 or more).",
             "missing_alarmpanel_code": "Alarm Panel Code is required when you set the action type to something other than `Never`.",
             "unknown": "Unexpected error"
@@ -135,12 +144,6 @@
             "init": {
                 "title": "Options",
                 "description": "_More details about these options are available [here]({options_url})_",
-                "data": {
-                    "use_topaze": "Use emergency mode"
-                },
-                "data_description": {
-                    "use_topaze": "Use the alternative cloud service for the central state and whole-system commands. Anomalies, group commands and webhook management still depend on the usual service. Disable this option to return to normal mode."
-                },
                 "sections": {
                     "alarmpanel_options": {
                         "name": "Alarm Panel Options",

@@ -17,6 +17,7 @@ from custom_components.diagral.sensor import (
     SENSORS,
     DiagralHealthSensor,
     DiagralSensor,
+    async_setup_entry,
 )
 from pydiagral.models import (
     Anomalies,
@@ -407,6 +408,68 @@ class TestHealthSensors:
 
         assert set(translations["webhook_status"]["state"]) == set(WEBHOOK_STATUSES)
         assert translations["last_webhook"]["name"]
+
+
+class TestActiveAPI:
+    """The active service explains primary failure, fallback and recovery."""
+
+    def test_same_entity_follows_primary_fallback_recovery_and_total_failure(self):
+        """A remembered backend name never masquerades as a healthy service."""
+        coordinator = MagicMock()
+        coordinator.api.supports_failover = True
+        sensor = make_health_sensor("active_api", coordinator)
+        for backend, primary, fallback, value, available in (
+            ("emerald", None, None, None, True),
+            ("emerald", True, False, "emerald", True),
+            ("topaze", False, True, "topaze", True),
+            ("emerald", True, False, "emerald", True),
+            ("topaze", False, False, None, False),
+        ):
+            coordinator.api.active_api = backend
+            coordinator.api.primary_api_connected = primary
+            coordinator.api.fallback_api_connected = fallback
+            assert sensor.native_value == value
+            assert sensor.available is available
+            assert sensor.unique_id == "entry1_diagral_FAKECENTRAL01_active_api"
+
+    @pytest.mark.parametrize("supported", [False, True])
+    def test_is_created_only_for_automatic_client(self, supported):
+        """An old SDK has no alternate backend to display."""
+        description = next(d for d in HEALTH_SENSORS if d.key == "active_api")
+        coordinator = MagicMock()
+        coordinator.api.supports_failover = supported
+        assert description.exists_fn(coordinator) is supported
+        assert description.device_class == SensorDeviceClass.ENUM
+        assert description.options == ["emerald", "topaze"]
+        assert description.entity_category == EntityCategory.DIAGNOSTIC
+
+    @pytest.mark.parametrize("language", ["en", "fr"])
+    def test_backend_names_are_translated(self, language):
+        """The UI identifies the primary and fallback in both languages."""
+        translations = json.loads(
+            (TRANSLATIONS / f"{language}.json").read_text(encoding="utf-8")
+        )["entity"]["sensor"]["active_api"]
+        assert translations["name"]
+        assert set(translations["state"]) == {"emerald", "topaze"}
+
+    @pytest.mark.parametrize("supported", [False, True])
+    async def test_platform_registers_active_api_only_when_supported(self, supported):
+        """The platform's registration keeps existing sensors and adds one diagnostic."""
+        coordinator = MagicMock()
+        coordinator.api.supports_failover = supported
+        make_health_sensor("webhook_status", coordinator)
+        entry = MagicMock(entry_id="entry1")
+        entry.runtime_data.coordinator = coordinator
+        entities = []
+
+        await async_setup_entry(MagicMock(), entry, entities.extend)
+
+        keys = [entity.entity_description.key for entity in entities]
+        assert ("active_api" in keys) is supported
+        assert len(keys) == len(set(keys))
+        assert {"anomalies", "active_groups", "webhook_status", "last_webhook"} <= set(
+            keys
+        )
 
 
 def make_live_sensor(key: str, data: dict) -> DiagralSensor:

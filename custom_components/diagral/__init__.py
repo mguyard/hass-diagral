@@ -93,14 +93,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
     config_dict = asdict(config)
 
     try:
-        api_class = DiagralAPI
-        if config.options.use_topaze is True:
-            api_class = getattr(pydiagral, "TopazeDiagralAPI", None)
-            if api_class is None:
-                raise ConfigurationError(
-                    "The installed pydiagral version does not support emergency mode; "
-                    "update the integration or disable emergency mode in its options"
-                )
+        api_class = getattr(pydiagral, "FailoverDiagralAPI", None) or DiagralAPI
         api = api_class(
             username=config_dict[CONF_USERNAME],
             password=config_dict[CONF_PASSWORD],
@@ -112,8 +105,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
             session=async_get_clientsession(hass),
             vendor=DIAGRAL_VENDOR,
         )
-        if config.options.use_topaze is True:
-            api.expected_central_serial = _existing_central_serial(hass, entry.entry_id)
+        api.expected_central_serial = _existing_central_serial(hass, entry.entry_id)
         coordinator = DiagralDataUpdateCoordinator(hass, entry, api)
         await coordinator.async_config_entry_first_refresh()
 

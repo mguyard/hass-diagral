@@ -43,6 +43,7 @@ from custom_components.diagral.const import (
 from pydiagral.exceptions import (
     AuthenticationError,
     ClientError,
+    ConfigurationError,
     DiagralAPIError,
     ServerError,
 )
@@ -60,6 +61,13 @@ OWN_OLD_URL = f"{OWN_HOST}/api/webhook/OLDID"
 OTHER_URL = "https://other.example.net/api/webhook/OTHERSECRETID"
 CLOUDHOOK_URL = "https://hooks.nabu.casa/SECRETCLOUDHOOK"
 NO_SUBSCRIPTION = DiagralAPIError("No subscription found for FAKECENTRAL01")
+
+
+@pytest.fixture(autouse=True)
+def published_client_boundary():
+    """Existing setup tests use their explicitly mocked Emerald client."""
+    with patch("pydiagral.FailoverDiagralAPI", None, create=True):
+        yield
 
 
 def url_hash(url: str) -> str:
@@ -412,20 +420,19 @@ class TestMigrateEntry:
 class TestSetupEntry:
     """async_setup_entry() builds the Diagral client."""
 
-    @pytest.mark.parametrize("use_topaze", [False, True])
-    async def test_client_selection_is_explicit(self, use_topaze):
-        """Only an opted-in entry uses the SDK emergency client and identity guard."""
-        config = MagicMock()
-        config.options.use_topaze = use_topaze
+    @pytest.mark.parametrize("supported", [False, True])
+    async def test_automatic_client_selected_when_sdk_supports_it(self, supported):
+        """Automatic failover needs no option and preserves the registered central."""
         coordinator = MagicMock()
         coordinator.async_config_entry_first_refresh = AsyncMock(
             side_effect=DiagralAPIError("stop after construction")
         )
+        failover = MagicMock() if supported else None
         with (
-            patch("custom_components.diagral.DiagralConfigData") as config_cls,
+            patch("custom_components.diagral.DiagralConfigData"),
             patch("custom_components.diagral.asdict", return_value=MagicMock()),
             patch("custom_components.diagral.DiagralAPI") as emerald,
-            patch("pydiagral.TopazeDiagralAPI", MagicMock(), create=True) as topaze,
+            patch("pydiagral.FailoverDiagralAPI", failover, create=True),
             patch("custom_components.diagral.async_get_clientsession"),
             patch("custom_components.diagral._delete_orphan_issues"),
             patch(
@@ -438,31 +445,13 @@ class TestSetupEntry:
             ),
             pytest.raises(ConfigEntryNotReady),
         ):
-            config_cls.from_config_entry.return_value = config
             await async_setup_entry(MagicMock(), MagicMock(entry_id="entry1"))
 
-        assert topaze.call_count == int(use_topaze)
-        assert emerald.call_count == int(not use_topaze)
-        assert existing.call_count == int(use_topaze)
-        if use_topaze:
-            assert topaze.return_value.expected_central_serial == "00123"
-
-    async def test_missing_sdk_emergency_client_is_reported_before_network(self):
-        """A persisted opt-in cannot silently use Emerald after an SDK downgrade."""
-        config = MagicMock()
-        config.options.use_topaze = True
-        with (
-            patch("custom_components.diagral.DiagralConfigData") as config_cls,
-            patch("custom_components.diagral.asdict", return_value=MagicMock()),
-            patch("custom_components.diagral.DiagralAPI") as emerald,
-            patch("pydiagral.TopazeDiagralAPI", None, create=True),
-            patch("custom_components.diagral._delete_orphan_issues"),
-            pytest.raises(ConfigEntryNotReady),
-        ):
-            config_cls.from_config_entry.return_value = config
-            await async_setup_entry(MagicMock(), MagicMock())
-
-        emerald.assert_not_called()
+        selected = failover if supported else emerald
+        selected.assert_called_once()
+        existing.assert_called_once()
+        assert selected.return_value.expected_central_serial == "00123"
+        assert emerald.call_count == int(not supported)
 
     def test_existing_panel_identity_is_preserved(self):
         """The existing central serial, including leading zeros, seeds the guard."""
@@ -479,6 +468,26 @@ class TestSetupEntry:
             ),
         ):
             assert _existing_central_serial(MagicMock(), "entry") == "00123"
+
+    @pytest.mark.parametrize("serials", [["00123", "00456"], [""]])
+    def test_ambiguous_registry_identity_is_rejected(self, serials):
+        """Failover cannot choose a different central when registry data conflicts."""
+        rows = [
+            SimpleNamespace(
+                platform="diagral",
+                unique_id=f"entry_diagral_{serial}_alarm_control_panel",
+            )
+            for serial in serials
+        ]
+        with (
+            patch("custom_components.diagral.er.async_get"),
+            patch(
+                "custom_components.diagral.er.async_entries_for_config_entry",
+                return_value=rows,
+            ),
+            pytest.raises(ConfigurationError, match="ambiguous"),
+        ):
+            _existing_central_serial(MagicMock(), "entry")
 
     @staticmethod
     async def build_client(
