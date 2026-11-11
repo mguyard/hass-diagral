@@ -84,10 +84,16 @@
     "entity": {
         "binary_sensor": {
             "cloud_connection": {
-                "name": "Cloud Diagral"
+                "name": "Connexion à la centrale"
             },
             "cloud_reachable": {
-                "name": "Cloud Diagral joignable"
+                "name": "Point d’entrée cloud (ping)"
+            },
+            "primary_api_connection": {
+                "name": "API principale Emerald"
+            },
+            "fallback_api_connection": {
+                "name": "API de secours"
             }
         },
         "alarm_control_panel": {
@@ -96,6 +102,13 @@
             }
         },
         "sensor": {
+            "active_api": {
+                "name": "API utilisée",
+                "state": {
+                    "emerald": "Emerald (principale)",
+                    "topaze": "Topaze (secours)"
+                }
+            },
             "alarm_anomalies": {
                 "name": "Anomalies"
             },
@@ -107,7 +120,7 @@
                 "state": {
                     "connected": "Connecté",
                     "owned_elsewhere": "Utilisé par une autre installation",
-                    "registration_failed": "Échec de l'enregistrement",
+                    "registration_failed": "Enregistrement non confirmé",
                     "no_url": "Aucune adresse",
                     "unregistered": "Désenregistré"
                 }
@@ -210,17 +223,17 @@
             }
         },
         "webhook_registration_failed": {
-            "title": "Le webhook Diagral n'a pas pu être enregistré : {entry_title}",
+            "title": "Enregistrement du webhook Diagral non confirmé : {entry_title}",
             "fix_flow": {
                 "step": {
                     "confirm": {
-                        "title": "Réessayer l'enregistrement du webhook Diagral",
-                        "description": "Home Assistant n'a pas pu enregistrer son webhook auprès du cloud Diagral pour **{entry_title}** : il ne reçoit donc pas les événements Diagral. Les alertes d'intrusion n'arrivent que par ce biais : le panneau d'alarme ne peut pas passer à *déclenchée* tant que cela dure. Le polling continue de mettre à jour l'état d'armement toutes les 5 minutes.\n\nCela vient généralement d'une panne passagère du cloud Diagral ou de Home Assistant Cloud. Confirmez ci-dessous pour réessayer ; recharger l'intégration a le même effet."
+                        "title": "Réessayer la vérification du webhook Diagral",
+                        "description": "Home Assistant n'a pas pu vérifier ou enregistrer son webhook auprès du cloud Diagral pour **{entry_title}**. Si l'adresse de réception précédemment validée est inchangée, son écoute locale reste active malgré cette erreur. La livraison des événements par le cloud n'est toutefois pas confirmée.\n\nLes alertes d'intrusion et l'état *déclenchée* dépendent de ces événements ; la lecture périodique de l'état d'armement toutes les 5 minutes ne les remplace pas.\n\nLa vérification sera réessayée automatiquement chaque heure. Vous pouvez aussi confirmer ci-dessous pour la relancer maintenant."
                     }
                 },
                 "abort": {
                     "entry_not_loaded": "L'intégration Diagral n'est pas chargée. Rechargez-la, puis réessayez.",
-                    "retry_failed": "L'enregistrement a de nouveau échoué. Consultez les journaux, puis réessayez plus tard."
+                    "retry_failed": "L'enregistrement reste non confirmé. Consultez les journaux, puis réessayez plus tard."
                 }
             }
         },
@@ -240,7 +253,7 @@
             "message": "Diagral n'a pas confirmé la commande à temps, et l'état de l'alarme ne la reflète pas. Vérifiez l'état de l'alarme avant de réessayer."
         },
         "webhook_registration_failed": {
-            "message": "Le webhook Diagral n'a pas pu être enregistré. Consultez les journaux, puis réessayez."
+            "message": "L'enregistrement du webhook Diagral n'a pas pu être confirmé. Consultez les journaux, puis réessayez."
         },
         "webhook_no_url": {
             "message": "Aucune adresse HTTPS accessible depuis Internet n'est disponible pour le webhook Diagral. Définissez une URL externe, ou connectez Home Assistant Cloud."

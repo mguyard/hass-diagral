@@ -9,10 +9,12 @@ and API keys grant access to the Diagral account: neither may be logged.
 import hashlib
 import logging
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.diagral import (
     WebhookUnavailable,
+    _existing_central_serial,
     async_check_webhook,
     async_migrate_entry,
     async_remove_entry,
@@ -38,7 +40,13 @@ from custom_components.diagral.const import (
     WEBHOOK_REGISTRATION_FAILED,
     WEBHOOK_UNREGISTERED,
 )
-from pydiagral.exceptions import DiagralAPIError
+from pydiagral.exceptions import (
+    AuthenticationError,
+    ClientError,
+    ConfigurationError,
+    DiagralAPIError,
+    ServerError,
+)
 import pytest
 
 from homeassistant.config_entries import ConfigEntryDisabler
@@ -53,6 +61,13 @@ OWN_OLD_URL = f"{OWN_HOST}/api/webhook/OLDID"
 OTHER_URL = "https://other.example.net/api/webhook/OTHERSECRETID"
 CLOUDHOOK_URL = "https://hooks.nabu.casa/SECRETCLOUDHOOK"
 NO_SUBSCRIPTION = DiagralAPIError("No subscription found for FAKECENTRAL01")
+
+
+@pytest.fixture(autouse=True)
+def published_client_boundary():
+    """Existing setup tests use their explicitly mocked Emerald client."""
+    with patch("pydiagral.FailoverDiagralAPI", None, create=True):
+        yield
 
 
 def url_hash(url: str) -> str:
@@ -82,6 +97,19 @@ def issues():
     """Patch the issue registry helper used by the integration."""
     with patch("custom_components.diagral.ir") as ir:
         yield ir
+
+
+@pytest.fixture(autouse=True)
+def entity_registry():
+    """Start without existing entities unless the case supplies them."""
+    with (
+        patch("custom_components.diagral.er.async_get"),
+        patch(
+            "custom_components.diagral.er.async_entries_for_config_entry",
+            return_value=[],
+        ),
+    ):
+        yield
 
 
 @pytest.fixture
@@ -392,6 +420,75 @@ class TestMigrateEntry:
 class TestSetupEntry:
     """async_setup_entry() builds the Diagral client."""
 
+    @pytest.mark.parametrize("supported", [False, True])
+    async def test_automatic_client_selected_when_sdk_supports_it(self, supported):
+        """Automatic failover needs no option and preserves the registered central."""
+        coordinator = MagicMock()
+        coordinator.async_config_entry_first_refresh = AsyncMock(
+            side_effect=DiagralAPIError("stop after construction")
+        )
+        failover = MagicMock() if supported else None
+        with (
+            patch("custom_components.diagral.DiagralConfigData"),
+            patch("custom_components.diagral.asdict", return_value=MagicMock()),
+            patch("custom_components.diagral.DiagralAPI") as emerald,
+            patch("pydiagral.FailoverDiagralAPI", failover, create=True),
+            patch("custom_components.diagral.async_get_clientsession"),
+            patch("custom_components.diagral._delete_orphan_issues"),
+            patch(
+                "custom_components.diagral._existing_central_serial",
+                return_value="00123",
+            ) as existing,
+            patch(
+                "custom_components.diagral.DiagralDataUpdateCoordinator",
+                return_value=coordinator,
+            ),
+            pytest.raises(ConfigEntryNotReady),
+        ):
+            await async_setup_entry(MagicMock(), MagicMock(entry_id="entry1"))
+
+        selected = failover if supported else emerald
+        selected.assert_called_once()
+        existing.assert_called_once()
+        assert selected.return_value.expected_central_serial == "00123"
+        assert emerald.call_count == int(not supported)
+
+    def test_existing_panel_identity_is_preserved(self):
+        """The existing central serial, including leading zeros, seeds the guard."""
+        rows = [
+            SimpleNamespace(
+                platform="diagral", unique_id="entry_diagral_00123_alarm_control_panel"
+            )
+        ]
+        with (
+            patch("custom_components.diagral.er.async_get"),
+            patch(
+                "custom_components.diagral.er.async_entries_for_config_entry",
+                return_value=rows,
+            ),
+        ):
+            assert _existing_central_serial(MagicMock(), "entry") == "00123"
+
+    @pytest.mark.parametrize("serials", [["00123", "00456"], [""]])
+    def test_ambiguous_registry_identity_is_rejected(self, serials):
+        """Failover cannot choose a different central when registry data conflicts."""
+        rows = [
+            SimpleNamespace(
+                platform="diagral",
+                unique_id=f"entry_diagral_{serial}_alarm_control_panel",
+            )
+            for serial in serials
+        ]
+        with (
+            patch("custom_components.diagral.er.async_get"),
+            patch(
+                "custom_components.diagral.er.async_entries_for_config_entry",
+                return_value=rows,
+            ),
+            pytest.raises(ConfigurationError, match="ambiguous"),
+        ):
+            _existing_central_serial(MagicMock(), "entry")
+
     @staticmethod
     async def build_client(
         hass: MagicMock,
@@ -536,6 +633,123 @@ class TestWebhookLifecycle:
             await run_register(make_entry(), make_api(None), "https://abc.ui.nabu.casa")
 
         assert raised.value.reason == ISSUE_WEBHOOK_NO_URL
+
+
+class TestWebhookListenerPreservation:
+    """A failed cloud check must not disable an existing, proven local URL."""
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ClientError("timeout"),
+            ServerError("unavailable", status_code=503),
+            DiagralAPIError("gateway", status_code=502),
+            TimeoutError(),
+        ],
+        ids=["network", "server", "gateway", "outer-timeout"],
+    )
+    async def test_transient_read_keeps_owned_listener(self, cloud, issues, error):
+        """Keep receiving events without pretending the cloud check succeeded."""
+        entry = make_entry(OWN_NEW_URL)
+        entry.data[CONF_WEBHOOK_ID] = WEBHOOK_ID
+        entry.runtime_data = None
+        before = dict(entry.data)
+        api = make_api(OWN_NEW_URL)
+        api.get_webhook.side_effect = error
+        local = MagicMock()
+
+        with (
+            patch("custom_components.diagral._remember_subscription") as remember,
+            pytest.raises(WebhookUnavailable) as raised,
+        ):
+            await run_register(entry, api, local=local)
+
+        assert [call[0] for call in local.method_calls] == ["unregister", "register"]
+        assert raised.value.reason == ISSUE_WEBHOOK_REGISTRATION_FAILED
+        assert raised.value.webhook_id == WEBHOOK_ID
+        assert entry.data == before
+        remember.assert_not_called()
+        issues.async_delete_issue.assert_not_called()
+        api.register_webhook.assert_not_awaited()
+        api.update_webhook.assert_not_awaited()
+        api.delete_webhook.assert_not_awaited()
+
+    @pytest.mark.parametrize(
+        ("stored_url", "stored_id", "error"),
+        [
+            (None, WEBHOOK_ID, ClientError("timeout")),
+            (OWN_OLD_URL, WEBHOOK_ID, ClientError("timeout")),
+            (OWN_NEW_URL, None, ClientError("timeout")),
+            (OWN_NEW_URL, "", ClientError("timeout")),
+            (OWN_NEW_URL, WEBHOOK_ID, AuthenticationError("forbidden", 403)),
+        ],
+        ids=["no-hash", "changed-url", "no-id", "empty-id", "auth-error"],
+    )
+    async def test_unproven_or_rejected_listener_is_removed(
+        self, cloud, issues, stored_url, stored_id, error
+    ):
+        """A generated URL or an authentication rejection grants no preservation."""
+        entry = make_entry(stored_url)
+        entry.data[CONF_WEBHOOK_ID] = stored_id
+        entry.runtime_data = SimpleNamespace(webhook_id=None)
+        api = make_api(OWN_NEW_URL)
+        api.get_webhook.side_effect = error
+        local = MagicMock()
+
+        with pytest.raises(WebhookUnavailable) as raised:
+            await run_register(entry, api, local=local)
+
+        assert [call[0] for call in local.method_calls] == [
+            "unregister",
+            "register",
+            "unregister",
+        ]
+        assert getattr(raised.value, "webhook_id", None) is None
+        assert entry.runtime_data.webhook_id is None
+        api.register_webhook.assert_not_awaited()
+        api.update_webhook.assert_not_awaited()
+
+    async def test_loaded_entry_adopts_preserved_listener(self, cloud, issues):
+        """Hourly or manual retries must route the listener even after an outage."""
+        entry = make_entry(OWN_NEW_URL)
+        entry.data[CONF_WEBHOOK_ID] = WEBHOOK_ID
+        entry.runtime_data = SimpleNamespace(webhook_id=None)
+        api = make_api(OWN_NEW_URL)
+        api.get_webhook.side_effect = ClientError("timeout")
+
+        with pytest.raises(WebhookUnavailable):
+            await run_register(entry, api)
+
+        assert entry.runtime_data.webhook_id == WEBHOOK_ID
+
+    async def test_setup_keeps_listener_id_and_failure_status(self, issues):
+        """Startup enables routing while the repair still reports uncertainty."""
+        hass = MagicMock()
+        hass.config_entries.async_forward_entry_setups = AsyncMock()
+        entry = make_entry()
+        failure = WebhookUnavailable(ISSUE_WEBHOOK_REGISTRATION_FAILED)
+        failure.webhook_id = WEBHOOK_ID
+        with (
+            patch("custom_components.diagral.DiagralConfigData"),
+            patch("custom_components.diagral.asdict", return_value=MagicMock()),
+            patch("custom_components.diagral.DiagralAPI"),
+            patch("custom_components.diagral.DiagralDataUpdateCoordinator") as coord,
+            patch("custom_components.diagral.async_get_clientsession"),
+            patch(
+                "custom_components.diagral.register_webhook",
+                AsyncMock(side_effect=failure),
+            ),
+        ):
+            coord.return_value.async_config_entry_first_refresh = AsyncMock()
+            assert await async_setup_entry(hass, entry) is True
+
+        assert entry.runtime_data.webhook_id == WEBHOOK_ID
+        coord.return_value.async_set_webhook_status.assert_called_with(
+            WEBHOOK_REGISTRATION_FAILED
+        )
+        assert issues.async_create_issue.call_args.kwargs["translation_key"] == (
+            ISSUE_WEBHOOK_REGISTRATION_FAILED
+        )
 
 
 class TestUnregisterResult:

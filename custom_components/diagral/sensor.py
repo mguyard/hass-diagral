@@ -28,7 +28,7 @@ import homeassistant.util.dt as dt_util
 
 from . import DiagralConfigEntry
 from .const import DOMAIN, WEBHOOK_STATUSES
-from .coordinator import DiagralDataUpdateCoordinator
+from .coordinator import DiagralDataUpdateCoordinator, active_api_status
 from .entity import DiagralEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,9 +62,28 @@ class DiagralHealthSensorEntityDescription(SensorEntityDescription):
     """Diagnostic sensor reading the coordinator's health, not the alarm."""
 
     value_fn: Callable[[DiagralDataUpdateCoordinator], Any]
+    exists_fn: Callable[[DiagralDataUpdateCoordinator], bool] = lambda _: True
+    available_fn: Callable[[DiagralDataUpdateCoordinator], bool] = lambda _: True
 
 
 HEALTH_SENSORS: tuple[DiagralHealthSensorEntityDescription, ...] = (
+    DiagralHealthSensorEntityDescription(
+        key="active_api",
+        translation_key="active_api",
+        device_class=SensorDeviceClass.ENUM,
+        options=["emerald", "topaze"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=active_api_status,
+        exists_fn=lambda coordinator: (
+            getattr(coordinator.api, "supports_failover", False) is True
+        ),
+        available_fn=lambda coordinator: (
+            not (
+                coordinator.api.primary_api_connected is False
+                and coordinator.api.fallback_api_connected is False
+            )
+        ),
+    ),
     DiagralHealthSensorEntityDescription(
         key="webhook_status",
         translation_key="webhook_status",
@@ -98,11 +117,12 @@ async def async_setup_entry(
     async_add_entities(
         DiagralHealthSensor(coordinator, description, entry)
         for description in HEALTH_SENSORS
+        if description.exists_fn(coordinator)
     )
 
 
 class DiagralHealthSensor(DiagralEntity, SensorEntity):
-    """Diagnostic sensor about the webhook, readable during a polling outage."""
+    """Report webhook and API health independently from alarm entities."""
 
     entity_description: DiagralHealthSensorEntityDescription
 
@@ -122,8 +142,8 @@ class DiagralHealthSensor(DiagralEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """The webhook state does not depend on polling."""
-        return True
+        """Keep webhook diagnostics readable and flag an absent working backend."""
+        return self.entity_description.available_fn(self.coordinator)
 
     @property
     def native_value(self) -> Any:
@@ -150,6 +170,14 @@ class DiagralSensor(DiagralEntity, SensorEntity):
             "alarm_config", {}
         )
         self._attr_unique_id = f"{self._entry_id}_{DOMAIN}_{self._alarm_config.alarm.central.serial}_{description.key}"
+
+    @property
+    def available(self) -> bool:
+        """A failed anomaly read must not appear as zero faults."""
+        return super().available and (
+            self.entity_description.key != "anomalies"
+            or self.coordinator.anomalies_available
+        )
 
     @property
     def icon(self) -> str | None:
@@ -190,6 +218,8 @@ class DiagralSensor(DiagralEntity, SensorEntity):
         _LOGGER.debug("Devices infos received: %s", devices_infos)
 
         if self.entity_description.key == "anomalies":
+            if not self.coordinator.anomalies_available:
+                return
             self._update_anomalies(anomalies, groups, devices_infos)
         if self.entity_description.key == "active_groups":
             self._update_active_groups(system_status, groups, alarm_config)

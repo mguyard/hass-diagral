@@ -84,10 +84,16 @@
     "entity": {
         "binary_sensor": {
             "cloud_connection": {
-                "name": "Diagral cloud"
+                "name": "Central connection"
             },
             "cloud_reachable": {
-                "name": "Diagral cloud reachable"
+                "name": "Cloud endpoint (ping)"
+            },
+            "primary_api_connection": {
+                "name": "Primary API Emerald"
+            },
+            "fallback_api_connection": {
+                "name": "Fallback API"
             }
         },
         "alarm_control_panel": {
@@ -96,6 +102,13 @@
             }
         },
         "sensor": {
+            "active_api": {
+                "name": "Active API",
+                "state": {
+                    "emerald": "Emerald (primary)",
+                    "topaze": "Topaze (fallback)"
+                }
+            },
             "alarm_anomalies": {
                 "name": "Anomalies"
             },
@@ -107,7 +120,7 @@
                 "state": {
                     "connected": "Connected",
                     "owned_elsewhere": "Used by another installation",
-                    "registration_failed": "Registration failed",
+                    "registration_failed": "Registration unconfirmed",
                     "no_url": "No address",
                     "unregistered": "Unregistered"
                 }
@@ -210,17 +223,17 @@
             }
         },
         "webhook_registration_failed": {
-            "title": "Diagral webhook could not be registered: {entry_title}",
+            "title": "Diagral webhook registration unconfirmed: {entry_title}",
             "fix_flow": {
                 "step": {
                     "confirm": {
-                        "title": "Retry the Diagral webhook registration",
-                        "description": "Home Assistant could not register its webhook with the Diagral cloud for **{entry_title}**, so it does not receive Diagral events. Intrusion alerts only arrive this way: the alarm panel cannot show *triggered* while this lasts. Polling still updates the arming state every 5 minutes.\n\nThis usually comes from a temporary outage of the Diagral cloud or of Home Assistant Cloud. Confirm below to try again; reloading the integration does the same."
+                        "title": "Retry the Diagral webhook verification",
+                        "description": "Home Assistant could not verify or register its webhook with the Diagral cloud for **{entry_title}**. If the previously verified receiver address is unchanged, its local listener stays active despite this error. Event delivery by the cloud is still unconfirmed.\n\nIntrusion alerts and the *triggered* state depend on these events; polling the arming state every 5 minutes does not replace them.\n\nVerification is retried automatically every hour. You can also confirm below to retry now."
                     }
                 },
                 "abort": {
                     "entry_not_loaded": "The Diagral integration is not loaded. Reload it, then try again.",
-                    "retry_failed": "The registration failed again. Check the logs, then try again later."
+                    "retry_failed": "Registration is still unconfirmed. Check the logs, then try again later."
                 }
             }
         },
@@ -240,7 +253,7 @@
             "message": "Diagral did not confirm the command in time, and the alarm state does not show it. Check the alarm state before trying again."
         },
         "webhook_registration_failed": {
-            "message": "The Diagral webhook could not be registered. Check the logs, then try again."
+            "message": "The Diagral webhook registration could not be confirmed. Check the logs, then try again."
         },
         "webhook_no_url": {
             "message": "No HTTPS address reachable from the internet is available for the Diagral webhook. Set an external URL, or connect Home Assistant Cloud."

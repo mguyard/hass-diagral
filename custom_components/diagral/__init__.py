@@ -9,8 +9,9 @@ import hashlib
 import logging
 from urllib.parse import urlparse
 
-from pydiagral.api import DiagralAPI
-from pydiagral.exceptions import DiagralAPIError
+import pydiagral
+from pydiagral import DiagralAPI
+from pydiagral.exceptions import ConfigurationError, DiagralAPIError
 from pydiagral.models import Webhook
 
 from homeassistant.components.webhook import (
@@ -23,7 +24,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, CONF_WEBHOOK_ID, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.network import NoURLAvailableError, get_url
@@ -51,7 +52,7 @@ from .const import (
     WEBHOOK_STATUS_OF_ISSUE,
     WEBHOOK_UNREGISTERED,
 )
-from .coordinator import DiagralDataUpdateCoordinator
+from .coordinator import DiagralDataUpdateCoordinator, is_transient_error
 from .models import DiagralConfigData, DiagralData
 from .webhook import handle_webhook
 
@@ -66,6 +67,23 @@ PLATFORMS: list[Platform] = [
 type DiagralConfigEntry = ConfigEntry[DiagralData]
 
 
+def _existing_central_serial(hass: HomeAssistant, entry_id: str) -> str | None:
+    """Keep the identity already used by the alarm panel and automations."""
+    prefix = f"{entry_id}_{DOMAIN}_"
+    suffix = "_alarm_control_panel"
+    entries = er.async_entries_for_config_entry(er.async_get(hass), entry_id)
+    serials = {
+        entity.unique_id.removeprefix(prefix).removesuffix(suffix)
+        for entity in entries
+        if entity.platform == DOMAIN
+        and entity.unique_id.startswith(prefix)
+        and entity.unique_id.endswith(suffix)
+    }
+    if len(serials) > 1 or "" in serials:
+        raise ConfigurationError("Existing HA central identity is ambiguous")
+    return next(iter(serials), None)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> bool:
     """Set up Diagral from a config entry."""
     # Entries removed before their repairs were deleted with them left some behind
@@ -75,7 +93,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
     config_dict = asdict(config)
 
     try:
-        api = DiagralAPI(
+        api_class = getattr(pydiagral, "FailoverDiagralAPI", None) or DiagralAPI
+        api = api_class(
             username=config_dict[CONF_USERNAME],
             password=config_dict[CONF_PASSWORD],
             serial_id=config_dict[CONF_SERIAL_ID],
@@ -86,6 +105,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
             session=async_get_clientsession(hass),
             vendor=DIAGRAL_VENDOR,
         )
+        api.expected_central_serial = _existing_central_serial(hass, entry.entry_id)
         coordinator = DiagralDataUpdateCoordinator(hass, entry, api)
         await coordinator.async_config_entry_first_refresh()
 
@@ -94,9 +114,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiagralConfigEntry) -> b
                 hass, entry, api, coordinator, "setup_entry"
             )
         except WebhookUnavailable as err:
-            # Polling still works; the repair says why events cannot arrive
+            # A saved local receiver may still work while verification is down.
             report_webhook_unavailable(hass, entry, err.reason)
-            webhook_id = None
+            webhook_id = err.webhook_id
 
         entry.runtime_data = DiagralData(
             config=config, coordinator=coordinator, api=api, webhook_id=webhook_id
@@ -211,18 +231,19 @@ def _delete_orphan_issues(hass: HomeAssistant) -> None:
 
 
 class WebhookUnavailable(Exception):
-    """The webhook could not be registered, so no Diagral event can arrive."""
+    """The webhook could not be configured or verified with Diagral."""
 
-    def __init__(self, reason: str) -> None:
-        """Keep the repair issue key that explains the failure."""
+    def __init__(self, reason: str, *, webhook_id: str | None = None) -> None:
+        """Keep the repair reason and any previously owned receiver still active."""
         super().__init__(reason)
         self.reason = reason
+        self.webhook_id = webhook_id
 
 
 def report_webhook_unavailable(
     hass: HomeAssistant, entry: DiagralConfigEntry, reason: str
 ) -> None:
-    """Raise the repair issue that explains why no event can arrive."""
+    """Report a webhook configuration or verification failure."""
     ir.async_create_issue(
         hass,
         DOMAIN,
@@ -389,11 +410,13 @@ async def register_webhook(
     Home Assistant listens before Diagral is told where to send, so no event
     is lost. A subscription this entry cannot prove it owns is left untouched
     and reported as a repair issue, unless take_over is set; None is then
-    returned. Raises WebhookUnavailable when no event can be received.
+    returned. Raises WebhookUnavailable when delivery cannot be confirmed;
+    its webhook_id identifies an existing local receiver kept during an outage.
     """
     _LOGGER.debug("Webhook registration requested by '%s' for %s", source, entry.title)
     # A stable id keeps the URL, so a restart does not rewrite the subscription
-    webhook_id: str = entry.data.get(CONF_WEBHOOK_ID) or webhook_generate_id()
+    stored_webhook_id = entry.data.get(CONF_WEBHOOK_ID)
+    webhook_id: str = stored_webhook_id or webhook_generate_id()
     webhook_url = await _async_webhook_url(hass, webhook_id)
 
     # The register action re-registers an id that may already be listening
@@ -403,15 +426,35 @@ async def register_webhook(
         subscribed = await _async_subscribe(
             hass, entry, api, webhook_url, take_over=take_over
         )
-    except DiagralAPIError as err:
-        webhook_async_unregister(hass, webhook_id)
-        _LOGGER.error(
-            "Failed to register the Diagral webhook for %s on %s : %s",
-            entry.title,
-            _redact_url(webhook_url),
-            err,
-        )
-        raise WebhookUnavailable(ISSUE_WEBHOOK_REGISTRATION_FAILED) from err
+    except (DiagralAPIError, TimeoutError) as err:
+        preserved_id = None
+        if (
+            is_transient_error(err)
+            and isinstance(stored_webhook_id, str)
+            and stored_webhook_id
+            and stored_webhook_id == webhook_id
+            and entry.data.get(CONF_WEBHOOK_URL_HASH) == _url_hash(webhook_url)
+        ):
+            preserved_id = webhook_id
+            runtime = getattr(entry, "runtime_data", None)
+            if runtime is not None:
+                runtime.webhook_id = webhook_id
+            _LOGGER.warning(
+                "Diagral webhook verification failed; keeping the previously "
+                "owned local receiver (%s)",
+                type(err).__name__,
+            )
+        else:
+            webhook_async_unregister(hass, webhook_id)
+            _LOGGER.error(
+                "Failed to register the Diagral webhook for %s on %s : %s",
+                entry.title,
+                _redact_url(webhook_url),
+                err,
+            )
+        raise WebhookUnavailable(
+            ISSUE_WEBHOOK_REGISTRATION_FAILED, webhook_id=preserved_id
+        ) from err
     if not subscribed:
         webhook_async_unregister(hass, webhook_id)
         return None
@@ -444,9 +487,9 @@ async def _async_connect_webhook(
 async def async_check_webhook(hass: HomeAssistant, entry: DiagralConfigEntry) -> None:
     """Notice a subscription taken over or deleted since the last check.
 
-    A working webhook is only read: register_webhook drops the local handler
-    when Diagral fails, which a passing outage must never do. Any other state
-    is retried, so the webhook recovers by itself.
+    A working webhook is only read, keeping its receiver through a passing
+    verification outage. Other states retry registration so delivery can
+    recover and the repair can clear after a successful cloud check.
     """
     runtime = entry.runtime_data
     coordinator = runtime.coordinator

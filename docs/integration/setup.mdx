@@ -105,3 +105,24 @@ The Alarm Panel options allow you to specify whether a code should be required w
 <Info>
 Keep in mind, if you switch to `Never` the code will be also automatically removed.
 </Info>
+
+### Automatic emergency mode
+
+The integration prefers the usual Diagral cloud service (Emerald). If an authenticated central read encounters a temporary server or network failure, the SDK automatically tries the alternative Topaze service for the central's configuration, state and whole-system commands. No option or manual reload is required.
+
+Each central refresh first tests Emerald with a fresh, authenticated configuration and status read, bounded to ten seconds. A successful read of the same central automatically returns the integration to Emerald. A ping or a cached result cannot trigger recovery. The normal polling interval is five minutes; webhook events and explicit refreshes can also request a read. A rejected account, PIN, permission or invalid configuration is reported instead of being hidden by a switch to another service.
+
+Automatic emergency mode requires a version of `pydiagral` that provides `FailoverDiagralAPI`. With an older library, the integration keeps its standard Emerald behavior. Initial account setup and reconfiguration still require Emerald.
+
+| Feature | Service in emergency mode |
+| --- | --- |
+| Central configuration and state | Topaze, preserving the existing Home Assistant central identity |
+| Whole-system arm, disarm and presence | The selected backend after a read-only check; a command is sent once and confirmed by a state read, never replayed on another service after an uncertain response |
+| Group commands, detailed anomalies and webhook management | Emerald; these may remain unavailable during its outage |
+| Intrusion events | The existing webhook; Topaze polling does not replace event delivery |
+
+Topaze configuration metadata is cached for one hour. Session cleanup is attempted after each use, and emergency mode does not take over another active session. Topaze is another cloud service, so internet access is still required. Its connection limits are not documented here; repeated manual refreshes or commands can exhaust the service quota.
+
+**Primary API Emerald** reports whether the authenticated primary probe succeeded. **Fallback API** is connected while Topaze serves successful central reads and disconnected when it is on standby or its read fails. **Active API** states `Emerald (primary)` or `Topaze (fallback)`, and becomes unavailable if neither service works. All three remain registered across backend switches and are unknown before the first result. **Cloud endpoint (ping)** remains a separate public reachability check; it does not prove that authenticated Emerald calls, detailed anomalies or webhook delivery are working.
+
+When a webhook verification request fails temporarily, the integration preserves its local receiver only if the saved webhook ID and exact URL fingerprint prove that the receiver belongs to this entry. The repair remains until registration is confirmed. No subscription is taken over or reported as healthy solely because emergency polling works.
