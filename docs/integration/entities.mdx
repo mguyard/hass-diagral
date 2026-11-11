@@ -18,23 +18,38 @@ The Diagral integration operates in Hub Mode, meaning that all configurations wi
 | Active Groups             | Sensor displaying the number of active groups in state and details per group in attributes |
 | Webhook                   | Diagnostic sensor showing whether Diagral events can reach Home Assistant                  |
 | Last webhook              | Diagnostic sensor with the time of the last Diagral event received (disabled by default)   |
-| Diagral cloud             | Diagnostic binary sensor, connected while the Diagral cloud answers the polling            |
-| Diagral cloud reachable   | Diagnostic binary sensor, connected while Emerald answers a ping, which needs no credentials; this can be disconnected while the Topaze emergency service is working |
-| Fallback API              | Diagnostic binary sensor showing the last central refresh through Topaze, created when emergency mode is enabled |
+| Central connection        | Diagnostic binary sensor, connected while central polling succeeds through either backend |
+| Cloud endpoint (ping)     | Diagnostic binary sensor, connected while the public cloud endpoint answers; this does not establish that authenticated Emerald calls work |
+| Primary API Emerald       | Diagnostic binary sensor reporting the last authenticated Emerald central probe, present when the SDK supports automatic emergency mode |
+| Fallback API              | Diagnostic binary sensor showing whether Topaze is serving successful central reads, present when the SDK supports automatic emergency mode |
+| Active API                | Diagnostic enum showing Emerald (primary) or Topaze (fallback), unavailable if neither can return a valid central state |
 
 <Info>
 All entities are refreshed every `5 minutes` (fixed) or upon receiving a [Webhook](/integration/webhook) from the Diagral Cloud.
 
-When the Diagral Cloud fails temporarily (server error, timeout, network error), the refresh is retried up to twice, with longer waits, within `2.5 minutes`. Entities become unavailable only if every attempt fails, and recover at the next successful refresh.
+Central refreshes are bounded to `2.5 minutes`. With automatic emergency support, a temporary Emerald failure triggers a Topaze attempt within that budget. Older SDK versions keep the standard Emerald retries, up to twice with longer waits. The alarm panel becomes unavailable if no backend returns a valid central state, and recovers at the next successful refresh.
 </Info>
 
 ## Fallback API - Details
 
-When [emergency mode](/integration/setup#emergency-mode) is enabled, **Fallback API** is connected after a successful central refresh through Topaze and disconnected after a failed refresh. Its state is unknown before a Topaze read. The entity stays available during a failure so that it can report the disconnected state. Disabling emergency mode stops providing this diagnostic; Home Assistant may retain the entity in its registry as unavailable.
+With [automatic emergency mode](/integration/setup#automatic-emergency-mode), **Fallback API** is connected while the last central refresh succeeded through Topaze. It is disconnected when Emerald is working and the fallback is on standby, or when the fallback read failed. Its state is unknown before the first central read. The same entity stays available during outages and backend switches.
 
-This diagnostic uses the existing refresh result and sends no additional API requests. It is independent of the Emerald ping reported by **Diagral cloud reachable** and does not confirm webhook delivery or the availability of detailed anomalies.
+This diagnostic uses the SDK's current result and sends no additional API requests. It follows a backend change made during a command's read-only preflight as well as normal polling. It is independent of **Cloud endpoint (ping)** and does not confirm webhook delivery or the availability of detailed anomalies.
 
-Downloaded diagnostics also report whether emergency mode is active, its last connectivity result and whether the anomalies read succeeded. An unavailable anomaly count is exported as `null`, never as a confirmed zero.
+Downloaded diagnostics also report whether automatic failover is supported, which backend is active, the fallback connectivity result and whether the anomalies read succeeded. An unavailable anomaly count is exported as `null`, never as a confirmed zero.
+
+## Primary API Emerald and Active API - Details
+
+**Primary API Emerald** reports an authenticated configuration and status read of the central. A successful public ping cannot turn it on. **Active API** identifies the service currently providing a validated central state, so the combination explains what is happening:
+
+| Primary API Emerald | Fallback API | Active API | Meaning |
+| --- | --- | --- | --- |
+| Connected | Disconnected | Emerald (primary) | Normal operation; Topaze is on standby |
+| Disconnected | Connected | Topaze (fallback) | Emerald failed; emergency service is working |
+| Disconnected | Disconnected | Unavailable | Neither service returned a valid central state |
+| Unknown | Unknown | Unknown | No central probe has finished yet |
+
+These entities keep the same identifiers through failure and recovery. Downloaded diagnostics include the primary probe result and its exception class, without account information or raw server error messages.
 
 ## Central - Details
 
@@ -185,6 +200,6 @@ Use it in an automation to be warned when the state is not `connected`.
 
 The time of the last Diagral event received, whatever its type. Disabled by default: enable it in the entity settings. A Diagral system that is rarely armed or disarmed sends few events, so a long silence is not an error by itself.
 
-## Diagral cloud - Details
+## Central connection - Details
 
 Connected while the last refresh from the Diagral cloud succeeded. When Diagral does not answer, after the retries described above, the other entities become unavailable while this one switches to disconnected. Use it in an automation to be warned of a Diagral outage.
