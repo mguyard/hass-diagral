@@ -19,13 +19,22 @@ The Diagral integration operates in Hub Mode, meaning that all configurations wi
 | Webhook                   | Diagnostic sensor showing whether Diagral events can reach Home Assistant                  |
 | Last webhook              | Diagnostic sensor with the time of the last Diagral event received (disabled by default)   |
 | Diagral cloud             | Diagnostic binary sensor, connected while the Diagral cloud answers the polling            |
-| Diagral cloud reachable   | Diagnostic binary sensor, connected while the Diagral cloud answers a ping, which needs no credentials: disconnected means a Diagral outage, while `Diagral cloud` alone disconnected points at the API key or PIN |
+| Diagral cloud reachable   | Diagnostic binary sensor, connected while Emerald answers a ping, which needs no credentials; this can be disconnected while the Topaze emergency service is working |
+| Fallback API              | Diagnostic binary sensor showing the last central refresh through Topaze, created when emergency mode is enabled |
 
 <Info>
 All entities are refreshed every `5 minutes` (fixed) or upon receiving a [Webhook](/integration/webhook) from the Diagral Cloud.
 
 When the Diagral Cloud fails temporarily (server error, timeout, network error), the refresh is retried up to twice, with longer waits, within `2.5 minutes`. Entities become unavailable only if every attempt fails, and recover at the next successful refresh.
 </Info>
+
+## Fallback API - Details
+
+When [emergency mode](/integration/setup#emergency-mode) is enabled, **Fallback API** is connected after a successful central refresh through Topaze and disconnected after a failed refresh. Its state is unknown before a Topaze read. The entity stays available during a failure so that it can report the disconnected state. Disabling emergency mode stops providing this diagnostic; Home Assistant may retain the entity in its registry as unavailable.
+
+This diagnostic uses the existing refresh result and sends no additional API requests. It is independent of the Emerald ping reported by **Diagral cloud reachable** and does not confirm webhook delivery or the availability of detailed anomalies.
+
+Downloaded diagnostics also report whether emergency mode is active, its last connectivity result and whether the anomalies read succeeded. An unavailable anomaly count is exported as `null`, never as a confirmed zero.
 
 ## Central - Details
 
@@ -61,6 +70,12 @@ Alert codes that trigger it:
 | `1141` | PREALARM-CONFIRMED |
 
 ## Anomalies - Details
+
+Anomalies are fetched independently after the central's configuration and status. A slow or failed anomaly request does not prevent the alarm panel from loading or receiving its status. The anomalies sensor is unavailable until its own read succeeds; a failed read never means zero faults. Subsequent successful central polls request another anomaly refresh, without overlapping a read already in progress.
+
+Detailed anomalies continue to use Emerald in emergency mode and can remain unavailable while the central state is updating through Topaze. The Topaze `defaults` field is not interpreted as a detailed anomaly list.
+
+If a transient webhook verification fails, the local build retains a previously owned listener only when its stored ID and exact URL hash still match. The receiver remains routable after setup and retries, but the repair stays visible until the cloud subscription can be confirmed. Listening locally does not prove that Diagral is delivering events.
 
 <Card title="Example of Anomalies Sensor Attributes" icon="newspaper">
 ```yaml

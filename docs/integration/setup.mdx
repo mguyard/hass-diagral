@@ -105,3 +105,22 @@ The Alarm Panel options allow you to specify whether a code should be required w
 <Info>
 Keep in mind, if you switch to `Never` the code will be also automatically removed.
 </Info>
+
+### Emergency mode
+
+If the usual Diagral cloud service (Emerald) is degraded, an existing integration can use the alternative Topaze service for its central configuration, state and whole-system commands. Open **Settings > Devices & services > Diagral > Configure** and enable **Use emergency mode**. This reloads the entry. Disable the same option to return to normal mode; there is no automatic switch between services.
+
+Normal mode remains the default. Emergency mode requires a version of `pydiagral` that provides `TopazeDiagralAPI`; if the installed library does not support it, the options form asks you to update the integration. Initial account setup and reconfiguration still require Emerald.
+
+| Feature | Service in emergency mode |
+| --- | --- |
+| Central configuration and state | Topaze, preserving the existing Home Assistant central identity |
+| Whole-system arm, disarm and presence | Topaze; a command is sent once and confirmed by a state read |
+| Group commands, detailed anomalies and webhook management | Emerald; these may remain unavailable during its outage |
+| Intrusion events | The existing webhook; Topaze polling does not replace event delivery |
+
+Configuration metadata is cached for one hour. Session cleanup is attempted after each use, and emergency mode does not take over another active session. Topaze is another cloud service, so internet access is still required. Its connection limits are not documented here; repeated manual refreshes or commands can exhaust the service quota.
+
+The **Fallback API** diagnostic reports whether the last central refresh succeeded through Topaze. **Diagral cloud reachable** continues to measure the Emerald ping independently. A green fallback diagnostic therefore does not prove that detailed anomalies or webhook delivery are working.
+
+When a webhook verification request fails temporarily, the integration preserves its local receiver only if the saved webhook ID and exact URL fingerprint prove that the receiver belongs to this entry. The repair remains until registration is confirmed. No subscription is taken over or reported as healthy solely because emergency polling works.
